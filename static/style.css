@@ -28,14 +28,14 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
-  background-color: var(--bg);
+  background-color: #bdd5e6;
   color: var(--text);
   line-height: 1.5;
 }
 
 /* Navigation Bar */
 .navbar {
-  background-color: #fff;
+  background-color: #4f67b1;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
@@ -53,7 +53,7 @@ body {
 
 .nav-logo h1 {
   font-size: 1.8rem;
-  color: #333;
+  color: #b34b28 !important;
 }
 
 .nav-menu {
