@@ -202,7 +202,10 @@
 
         <div class="course-detail-layout">
           <article class="detail-card course-overview-card">
-            <span class="detail-course-code" id="detailCourseCode"></span>
+            <div class="detail-course-tags">
+              <span class="detail-course-code" id="detailCourseCode"></span>
+              <span class="detail-course-term" id="detailCourseTerm"></span>
+            </div>
             <h2 id="detailCourseTitle"></h2>
             <p class="detail-course-title-zh" id="detailCourseTitleZh"></p>
 
@@ -229,8 +232,10 @@
 
           <aside class="detail-card rating-summary-card">
             <h3>Course Rating</h3>
-            <div class="rating-score" id="detailRatingValue"></div>
-            <div class="stars rating-summary-stars" id="detailStars"></div>
+            <div class="rating-summary-main">
+              <div class="rating-score" id="detailRatingValue"></div>
+              <div class="stars rating-summary-stars" id="detailStars"></div>
+            </div>
             <p class="rating-summary-count" id="detailReviewCount"></p>
             <div class="rating-breakdown" id="ratingBreakdown"></div>
           </aside>
