@@ -226,6 +226,14 @@ function bookmarkIcon() {
   `;
 }
 
+function commentIcon() {
+  return `
+    <svg class="comment-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0z"></path>
+    </svg>
+  `;
+}
+
 function questionIcon() {
   return avatarImage("question");
 }
@@ -379,7 +387,7 @@ function renderCourseCards(container, courses, emptyText) {
                   aria-label="${course.followed ? "Unfollow course" : "Follow course"}"
                   title="${course.followed ? "Saved" : "Save course"}"
                 >
-                  ${bookmarkIcon()}
+                  ${heartIcon()}
                 </button>
             </div>
             
@@ -396,9 +404,9 @@ function renderCourseCards(container, courses, emptyText) {
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
                     <span class="stat-save-display">
-                        🔖 <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
+                        ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">💬 ${course.reviewCount}</span>
+                    <span class="stat-comment">${commentIcon()} ${course.reviewCount}</span>
                 </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
             </div>
@@ -668,6 +676,8 @@ function openCourseDetail(courseId) {
   const averageRating = getAverageRating(reviews, course.rating);
 
   document.getElementById("detailCourseCode").textContent = course.code;
+  document.getElementById("detailCourseTerm").textContent =
+    `${course.year} S${course.semester}`;
   document.getElementById("detailCourseTitle").textContent = course.title;
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
   document.getElementById("detailCourseProfessor").textContent =
@@ -762,9 +772,10 @@ function loadReviews(courseId) {
 
     const starsHtml = generateStars(review.rating);
     const replies = review.replies || [];
+    const totalReplies = countReplies(replies);
     const replyCountText =
-      replies.length > 0
-        ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`
+      totalReplies > 0
+        ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
         : "Reply";
 
     reviewItem.innerHTML = `
@@ -801,31 +812,70 @@ function loadReviews(courseId) {
               <button type="button" onclick="submitReply('${review.id}')">Post</button>
             </div>
             <div class="review-replies">
-              ${replies
-                .map(
-                  (reply) => `
-                    <div class="reply-item">
-                      <div class="reply-content">
-                        <div class="reply-meta">
-                          <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
-                          <strong>${escapeHtml(reply.author)}</strong>
-                          <span>${escapeHtml(reply.date)}</span>
-                        </div>
-                        <p>${escapeHtml(reply.text)}</p>
-                      </div>
-                      <button class="review-action-btn reply-like-btn ${reply.liked ? "liked" : ""}" onclick="toggleReplyLike('${review.id}', '${reply.id}')">
-                        ${heartIcon()}
-                        <span>${reply.likes ?? 0}</span>
-                      </button>
-                    </div>
-                  `,
-                )
-                .join("")}
+              ${renderReplies(replies, review.id)}
             </div>
         `;
 
     reviewsList.appendChild(reviewItem);
   });
+}
+
+function countReplies(replies = []) {
+  return replies.reduce(
+    (total, reply) => total + 1 + countReplies(reply.replies || []),
+    0,
+  );
+}
+
+function renderReplies(replies = [], reviewId, depth = 0) {
+  return replies
+    .map((reply) => {
+      const childReplies = reply.replies || [];
+      const replyCount = countReplies(childReplies);
+      const replyCountText =
+        replyCount > 0
+          ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`
+          : "Reply";
+
+      return `
+        <div class="reply-thread" style="--reply-depth: ${depth}">
+          <div class="reply-item">
+            <div class="reply-content">
+              <div class="reply-meta">
+                <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
+                <strong>${escapeHtml(reply.author)}</strong>
+                <span>${escapeHtml(reply.date)}</span>
+              </div>
+              <p>${escapeHtml(reply.text)}</p>
+              <div class="reply-actions">
+                <button class="review-action-btn reply-like-btn ${reply.liked ? "liked" : ""}" onclick="toggleReplyLike('${reviewId}', '${reply.id}')">
+                  ${heartIcon()}
+                  <span>${reply.likes ?? 0}</span>
+                </button>
+                <button class="review-action-btn reply-to-reply-btn" onclick="toggleReplyForm('${reviewId}', '${reply.id}')">
+                  ${replyIcon()}
+                  <span>${replyCountText}</span>
+                </button>
+              </div>
+              <div class="reply-form nested-reply-form" id="replyForm-${reviewId}-${reply.id}" style="display: none">
+                <input
+                  type="text"
+                  id="replyInput-${reviewId}-${reply.id}"
+                  placeholder="Reply to ${escapeHtml(reply.author)}..."
+                />
+                <button type="button" onclick="submitReply('${reviewId}', '${reply.id}')">Post</button>
+              </div>
+            </div>
+          </div>
+          ${
+            childReplies.length > 0
+              ? `<div class="reply-children">${renderReplies(childReplies, reviewId, depth + 1)}</div>`
+              : ""
+          }
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function findReviewById(reviewId) {
@@ -851,7 +901,18 @@ function toggleReviewLike(reviewId) {
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
-  return review.replies.find((reply) => reply.id === replyId);
+  return findReplyRecursive(review.replies, replyId);
+}
+
+function findReplyRecursive(replies = [], replyId) {
+  for (const reply of replies) {
+    if (reply.id === replyId) return reply;
+
+    const childReply = findReplyRecursive(reply.replies || [], replyId);
+    if (childReply) return childReply;
+  }
+
+  return null;
 }
 
 function toggleReplyLike(reviewId, replyId) {
@@ -869,25 +930,31 @@ function toggleReplyLike(reviewId, replyId) {
   loadReviews(currentCourseId);
 }
 
-function toggleReplyForm(reviewId) {
+function toggleReplyForm(reviewId, parentReplyId = null) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
     return;
   }
 
-  const replyForm = document.getElementById(`replyForm-${reviewId}`);
+  const formId = parentReplyId
+    ? `replyForm-${reviewId}-${parentReplyId}`
+    : `replyForm-${reviewId}`;
+  const inputId = parentReplyId
+    ? `replyInput-${reviewId}-${parentReplyId}`
+    : `replyInput-${reviewId}`;
+  const replyForm = document.getElementById(formId);
   if (!replyForm) return;
 
   const isOpen = replyForm.style.display === "flex";
   replyForm.style.display = isOpen ? "none" : "flex";
 
   if (!isOpen) {
-    document.getElementById(`replyInput-${reviewId}`).focus();
+    document.getElementById(inputId).focus();
   }
 }
 
-function submitReply(reviewId) {
+function submitReply(reviewId, parentReplyId = null) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
@@ -895,17 +962,23 @@ function submitReply(reviewId) {
   }
 
   const review = findReviewById(reviewId);
-  const input = document.getElementById(`replyInput-${reviewId}`);
+  const inputId = parentReplyId
+    ? `replyInput-${reviewId}-${parentReplyId}`
+    : `replyInput-${reviewId}`;
+  const input = document.getElementById(inputId);
   if (!review || !input) return;
 
   const text = input.value.trim();
   if (!text) return;
 
-  if (!review.replies) {
-    review.replies = [];
+  const target = parentReplyId ? findReplyById(reviewId, parentReplyId) : review;
+  if (!target) return;
+
+  if (!target.replies) {
+    target.replies = [];
   }
 
-  review.replies.push({
+  target.replies.push({
     id: `reply-${Date.now()}`,
     author: getDisplayName(currentUser),
     avatar: {
@@ -916,6 +989,7 @@ function submitReply(reviewId) {
     text: text,
     likes: 0,
     liked: false,
+    replies: [],
   });
 
   loadReviews(currentCourseId);
