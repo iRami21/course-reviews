@@ -783,16 +783,27 @@ function loadReviews(courseId) {
             </div>
             <div class="review-text">${escapeHtml(review.text)}</div>
             <div class="review-actions">
-              <button class="review-action-btn ${review.liked ? "liked" : ""}" onclick="toggleReviewLike('${review.id}')">
-                ${heartIcon()}
-                <span>${review.likes ?? 0}</span>
-              </button>
+            <div class="reaction-container" data-review-id="${review.id}">
+                
+                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="toggleReviewLike('${review.id}')">
+                  <span class="current-emoji-icon">${heartIcon()}</span>
+                  <span class="like-count-num">${review.likes ?? 0}</span>
+                </button>
+
+                <div class="reaction-palette">
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️')">❤️</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮')">😮</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍')">👍</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥')">🔥</button>
+                </div>
+              </div>
+
               <button class="review-action-btn" onclick="toggleReplyForm('${review.id}')">
                 ${replyIcon()}
                 <span>${replyCountText}</span>
               </button>
             </div>
-            <div class="reply-form" id="replyForm-${review.id}" style="display: none">
+              <div class="reply-form" id="replyForm-${review.id}" style="display: none">
               <input
                 type="text"
                 id="replyInput-${review.id}"
@@ -826,6 +837,36 @@ function loadReviews(courseId) {
 
     reviewsList.appendChild(reviewItem);
   });
+}
+
+// 記錄使用者有沒有對這則評論表態過
+const userReactedReviews = new Set();
+
+function selectReviewEmoji(event, reviewId, selectedEmoji) {
+    // 1. 阻止事件冒泡與預設行為
+    event.stopPropagation();
+    event.preventDefault();
+
+    // 2. 精準抓到這則留言的複合式按鈕容器
+    const container = document.querySelector(`[data-review-id="${reviewId}"]`);
+    if (!container) return;
+
+    const emojiIconSpan = container.querySelector('.current-emoji-icon');
+    const countSpan = container.querySelector('.like-count-num');
+    const mainBtn = container.querySelector('.main-reaction-btn');
+    
+    let currentCount = parseInt(countSpan.textContent) || 0;
+
+    // 3. 檢查是不是第一次點，如果是就 +1
+    if (!userReactedReviews.has(reviewId)) {
+        currentCount += 1;
+        userReactedReviews.add(reviewId);
+        mainBtn.classList.add('liked'); // 套用點讚後的可愛變色
+    }
+
+    // 4. 把原本的 icon 換成選中的可愛表情，並更新計數
+    emojiIconSpan.textContent = selectedEmoji;
+    countSpan.textContent = currentCount;
 }
 
 function findReviewById(reviewId) {
