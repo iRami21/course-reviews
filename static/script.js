@@ -394,7 +394,12 @@ function renderCourseCards(container, courses, emptyText) {
             <div class="course-divider"></div>
             
             <div class="course-footer" onclick="event.stopPropagation();">
-                <div class="course-reviews-count">${course.reviewCount} review${course.reviewCount !== 1 ? "s" : ""}</div>
+                <div class="course-reviews-count">
+                    <span class="stat-save-display">
+                        🔖 <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
+                    </span>
+                    <span class="stat-comment">💬 ${course.reviewCount}</span>
+                </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
             </div>
         `;
@@ -464,6 +469,32 @@ function toggleFollow(courseId) {
       filterCourses();
     }
   }
+
+  const countSpan = document.getElementById(`save-count-${courseId}`);
+  if (!countSpan) return; 
+
+  let currentCount = parseInt(countSpan.textContent);
+
+  // 2. 透過判斷右上角按鈕現在有沒有 "followed" 這個 class，來決定數字加減
+  // 先找出那一張卡片的按鈕元素
+  const btn = document.querySelector(`[onclick*="toggleFollow(${courseId})"]`);
+    
+    if (btn) {
+        // 如果點擊後按鈕身上有 followed，代表剛才的動作是「新增收藏」，數字 +1
+        if (btn.classList.contains('followed')) {
+            currentCount += 1;
+        } else {
+            // 反之，如果 class 沒了，代表是「取消收藏」，數字 -1
+            currentCount -= 1;
+        }  
+    }
+
+    if (currentCount < 0) {
+        currentCount = 0; // 用一個等號來重新賦值
+    }
+
+    // 3. 把算好的新數字塞回左下角畫面上
+    countSpan.textContent = currentCount;
 }
 
 function showFavorites() {

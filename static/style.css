@@ -219,6 +219,25 @@ body {
   padding: 0;
 }
 
+/* 確保左下角收藏和留言橫向排開 */
+.course-reviews-count {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* 兩個數據中間的可愛小空隙 */
+}
+
+/* 讓 🔖 💬 圖標和數字垂直置中對齊 */
+.stat-save-display, .stat-comment {
+  display: flex;
+  align-items: center;
+  gap: 4px; /* 圖標跟數字之間的距離 */
+  font-family: "Sniglet", system-ui;
+  font-weight: 400;
+  font-style: normal;
+  color: #4c566a;
+  font-size: 18px;
+}
+
 /* Course Card */
 .course-card {
   background-color: #fefaf0 !important;
