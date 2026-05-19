@@ -10,6 +10,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single+Ink:wght@100..900&family=Cause:wght@100..900&family=Chewy&family=Comic+Relief:wght@400;700&family=Delicious+Handrawn&family=Grandstander:ital,wght@0,100..900;1,100..900&family=Jersey+10&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Rampart+One&family=Roboto:ital,wght@0,100..900;1,100..900&family=Sniglet:wght@400;800&family=Space+Mono&display=swap" rel="stylesheet">
   </head>
   <body>
+
+    <body>
+    <div id="landingScreen" class="landing-screen">
+      <div class="landing-content">
+        <h1 class="landing-title">CourseReviewPlatform</h1>
+        <p class="landing-subtitle">a platform that allows students to leave course reviews.</p>
+        
+        <div class="landing-actions">
+          <button type="button" class="btn-outline" onclick="openRoleModal()">Login</button>
+          <button type="button" class="btn-outline" onclick="openLoginModal(); setRegisterMode(true);">Register</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="roleModal" class="modal" onclick="closeRoleModalOutside(event)">
+      <div class="modal-content">
+        <span class="close" onclick="closeRoleModal()">&times;</span>
+        <h2 style="text-align: center; color: #891d1a; margin-bottom: 0.5rem;">Choose Your Role</h2>
+        <p style="text-align: center; color: #4f67b1; font-weight: 700; margin-bottom: 2rem;">Please select your identity to login</p>
+        
+        <div class="landing-actions" style="display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1rem;">
+          <button type="button" class="btn-outline" onclick="handleRoleChoice('user')">User</button>
+          <button type="button" class="btn-outline" onclick="handleRoleChoice('admin')">Admin</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="navbar">
+
     <!-- Navigation Bar -->
     <nav class="navbar">
       <div class="nav-container">
@@ -39,60 +68,72 @@
     <div id="loginModal" class="modal" style="display: none">
       <div class="modal-content">
         <span class="close" onclick="closeLoginModal()">&times;</span>
-        <h2>Login / Register</h2>
-        <form id="authForm">
-          <div class="register-fields" id="registerFields" style="display: none">
-            <div class="avatar-preview" id="avatarPreview" aria-hidden="true"></div>
-            <div class="form-group">
-              <label for="avatarAnimal">Avatar</label>
-              <select id="avatarAnimal">
-                <option value="question">Default</option>
-                <option value="cat">Cat</option>
-                <option value="dog">Dog</option>
-                <option value="bear">Bear</option>
-                <option value="monkey">Monkey</option>
-                <option value="elephant">Elephant</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="gender">Gender</label>
-              <select id="gender">
-                <option value="undisclosed">Prefer not to say</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </div>
+        
+        <div id="roleSelectionSection" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 0;">
+          <h2 style="color: var(--primary); margin-bottom: 0.5rem;">Choose Your Role</h2>
+          <p style="color: var(--text-muted); font-weight: 700; margin-bottom: 2rem;">Please select your identity to login</p>
+          <div style="display: flex; gap: 1.5rem;">
+            <button type="button" class="btn-submit" style="background: #4f67b1; padding: 0.6rem 2.5rem; margin: 0;" onclick="selectRole('user')">User</button>
+            <button type="button" class="btn-submit" style="background: #891d1a; padding: 0.6rem 2.5rem; margin: 0;" onclick="selectRole('admin')">Admin</button>
           </div>
-          <input type="text" placeholder="Username" id="username" required />
-          <input
-            type="email"
-            placeholder="Email"
-            id="email"
-            class="register-only"
-            style="display: none"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            id="password"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Confirm Password"
-            id="confirmPassword"
-            class="register-only"
-            style="display: none"
-          />
-          <button type="submit" class="btn-submit">Login</button>
-          <p class="toggle-register">
-            Don't have an account?
-            <a href="#" onclick="toggleRegister(event)">Register here</a>
-          </p>
-        </form>
+        </div>
+
+        <div id="actualLoginForm" style="display: none;">
+          <h2>Login / Register</h2>
+          <form id="authForm">
+            <div class="register-fields" id="registerFields" style="display: none">
+              <div class="avatar-preview" id="avatarPreview" aria-hidden="true"></div>
+              <div class="form-group">
+                <label for="avatarAnimal">Avatar</label>
+                <select id="avatarAnimal">
+                  <option value="question">Default</option>
+                  <option value="cat">Cat</option>
+                  <option value="dog">Dog</option>
+                  <option value="bear">Bear</option>
+                  <option value="monkey">Monkey</option>
+                  <option value="elephant">Elephant</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gender">Gender</label>
+                <select id="gender">
+                  <option value="undisclosed">Prefer not to say</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+            </div>
+            <input type="text" placeholder="Username" id="username" required />
+            <input
+              type="email"
+              placeholder="Email"
+              id="email"
+              class="register-only"
+              style="display: none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              id="password"
+              required
+            />
+            <input
+              type="password"
+              placeholder="Confirm Password"
+              id="confirmPassword"
+              class="register-only"
+              style="display: none"
+            />
+            <button type="submit" class="btn-submit">Login</button>
+            <p class="auth-toggle">
+              <a href="#" class="toggle-register" onclick="toggleRegister(event)">Don't have an account? Register</a>
+            </p>
+          </form>
+        </div>
+
       </div>
     </div>
-
+    
     <!-- Main Content -->
     <main class="main-content">
       <section class="page-heading" id="pageHeading">

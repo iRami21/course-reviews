@@ -48,6 +48,7 @@ body {
   line-height: 1.5;
 }
 
+
 /* Navigation Bar */
 .navbar {
   background-color: #4f67b1;
@@ -2487,4 +2488,78 @@ button {
   .register-fields {
     grid-template-columns: 1fr;
   }
+}
+
+/* =========================================
+   滿版大門與手繪角色選單樣式
+   ========================================= */
+/* 🌟 貼在 style.css 的最底部 */
+.landing-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #fefaf0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999; /* 大門設為 9999 */
+  transition: opacity 0.4s ease;
+}
+
+#roleModal {
+  z-index: 100000 !important; /* 角色視窗 */
+}
+
+#loginModal {
+  z-index: 100005 !important; /* 藍色登入視窗強制壓在最前面 */
+}
+
+.landing-content {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.landing-title {
+  color: #0047FF; /* 草圖手繪的亮藍色 */
+  font-size: clamp(2.8rem, 5vw, 4.5rem);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.landing-subtitle {
+  color: #891d1a; /* 你們經典的深紅棕色 */
+  font-size: clamp(1.4rem, 2.5vw, 2.2rem);
+  margin-bottom: 3.5rem;
+}
+
+.landing-subtitle .squiggle {
+  text-decoration: underline;
+  text-decoration-style: wavy;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: #891d1a;
+  border: 3px solid #891d1a;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 2.5rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+  background-color: #891d1a;
+  color: #fefaf0;
+  transform: translateY(-2px);
 }
