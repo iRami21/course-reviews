@@ -622,6 +622,54 @@ body {
   100% { transform: translateY(-6px) scale(1); opacity: 1; }
 }
 
+/* 讓複合按鈕容器可以作為彈出面板的定位基準 */
+.reaction-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* 🌟 隱藏的表情面板（完全配合 Sniglet 圓潤風） */
+.reaction-palette {
+  display: none; /* 平常藏起來 */
+  position: absolute;
+  bottom: 100%;  /* 釘在按鈕正上方 */
+  left: 0;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 30px; /* 圓角膠囊形狀 */
+  padding: 6px 10px;
+  box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.12); /* 舒適的陰影 */
+  gap: 10px;
+  z-index: 99;
+  transform: translateY(-6px);
+  animation: emojiPop 0.2s ease; /* 彈出動效 */
+}
+
+/* 🌟 當滑鼠滑入區塊時，面板現身 */
+.reaction-container:hover .reaction-palette {
+  display: flex;
+}
+
+/* 面板內獨立的表情小按鈕 */
+.reaction-palette button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+/* 滑鼠滑過面板內的小表情時，單個表情會變大跳動 */
+.reaction-palette button:hover {
+  transform: scale(1.3) translateY(-4px);
+}
+
+@keyframes emojiPop {
+  0% { transform: translateY(0px) scale(0.8); opacity: 0; }
+  100% { transform: translateY(-6px) scale(1); opacity: 1; }
+}
+
 .language-icon {
   width: 1.1em;
   height: 1.1em;
