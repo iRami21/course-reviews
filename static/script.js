@@ -656,7 +656,7 @@ function updateAuthUI() {
     logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
     userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
   } else {
-    loginBtn.style.display = "none";
+    loginBtn.style.display = "block";
     logoutBtn.style.display = "none";
     userAvatar.setAttribute("aria-label", "Login");
   }

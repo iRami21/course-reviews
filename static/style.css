@@ -2500,7 +2500,7 @@ button {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #fefaf0;
+  background-color: #4f67b1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -2524,16 +2524,17 @@ button {
 }
 
 .landing-title {
-  color: #0047FF; /* 草圖手繪的亮藍色 */
+  color: #fefaf0; /* 草圖手繪的亮藍色 */
   font-size: clamp(2.8rem, 5vw, 4.5rem);
-  font-weight: 700;
+  font-weight: 500;
   margin-bottom: 0.5rem;
 }
 
 .landing-subtitle {
-  color: #891d1a; /* 你們經典的深紅棕色 */
+  color: #ffd8b9; /* 你們經典的深紅棕色 */
   font-size: clamp(1.4rem, 2.5vw, 2.2rem);
   margin-bottom: 3.5rem;
+  font-weight: 500;
 }
 
 .landing-subtitle .squiggle {
@@ -2547,13 +2548,12 @@ button {
 }
 
 .btn-outline {
-  background-color: transparent;
+  background-color: #ffd8b9;
   color: #891d1a;
-  border: 3px solid #891d1a;
   border-radius: var(--radius-md);
   padding: 0.6rem 2.5rem;
   font-size: 1.6rem;
-  font-weight: 700;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
 }
