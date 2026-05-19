@@ -782,19 +782,22 @@ function loadReviews(courseId) {
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
             <div class="review-text">${escapeHtml(review.text)}</div>
+            
             <div class="review-actions">
-            <div class="reaction-container" data-review-id="${review.id}">
+              <div class="reaction-container" data-review-id="${review.id}">
                 
-                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="toggleReviewLike('${review.id}')">
-                  <span class="current-emoji-icon">${heartIcon()}</span>
-                  <span class="like-count-num">${review.likes ?? 0}</span>
+                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="handleQuickLike(event, '${review.id}')">
+                  <span class="emoji-stack" id="emoji-stack-${review.id}">
+                    <span class="emoji-item">${heartIcon()}</span>
+                  </span>
+                  <span class="like-count-num" id="like-count-${review.id}">${review.likes ?? 0}</span>
                 </button>
 
                 <div class="reaction-palette">
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️')">❤️</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮')">😮</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍')">👍</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥')">🔥</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️', 'main')">❤️</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮', 'main')">😮</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍', 'main')">👍</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥', 'main')">🔥</button>
                 </div>
               </div>
 
@@ -803,6 +806,7 @@ function loadReviews(courseId) {
                 <span>${replyCountText}</span>
               </button>
             </div>
+
               <div class="reply-form" id="replyForm-${review.id}" style="display: none">
               <input
                 type="text"
@@ -812,61 +816,109 @@ function loadReviews(courseId) {
               <button type="button" onclick="submitReply('${review.id}')">Post</button>
             </div>
             <div class="review-replies">
-              ${replies
-                .map(
-                  (reply) => `
-                    <div class="reply-item">
-                      <div class="reply-content">
-                        <div class="reply-meta">
-                          <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
-                          <strong>${escapeHtml(reply.author)}</strong>
-                          <span>${escapeHtml(reply.date)}</span>
+                ${replies
+                  .map(
+                    (reply) => `
+                      <div class="reply-item">
+                        <div class="reply-content">
+                          <div class="reply-meta">
+                            <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
+                            <strong>${escapeHtml(reply.author)}</strong>
+                            <span>${escapeHtml(reply.date)}</span>
+                          </div>
+                          <p>${escapeHtml(reply.text)}</p>
                         </div>
-                        <p>${escapeHtml(reply.text)}</p>
+                        
+                        <div class="reaction-container" data-reply-id="${reply.id}">
+                          
+                          <button class="review-action-btn main-reaction-btn ${reply.liked ? "liked" : ""}" onclick="window.selectReviewEmoji(event, '${reply.id}', '❤️', 'reply')">
+                            <span class="emoji-stack" id="reply-emoji-stack-${reply.id}">
+                              <span class="emoji-item">❤️</span>
+                            </span>
+                            <span class="like-count-num" id="reply-like-count-${reply.id}">${reply.likes ?? 0}</span>
+                          </button>
+
+                          <div class="reaction-palette">
+                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '❤️', 'reply')">❤️</button>
+                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '😮', 'reply')">😮</button>
+                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '👍', 'reply')">👍</button>
+                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '🔥', 'reply')">🔥</button>
+                          </div>
+                        </div>
+                        
                       </div>
-                      <button class="review-action-btn reply-like-btn ${reply.liked ? "liked" : ""}" onclick="toggleReplyLike('${review.id}', '${reply.id}')">
-                        ${heartIcon()}
-                        <span>${reply.likes ?? 0}</span>
-                      </button>
-                    </div>
-                  `,
-                )
-                .join("")}
-            </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
         `;
 
     reviewsList.appendChild(reviewItem);
   });
 }
 
-// 記錄使用者有沒有對這則評論表態過
-const userReactedReviews = new Set();
+// 依然維持這兩個獨立的記憶庫
+const userReactedMainReviews = new Set(); 
+const userReactedSubReplies = new Set();   
 
-function selectReviewEmoji(event, reviewId, selectedEmoji) {
-    // 1. 阻止事件冒泡與預設行為
+window.selectReviewEmoji = function(event, id, selectedEmoji, type = 'main') {
     event.stopPropagation();
     event.preventDefault();
 
-    // 2. 精準抓到這則留言的複合式按鈕容器
-    const container = document.querySelector(`[data-review-id="${reviewId}"]`);
-    if (!container) return;
+    let countSpan, stackContainer, memorySet, defaultHeart;
 
-    const emojiIconSpan = container.querySelector('.current-emoji-icon');
-    const countSpan = container.querySelector('.like-count-num');
-    const mainBtn = container.querySelector('.main-reaction-btn');
-    
-    let currentCount = parseInt(countSpan.textContent) || 0;
-
-    // 3. 檢查是不是第一次點，如果是就 +1
-    if (!userReactedReviews.has(reviewId)) {
-        currentCount += 1;
-        userReactedReviews.add(reviewId);
-        mainBtn.classList.add('liked'); // 套用點讚後的可愛變色
+    // 1. 根據傳入的類型分流，並設定預設的愛心（主評論和子回覆可能用不同的 heartIcon）
+    if (type === 'main') {
+        countSpan = document.getElementById(`like-count-${id}`);
+        stackContainer = document.getElementById(`emoji-stack-${id}`);
+        memorySet = userReactedMainReviews;
+        defaultHeart = '❤️'; // 如果你們主評論原本有特殊的 heartIcon，也可以換成字串模板
+    } else {
+        countSpan = document.getElementById(`reply-like-count-${id}`);
+        stackContainer = document.getElementById(`reply-emoji-stack-${id}`);
+        memorySet = userReactedSubReplies;
+        defaultHeart = '❤️';
     }
 
-    // 4. 把原本的 icon 換成選中的可愛表情，並更新計數
-    emojiIconSpan.textContent = selectedEmoji;
+    if (!countSpan || !stackContainer) return;
+    let currentCount = parseInt(countSpan.textContent) || 0;
+
+    // 🌟 2. 【關鍵：判斷是不是點到同一個表情，進而「收回表態」】
+    // 我們可以偷看目前堆疊容器裡的第一個表情是不是就是現在點的這個
+    const firstEmoji = stackContainer.querySelector('.emoji-item')?.textContent;
+
+    if (memorySet.has(id) && firstEmoji === selectedEmoji) {
+        // 👉 情況 A：已經點過了，而且又按了同一個表情 ＝ 收回！
+        currentCount -= 1;
+        if (currentCount < 0) currentCount = 0; // 防呆
+        
+        countSpan.textContent = currentCount;
+        memorySet.delete(id); // 從記憶庫移除（解鎖）
+
+        // 將堆疊還原成原本最初只有一顆愛心的乾淨狀態
+        stackContainer.innerHTML = `<span class="emoji-item">${heartIcon()}</span>`;
+        return; // 結束函式
+    } 
+    
+    if (memorySet.has(id) && firstEmoji !== selectedEmoji) {
+        // 👉 情況 B：已經點過了，但點了「不一樣」的表情 ＝ 換心情（不加減數字）
+        // 直接換掉最前面的表情即可，不需要過關
+        stackContainer.innerHTML = `
+            <span class="emoji-item active-pop">${selectedEmoji}</span>
+            <span class="emoji-item">${heartIcon()}</span>
+        `;
+        return;
+    }
+
+    // 👉 情況 C：完全沒點過 ＝ 正常第一次點讚（數字 +1）
+    currentCount += 1;
     countSpan.textContent = currentCount;
+    memorySet.add(id); // 鎖定
+
+    // 產生雙表情堆疊效果
+    stackContainer.innerHTML = `
+        <span class="emoji-item active-pop">${selectedEmoji}</span>
+    `;
 }
 
 function findReviewById(reviewId) {
