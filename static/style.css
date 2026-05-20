@@ -150,12 +150,17 @@ body {
 }
 
 .btn-login {
-  background-color: #007bff;
-  color: white;
+  border: 1px solid #a7d7a4;
+  background-color: #f0fff0;
+  color: #1f7a35;
 }
 
 .btn-login:hover {
-  background-color: #0056b3;
+  border-color: #1f7a35;
+  background-color: #c9f7c7;
+  color: #145c28;
+  box-shadow: 0 8px 18px rgba(31, 122, 53, 0.26);
+  transform: translateY(-2px);
 }
 
 .btn-logout {
@@ -165,66 +170,6 @@ body {
 
 .btn-logout:hover {
   background-color: #c82333;
-}
-
-/* === 全螢幕歡迎與登入蓋台 === */
-.login-page-overlay {
-  background-color: #4f67b1 !important; /* 全螢幕粉藍色背景 */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 99999;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 第一階段：純文字與Start按鈕外殼（完全透明） */
-.welcome-pure-text {
-  background: transparent !important;
-  box-shadow: none !important;
-  text-align: center;
-  width: min(92vw, 500px);
-}
-
-.welcome-header h1 {
-  color: #fefaf0;
-  font-size: 2.5rem;
-  margin-bottom: 0.2rem;
-}
-
-.welcome-subtitle {
-  color: #ffd8b9;
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
-  font-weight: 700;
-}
-
-#startExploreBtn {
-  font-size: 1.2rem;
-  padding: 0.9rem 2.5rem;
-  width: auto;
-  display: inline-block;
-  background-color: #c74d30;
-}
-
-/* 第二階段：點了 Start 才出現的白色方塊卡片 */
-.welcome-white-box {
-  background: #ffffff !important; /* 维持底下白色底 */
-  padding: 2.5rem 2rem;
-  border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.15);
-  width: min(92vw, 400px);
-  text-align: center;
-  animation: fadeIn 0.3s ease-in-out; /* 加上一個順滑的淡入效果 */
-}
-
-/* 簡單的淡入動畫 */
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
 }
 
 /* 左右並排分頁標籤 */
@@ -1201,6 +1146,16 @@ body {
   fill: currentColor;
 }
 
+.review-action-btn .comment-icon {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .reply-form {
   align-items: center;
   gap: 0.75rem;
@@ -1273,6 +1228,42 @@ body {
   gap: 0.65rem;
   padding-left: 0.8rem;
   border-left: 2px dotted rgba(79, 103, 177, 0.28);
+}
+
+.reply-toggle-btn {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 999px;
+  background-color: #fff8e7;
+  color: #4f67b1;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.reply-toggle-btn:hover {
+  border-color: #4f67b1;
+  background-color: #edf2ff;
+  color: #2b2f44;
+}
+
+.read-more-btn {
+  display: inline;
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4f67b1;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.read-more-btn:hover {
+  color: #2b2f44;
+  text-decoration: underline;
 }
 
 .reply-content {
@@ -1548,6 +1539,33 @@ button {
 .btn-secondary:hover {
   border-color: var(--border-strong);
   background-color: var(--surface-soft);
+}
+
+.nav-menu .btn-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  border: 1px solid #a7d7a4;
+  border-radius: var(--radius-sm);
+  background-color: #f0fff0;
+  color: #1f7a35;
+  box-shadow: 0 3px 8px rgba(31, 122, 53, 0.12);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav-menu .btn-login:hover {
+  border-color: #1f7a35;
+  background-color: #c9f7c7;
+  color: #145c28;
+  box-shadow: 0 10px 22px rgba(31, 122, 53, 0.3);
+  transform: translateY(-2px);
 }
 
 .main-content {

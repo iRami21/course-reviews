@@ -11,7 +11,7 @@
   </head>
   <body>
     <!-- Navigation Bar -->
-    <nav class="navbar" id="navBlock" style="display: none">
+    <nav class="navbar" id="navBlock">
       <div class="nav-container">
         <div class="nav-logo">
           <h1>Course Review Platform</h1>
@@ -26,27 +26,20 @@
               id="searchBox"
             />
           </div>
-          <button class="user-avatar" id="userAvatar" type="button" aria-label="Login"></button>
+          <button class="user-avatar" id="userAvatar" type="button" aria-label="My favorites" style="display: none"></button>
           <button class="btn-logout" id="logoutBtn" style="display: none">
             Logout
           </button>
-          <button class="btn-login" id="loginBtn" style="display: none">Login</button>
+          <button class="btn-login" id="loginBtn" type="button">Login / Sign in</button>
         </div>
       </div>
     </nav>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="modal login-page-overlay" style="display: block">
-      
-      <div id="welcomeStartSection" class="welcome-pure-text">
-        <div class="welcome-header">
-          <h1>Course Review Platform</h1>
-          <p class="welcome-subtitle">A platform that allows students to leave course reviews.</p>
-        </div>
-        <button type="button" class="btn-submit" id="startExploreBtn" onclick="showAuthFields()">Start</button>
-      </div>
-
-      <div id="authCoreSection" class="welcome-white-box" style="display: none;">
+    <div id="loginModal" class="modal" style="display: none">
+      <div class="modal-content auth-modal-content">
+        <button class="close" type="button" onclick="closeLoginModal()" aria-label="Close">&times;</button>
+        <h2>Login / Register</h2>
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
           <button type="button" id="tabRegister" class="tab-btn" onclick="switchAuthTab('register')">Register</button>
@@ -103,11 +96,10 @@
           <button type="submit" class="btn-submit" id="authSubmitBtn">Login</button>
         </form>
       </div>
-      
     </div>
 
     <!-- Main Content -->
-    <main class="main-content" id="mainContentBlock" style="display: none">
+    <main class="main-content" id="mainContentBlock">
       <section class="page-heading" id="pageHeading">
         <div>
 

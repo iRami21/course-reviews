@@ -3,6 +3,9 @@ let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
 let selectedRating = 0;
+const expandedReplyGroups = new Set();
+const expandedTextItems = new Set();
+const TEXT_PREVIEW_LIMIT = 200;
 
 // Sample course data (will be replaced with API calls)
 const sampleCourses = [
@@ -288,6 +291,36 @@ function heartIcon() {
   `;
 }
 
+function reactionIcon(reaction) {
+  return reaction || heartIcon();
+}
+
+function renderReactionControl(item, reviewId, replyId = null) {
+  const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
+  const selectedReaction = item.reaction || (item.liked ? "❤️" : "");
+
+  return `
+    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
+      <button
+        class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
+        onclick="handleQuickLike(event, ${targetArgs})"
+        type="button"
+      >
+        <span class="emoji-stack">
+          <span class="emoji-item">${reactionIcon(selectedReaction)}</span>
+        </span>
+        <span class="like-count-num">${item.likes ?? 0}</span>
+      </button>
+      <div class="reaction-palette">
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '❤️')">❤️</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😮')">😮</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '👍')">👍</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🔥')">🔥</button>
+      </div>
+    </div>
+  `;
+}
+
 function replyIcon() {
   return `
     <svg class="reply-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -304,6 +337,39 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderExpandableText(text, key, className) {
+  const value = String(text || "");
+  const firstSentence = getFirstSentence(value);
+  const isLong = value.trim().length > TEXT_PREVIEW_LIMIT;
+  const isExpanded = expandedTextItems.has(key);
+  const visibleText = isLong && !isExpanded ? firstSentence : value;
+  const toggle = isLong
+    ? ` <button class="read-more-btn" type="button" onclick="toggleExpandedText(event, '${key}')">${isExpanded ? "Read less" : "Read more"}</button>`
+    : "";
+
+  return `<p class="${className}">${escapeHtml(visibleText)}${toggle}</p>`;
+}
+
+function getFirstSentence(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^.*?[.!?。！？](?=\s|$)/);
+  if (match) return match[0].trim();
+
+  return text.length > TEXT_PREVIEW_LIMIT
+    ? `${text.slice(0, TEXT_PREVIEW_LIMIT).trim()}...`
+    : text;
+}
+
+function toggleExpandedText(event, key) {
+  event.stopPropagation();
+  if (expandedTextItems.has(key)) {
+    expandedTextItems.delete(key);
+  } else {
+    expandedTextItems.add(key);
+  }
+  loadReviews(currentCourseId);
 }
 
 // Initialize the page
@@ -554,21 +620,11 @@ function renderFavorites() {
 // Login modal
 function openLoginModal() {
   document.getElementById("loginModal").style.display = "block";
+  switchAuthTab("login");
 }
 
 function closeLoginModal() {
-  // 1. 隱藏登入蓋台彈窗
   document.getElementById("loginModal").style.display = "none";
-  
-  // 2. 移除全螢幕的粉藍色蓋台樣式（讓畫面不會被鎖死）
-  document.getElementById("loginModal").classList.remove("login-page-overlay");
-
-  // 3. 【核心關鍵】成功登入後，立刻將後台主畫面與導覽列打開，進入主頁！
-  const navBlock = document.getElementById("navBlock");
-  const mainContentBlock = document.getElementById("mainContentBlock");
-  
-  if (navBlock) navBlock.style.display = "block";
-  if (mainContentBlock) mainContentBlock.style.display = "block";
 }
 
 function updateAvatarPreview() {
@@ -583,22 +639,28 @@ function updateAvatarPreview() {
 }
 
 function setRegisterMode(isRegistering) {
-  const submitButton = document.querySelector("#authForm .btn-submit");
+  const submitButton = document.getElementById("authSubmitBtn");
   const toggleText = document.querySelector(".toggle-register");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
 
   submitButton.dataset.mode = isRegistering ? "register" : "login";
   submitButton.textContent = isRegistering ? "Create Account" : "Login";
   registerFields.style.display = isRegistering ? "grid" : "none";
+  tabLogin.classList.toggle("active", !isRegistering);
+  tabRegister.classList.toggle("active", isRegistering);
   registerOnlyFields.forEach((field) => {
     field.style.display = isRegistering ? "block" : "none";
     field.required = isRegistering;
   });
   if (isRegistering) updateAvatarPreview();
-  toggleText.innerHTML = isRegistering
-    ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
-    : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
+  if (toggleText) {
+    toggleText.innerHTML = isRegistering
+      ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
+      : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
+  }
 }
 
 function toggleRegister(event) {
@@ -614,8 +676,6 @@ function login(event) {
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  // 在 function login(event) 內，將原本獲取 mode 的那行改成這樣：
-// 【核心修改】確認是用我們新設定的 id "authSubmitBtn" 來抓取目前的模式 (login 還是 register)
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -639,37 +699,13 @@ function login(event) {
     document.getElementById("authForm").reset();
     setRegisterMode(false);
   }
-
-  // ... 以上保持不變 ...
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    
-    updateAuthUI();
-    closeLoginModal();
-    document.getElementById("authForm").reset();
-    setRegisterMode(false);
-
-    // 【核心新增】登入成功後，把主畫面、導覽列顯示出來，並拔掉全螢幕遮罩
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
-  }
+}
 
 function logout() {
   currentUser = null;
   localStorage.removeItem("currentUser");
   updateAuthUI();
-
-  // 登出後，徹底隱藏後台
-  document.getElementById("navBlock").style.display = "none";
-  document.getElementById("mainContentBlock").style.display = "none";
-  
-  // 讓登入彈窗以滿版蓋台方式出現
-  document.getElementById("loginModal").style.display = "block";
-  document.getElementById("loginModal").classList.add("login-page-overlay");
-  
-  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
-  document.getElementById("welcomeStartSection").style.display = "block";
-  document.getElementById("authCoreSection").style.display = "none";
+  showBrowseCourses();
 }
 
 function checkUserLogin() {
@@ -680,19 +716,10 @@ function checkUserLogin() {
     } catch (error) {
       currentUser = getDefaultProfile(savedUser);
     }
-    
-    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    document.getElementById("loginModal").style.display = "none";
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
-  } else {
-    // 如果沒有登入，確保登入蓋台和樣式都有啟動
-    document.getElementById("navBlock").style.display = "none";
-    document.getElementById("mainContentBlock").style.display = "none";
-    document.getElementById("loginModal").style.display = "block";
-    document.getElementById("loginModal").classList.add("login-page-overlay");
   }
+  document.getElementById("navBlock").style.display = "";
+  document.getElementById("mainContentBlock").style.display = "";
+  document.getElementById("loginModal").style.display = "none";
   updateAuthUI();
 }
 
@@ -706,13 +733,16 @@ function updateAuthUI() {
 
   if (currentUser) {
     loginBtn.style.display = "none";
+    userAvatar.style.display = "inline-flex";
     logoutBtn.style.display = "block";
     logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
     userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
   } else {
-    loginBtn.style.display = "none";
+    loginBtn.style.display = "inline-flex";
+    loginBtn.textContent = "Login / Sign in";
+    userAvatar.style.display = "none";
     logoutBtn.style.display = "none";
-    userAvatar.setAttribute("aria-label", "Login");
+    userAvatar.setAttribute("aria-label", "My favorites");
   }
 }
 
@@ -822,11 +852,12 @@ function loadReviews(courseId) {
 
     const starsHtml = generateStars(review.rating);
     const replies = review.replies || [];
-    const totalReplies = countReplies(replies);
+    const totalReplies = replies.length;
     const replyCountText =
       totalReplies > 0
         ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
         : "Reply";
+    const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
     reviewItem.innerHTML = `
             <div class="review-header">
@@ -842,30 +873,24 @@ function loadReviews(courseId) {
                 <span class="review-rating">${starsHtml}</span>
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
-            <div class="review-text">${escapeHtml(review.text)}</div>
+            ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
             
             <div class="review-actions">
-              <div class="reaction-container" data-review-id="${review.id}">
-                
-                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="handleQuickLike(event, '${review.id}')">
-                  <span class="emoji-stack" id="emoji-stack-${review.id}">
-                    <span class="emoji-item">${heartIcon()}</span>
-                  </span>
-                  <span class="like-count-num" id="like-count-${review.id}">${review.likes ?? 0}</span>
-                </button>
+              ${renderReactionControl(review, review.id)}
 
-                <div class="reaction-palette">
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️', 'main')">❤️</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮', 'main')">😮</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍', 'main')">👍</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥', 'main')">🔥</button>
-                </div>
-              </div>
-
-              <button class="review-action-btn" onclick="toggleReplyForm('${review.id}')">
+              <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
+                ${commentIcon()}
+              </button>
+              ${
+                totalReplies > 0
+                  ? `
+              <button class="review-action-btn replies-toggle-btn" onclick="toggleRepliesGroup('${review.id}', 'root')">
                 ${replyIcon()}
                 <span>${replyCountText}</span>
               </button>
+                  `
+                  : ""
+              }
             </div>
 
               <div class="reply-form" id="replyForm-${review.id}" style="display: none">
@@ -873,37 +898,22 @@ function loadReviews(courseId) {
                 type="text"
                 id="replyInput-${review.id}"
                 placeholder="Write a reply..."
+                onkeydown="handleReplyKeydown(event, '${review.id}')"
               />
               <button type="button" onclick="submitReply('${review.id}')">Post</button>
             </div>
-            <div class="review-replies">
-              ${renderReplies(replies, review.id)}
-            </div>
+            ${showReplies ? `<div class="review-replies">${renderReplies(replies, review.id)}</div>` : ""}
         `;
 
     reviewsList.appendChild(reviewItem);
   });
 }
 
-function countReplies(replies = []) {
-  return replies.reduce(
-    (total, reply) => total + 1 + countReplies(reply.replies || []),
-    0,
-  );
-}
-
-function renderReplies(replies = [], reviewId, depth = 0) {
+function renderReplies(replies = [], reviewId) {
   return replies
     .map((reply) => {
-      const childReplies = reply.replies || [];
-      const replyCount = countReplies(childReplies);
-      const replyCountText =
-        replyCount > 0
-          ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`
-          : "Reply";
-
       return `
-        <div class="reply-thread" style="--reply-depth: ${depth}">
+        <div class="reply-thread">
           <div class="reply-item">
             <div class="reply-content">
               <div class="reply-meta">
@@ -911,36 +921,26 @@ function renderReplies(replies = [], reviewId, depth = 0) {
                 <strong>${escapeHtml(reply.author)}</strong>
                 <span>${escapeHtml(reply.date)}</span>
               </div>
-              <p>${escapeHtml(reply.text)}</p>
+              ${renderExpandableText(reply.text, `reply-${reviewId}-${reply.id}`, "reply-text")}
               <div class="reply-actions">
-                <button class="review-action-btn reply-like-btn ${reply.liked ? "liked" : ""}" onclick="toggleReplyLike('${reviewId}', '${reply.id}')">
-                  ${heartIcon()}
-                  <span>${reply.likes ?? 0}</span>
-                </button>
-                <button class="review-action-btn reply-to-reply-btn" onclick="toggleReplyForm('${reviewId}', '${reply.id}')">
-                  ${replyIcon()}
-                  <span>${replyCountText}</span>
-                </button>
-              </div>
-              <div class="reply-form nested-reply-form" id="replyForm-${reviewId}-${reply.id}" style="display: none">
-                <input
-                  type="text"
-                  id="replyInput-${reviewId}-${reply.id}"
-                  placeholder="Reply to ${escapeHtml(reply.author)}..."
-                />
-                <button type="button" onclick="submitReply('${reviewId}', '${reply.id}')">Post</button>
+                ${renderReactionControl(reply, reviewId, reply.id)}
               </div>
             </div>
           </div>
-          ${
-            childReplies.length > 0
-              ? `<div class="reply-children">${renderReplies(childReplies, reviewId, depth + 1)}</div>`
-              : ""
-          }
         </div>
       `;
     })
     .join("");
+}
+
+function toggleRepliesGroup(reviewId, parentReplyId) {
+  const groupKey = `${reviewId}:${parentReplyId}`;
+  if (expandedReplyGroups.has(groupKey)) {
+    expandedReplyGroups.delete(groupKey);
+  } else {
+    expandedReplyGroups.add(groupKey);
+  }
+  loadReviews(currentCourseId);
 }
 
 function findReviewById(reviewId) {
@@ -966,18 +966,60 @@ function toggleReviewLike(reviewId) {
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
-  return findReplyRecursive(review.replies, replyId);
+  return review.replies.find((reply) => reply.id === replyId) || null;
 }
 
-function findReplyRecursive(replies = [], replyId) {
-  for (const reply of replies) {
-    if (reply.id === replyId) return reply;
+function findReactionTarget(reviewId, replyId = null) {
+  return replyId ? findReplyById(reviewId, replyId) : findReviewById(reviewId);
+}
 
-    const childReply = findReplyRecursive(reply.replies || [], replyId);
-    if (childReply) return childReply;
+function applyReaction(reviewId, reaction = "❤️", replyId = null) {
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
   }
 
-  return null;
+  const target = findReactionTarget(reviewId, replyId);
+  if (!target) return;
+
+  if (!target.liked) {
+    target.likes = (target.likes ?? 0) + 1;
+  }
+
+  target.liked = true;
+  target.reaction = reaction;
+  loadReviews(currentCourseId);
+}
+
+function handleQuickLike(event, reviewId, replyId = null) {
+  event.stopPropagation();
+
+  const target = findReactionTarget(reviewId, replyId);
+  if (target?.liked && (target.reaction || "❤️") === "❤️") {
+    if (!currentUser) {
+      alert("Please login to react.");
+      openLoginModal();
+      return;
+    }
+
+    target.liked = false;
+    target.reaction = "";
+    target.likes = Math.max(0, (target.likes ?? 0) - 1);
+    loadReviews(currentCourseId);
+    return;
+  }
+
+  applyReaction(reviewId, "❤️", replyId);
+}
+
+function selectReviewEmoji(event, reviewId, replyIdOrReaction, maybeReaction = null) {
+  event.stopPropagation();
+
+  const hasReplyId = maybeReaction !== null;
+  const replyId = hasReplyId ? replyIdOrReaction : null;
+  const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
+  applyReaction(reviewId, reaction, replyId);
 }
 
 function toggleReplyLike(reviewId, replyId) {
@@ -995,19 +1037,15 @@ function toggleReplyLike(reviewId, replyId) {
   loadReviews(currentCourseId);
 }
 
-function toggleReplyForm(reviewId, parentReplyId = null) {
+function toggleReplyForm(reviewId) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
     return;
   }
 
-  const formId = parentReplyId
-    ? `replyForm-${reviewId}-${parentReplyId}`
-    : `replyForm-${reviewId}`;
-  const inputId = parentReplyId
-    ? `replyInput-${reviewId}-${parentReplyId}`
-    : `replyInput-${reviewId}`;
+  const formId = `replyForm-${reviewId}`;
+  const inputId = `replyInput-${reviewId}`;
   const replyForm = document.getElementById(formId);
   if (!replyForm) return;
 
@@ -1019,7 +1057,14 @@ function toggleReplyForm(reviewId, parentReplyId = null) {
   }
 }
 
-function submitReply(reviewId, parentReplyId = null) {
+function handleReplyKeydown(event, reviewId) {
+  if (event.key !== "Enter" || event.shiftKey) return;
+
+  event.preventDefault();
+  submitReply(reviewId);
+}
+
+function submitReply(reviewId) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
@@ -1027,23 +1072,18 @@ function submitReply(reviewId, parentReplyId = null) {
   }
 
   const review = findReviewById(reviewId);
-  const inputId = parentReplyId
-    ? `replyInput-${reviewId}-${parentReplyId}`
-    : `replyInput-${reviewId}`;
+  const inputId = `replyInput-${reviewId}`;
   const input = document.getElementById(inputId);
   if (!review || !input) return;
 
   const text = input.value.trim();
   if (!text) return;
 
-  const target = parentReplyId ? findReplyById(reviewId, parentReplyId) : review;
-  if (!target) return;
-
-  if (!target.replies) {
-    target.replies = [];
+  if (!review.replies) {
+    review.replies = [];
   }
 
-  target.replies.push({
+  review.replies.push({
     id: `reply-${Date.now()}`,
     author: getDisplayName(currentUser),
     avatar: {
@@ -1054,9 +1094,11 @@ function submitReply(reviewId, parentReplyId = null) {
     text: text,
     likes: 0,
     liked: false,
+    reaction: "",
     replies: [],
   });
 
+  expandedReplyGroups.add(`${reviewId}:root`);
   loadReviews(currentCourseId);
 }
 
@@ -1133,6 +1175,7 @@ function submitReview(event) {
     text: reviewText,
     likes: 0,
     liked: false,
+    reaction: "",
     replies: [],
   };
 
@@ -1207,52 +1250,4 @@ window.switchAuthTab = function(mode) {
     });
     updateAvatarPreview();
   }
-}
-
-// 新增：按下 Start 按鈕後，展現 Login / Register 區塊
-window.showAuthFields = function() {
-  // 隱藏原本的 Start 按鈕區塊
-  document.getElementById("welcomeStartSection").style.display = "none";
-  // 展現登入註冊的核心輸入區
-  document.getElementById("authCoreSection").style.display = "block";
-}
-
-// 新增：處理首頁 Login / Register 左右標籤切換（維持上一步的邏輯）
-window.switchAuthTab = function(mode) {
-  const tabLogin = document.getElementById("tabLogin");
-  const tabRegister = document.getElementById("tabRegister");
-  const submitButton = document.getElementById("authSubmitBtn");
-  const registerFields = document.getElementById("registerFields");
-  const registerOnlyFields = document.querySelectorAll(".register-only");
-
-  if (mode === "login") {
-    tabLogin.classList.add("active");
-    tabRegister.classList.remove("active");
-    submitButton.dataset.mode = "login";
-    submitButton.textContent = "Login";
-    registerFields.style.display = "none";
-    registerOnlyFields.forEach((field) => {
-      field.style.display = "none";
-      field.required = false;
-    });
-  } else {
-    tabRegister.classList.add("active");
-    tabLogin.classList.remove("active");
-    submitButton.dataset.mode = "register";
-    submitButton.textContent = "Create Account";
-    registerFields.style.display = "grid";
-    registerOnlyFields.forEach((field) => {
-      field.style.display = "block";
-      field.required = true;
-    });
-    updateAvatarPreview();
-  }
-}
-
-// 按下 Start 按鈕後切換區塊
-window.showAuthFields = function() {
-  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
-  document.getElementById("welcomeStartSection").style.display = "none";
-  // 2. 把第二階段的白色登入卡片方塊顯示出來
-  document.getElementById("authCoreSection").style.display = "block";
-}
+};
