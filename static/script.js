@@ -308,6 +308,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Setup event listeners
 function setupEventListeners() {
+  document.getElementById("loginBtn").addEventListener("click", openLoginModal);
   document.getElementById("userAvatar").addEventListener("click", function () {
     if (currentUser) {
       showFavorites();
@@ -545,11 +546,6 @@ function renderFavorites() {
 // Login modal
 function openLoginModal() {
   document.getElementById("loginModal").style.display = "block";
-
-    // 🌟 每次一打開視窗，確保「角色選擇區」顯示，「登入表單區」先藏起來
-    document.getElementById("roleSelectionSection").style.display = "flex";
-    document.getElementById("actualLoginForm").style.display = "none";
-
 }
 
 function closeLoginModal() {
@@ -656,23 +652,10 @@ function updateAuthUI() {
     logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
     userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
   } else {
-    loginBtn.style.display = "block";
+    loginBtn.style.display = "none";
     logoutBtn.style.display = "none";
     userAvatar.setAttribute("aria-label", "Login");
   }
-  // 🌟 新增：如果使用者已登入，大門優雅消失；沒登入則維持大門鎖定
-    const landing = document.getElementById("landingScreen");
-    if (landing) {
-      if (currentUser) {
-        landing.style.opacity = "0";
-        landing.style.pointerEvents = "none";
-        setTimeout(() => { landing.style.display = "none"; }, 400);
-      } else {
-        landing.style.display = "flex";
-        landing.style.opacity = "1";
-        landing.style.pointerEvents = "auto";
-      }
-    }
 }
 
 // Course detail page
@@ -1146,54 +1129,3 @@ window.onclick = function (event) {
     loginModal.style.display = "none";
   }
 };
-
-// ====== 角色選擇視窗 (Role Modal) 核心控制邏輯 ======
-
-// ====== 請將這段貼在 script.js 的最底部 ======
-
-window.openRoleModal = function() {
-    const roleModal = document.getElementById("roleModal");
-    if (roleModal) roleModal.style.display = "block";
-}
-
-window.closeRoleModal = function() {
-    const roleModal = document.getElementById("roleModal");
-    if (roleModal) roleModal.style.display = "none";
-}
-
-window.closeRoleModalOutside = function(event) {
-    const roleModal = document.getElementById("roleModal");
-    if (event.target === roleModal) {
-        roleModal.style.display = "none";
-    }
-}
-
-// 🌟 核心修正：點擊 User 之後的行為
-window.handleRoleChoice = function(role) {
-    console.log("選擇登入身分為:", role);
-    
-    // 1. 先把角色選擇視窗關閉
-    window.closeRoleModal();
-    
-    // 2. ⚡️ 關鍵魔法：讓瀏覽器呼吸 100 毫秒，等關閉動畫跑完，再乾乾淨淨地把藍色登入框叫醒！
-    setTimeout(() => {
-        if (role === 'user' || role === 'admin') {
-            window.openLoginModal();
-            window.setRegisterMode(false); // 確保是 Login 畫面
-        }
-    }, 100); 
-}
-
-// ====== 新增：在 Modal 中選好角色後的處理邏輯 ======
-window.selectRole = function(role) {
-    console.log("使用者選擇的角色是:", role);
-    
-    // 1. 把角色選擇區塊藏起來
-    document.getElementById("roleSelectionSection").style.display = "none";
-    
-    // 2. 把你原本寫好的藍色登入表單秀出來！
-    document.getElementById("actualLoginForm").style.display = "block";
-    
-    // 3. 呼叫你原本寫好的大腦，確保是 Login 狀態（隱藏 avatar, gender 等註冊欄位）
-    window.setRegisterMode(false);
-}

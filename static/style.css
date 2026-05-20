@@ -48,7 +48,6 @@ body {
   line-height: 1.5;
 }
 
-
 /* Navigation Bar */
 .navbar {
   background-color: #4f67b1;
@@ -227,9 +226,8 @@ body {
   gap: 12px; /* 兩個數據中間的可愛小空隙 */
 }
 
-/* 讓 Browse 統計 icon 和數字垂直置中對齊 */
-.stat-save-display,
-.stat-comment {
+/* 讓 🔖 💬 圖標和數字垂直置中對齊 */
+.stat-save-display, .stat-comment {
   display: flex;
   align-items: center;
   gap: 4px; /* 圖標跟數字之間的距離 */
@@ -238,25 +236,6 @@ body {
   font-style: normal;
   color: #4c566a;
   font-size: 18px;
-}
-
-.stat-save-display .heart-icon,
-.stat-comment .comment-icon {
-  width: 1.1em;
-  height: 1.1em;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.stat-save-display .heart-icon {
-  color: #d92d50;
-}
-
-.stat-comment .comment-icon {
-  color: #4f67b1;
 }
 
 /* Course Card */
@@ -384,7 +363,7 @@ body {
 
 .btn-reviews-card {
   padding: 0.5rem 1rem;
-  background-color: #4f67b1 !important;
+  background-color: #c74d30 !important;
   color: white;
   border: none;
   border-radius: 4px;
@@ -395,7 +374,7 @@ body {
 }
 
 .btn-reviews-card:hover {
-  background-color: #465da2;
+  background-color: #0056b3;
 }
 
 /* Modal */
@@ -1166,38 +1145,9 @@ body {
   background-color: #f8fafc;
 }
 
-.reply-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.reply-thread .reply-thread {
-  margin-left: min(2rem, 6vw);
-}
-
-.reply-children {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding-left: 0.8rem;
-  border-left: 2px dotted rgba(79, 103, 177, 0.28);
-}
-
 .reply-content {
   min-width: 0;
   flex: 1;
-}
-
-.reply-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.7rem;
-}
-
-.nested-reply-form {
-  margin-top: 0.75rem;
 }
 
 .reply-meta {
@@ -1616,13 +1566,12 @@ button {
 }
 
 .course-follow-btn.followed {
-  border-color: #d92d50;
-  background-color: #d92d50;
+  border-color: var(--primary);
+  background-color: var(--primary);
   color: #fff;
 }
 
-.course-follow-btn.followed .bookmark-icon,
-.course-follow-btn.followed .heart-icon {
+.course-follow-btn.followed .bookmark-icon {
   fill: currentColor;
 }
 
@@ -1967,115 +1916,6 @@ button {
   background-color: var(--surface-soft);
 }
 
-/* Colorful Auth Modal */
-#loginModal {
-  background-color: rgba(79, 103, 177, 0.32);
-  backdrop-filter: blur(4px);
-}
-
-#loginModal .modal-content {
-  overflow: hidden;
-  border: 1px solid rgba(137, 29, 26, 0.14);
-  border-radius: 16px;
-  background-color: #fefaf0;
-  box-shadow: 0 18px 38px rgba(79, 103, 177, 0.22);
-}
-
-#loginModal .modal-content h2 {
-  color: #2b2f44;
-  font-size: clamp(1.7rem, 4vw, 2.25rem);
-  line-height: 1.1;
-}
-
-#loginModal #authForm {
-  gap: 0.85rem;
-}
-
-#loginModal #authForm input,
-#loginModal .form-group select {
-  min-height: 46px;
-  border: 1px solid rgba(79, 103, 177, 0.16);
-  border-radius: 999px;
-  background-color: #fff8e7;
-  color: #2b2f44;
-  font-family: "Sniglet", system-ui;
-  font-weight: 400;
-}
-
-#loginModal #authForm input {
-  padding: 0.72rem 1rem;
-}
-
-#loginModal .form-group select {
-  padding: 0.72rem 0.95rem;
-}
-
-#loginModal #authForm input::placeholder {
-  color: rgba(76, 86, 106, 0.76);
-}
-
-#loginModal #authForm input:focus,
-#loginModal .form-group select:focus {
-  border-color: #4f67b1;
-  box-shadow: 0 0 0 3px rgba(79, 103, 177, 0.16);
-}
-
-#loginModal .form-group label {
-  color: #4f67b1;
-  font-weight: 800;
-}
-
-#loginModal .register-fields {
-  padding: 1rem;
-  border: 1px solid rgba(79, 103, 177, 0.12);
-  border-radius: var(--radius-md);
-  background-color: rgba(255, 216, 185, 0.34);
-}
-
-#loginModal .avatar-preview {
-  width: 5rem;
-  height: 5rem;
-  border-color: rgba(79, 103, 177, 0.14);
-  box-shadow: 0 8px 18px rgba(79, 103, 177, 0.14);
-}
-
-#loginModal .btn-submit {
-  min-height: 46px;
-  border-radius: 999px;
-  background-color: #4f67b1;
-  color: #fefaf0;
-  font-weight: 850;
-}
-
-#loginModal .btn-submit:hover {
-  background-color: #465da2;
-}
-
-#loginModal .toggle-register {
-  color: #4c566a;
-  font-weight: 700;
-}
-
-#loginModal .toggle-register a {
-  color: #c74d30;
-  font-weight: 850;
-  text-decoration: none;
-}
-
-#loginModal .toggle-register a:hover {
-  color: #a93d25;
-  text-decoration: underline;
-}
-
-#loginModal .close {
-  background-color: #ffcf76;
-  color: #891d1a;
-}
-
-#loginModal .close:hover {
-  background-color: #ffdca0;
-}
-
 .star {
   border-radius: var(--radius-sm);
 }
@@ -2091,207 +1931,6 @@ button {
 .btn-follow-tag:focus-visible {
   outline: 3px solid rgba(16, 24, 40, 0.18);
   outline-offset: 2px;
-}
-
-/* Colorful Course Detail Theme */
-.detail-open .main-content {
-  background-color: #bdd5e6;
-}
-
-.course-detail-page {
-  color: #2b2f44;
-}
-
-.back-button {
-  border-bottom: 1px solid rgba(79, 103, 177, 0.28);
-  background-color: #4f67b1;
-  color: #fefaf0;
-}
-
-.back-button:hover {
-  background-color: #465da2;
-}
-
-.course-overview-card,
-.rating-summary-card,
-.review-item,
-.inline-review-form,
-.empty-reviews {
-  border-color: rgba(137, 29, 26, 0.14);
-  background-color: #fefaf0 !important;
-  box-shadow: 0 10px 22px rgba(79, 103, 177, 0.12);
-}
-
-.course-overview-card h2,
-.student-reviews-header h2,
-.rating-score,
-.review-author,
-.review-score,
-.rating-breakdown-label,
-.rating-breakdown-count {
-  color: #2b2f44;
-}
-
-.detail-course-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-bottom: 1.9rem;
-}
-
-.detail-course-code {
-  background-color: #ffcf76 !important;
-  color: #891d1a !important;
-  margin-bottom: 0;
-}
-
-.detail-course-term {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  padding: 0.35rem 0.8rem;
-  border-radius: 999px;
-  background-color: #ffcf76;
-  color: #891d1a;
-  font-size: 1.05rem;
-  font-weight: 800;
-}
-
-.detail-course-title-zh,
-.review-date,
-.rating-summary-count {
-  color: #4f67b1;
-}
-
-.detail-meta-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  overflow: hidden;
-  padding: 1rem;
-  border: 1px solid rgba(79, 103, 177, 0.12);
-  border-radius: var(--radius-md);
-  background-color: rgba(255, 216, 185, 0.34);
-}
-
-.detail-meta-grid div {
-  padding: 0 1rem;
-}
-
-.detail-meta-grid div + div {
-  border-left: 2px dotted rgba(79, 103, 177, 0.36);
-}
-
-.detail-meta-grid div:last-child strong {
-  font-size: 0.98rem;
-}
-
-.detail-description {
-  padding: 1rem;
-  border: 1px solid rgba(79, 103, 177, 0.12);
-  border-radius: var(--radius-md);
-  background-color: rgba(255, 216, 185, 0.34);
-}
-
-.detail-meta-grid span,
-.detail-description span,
-.inline-review-form .form-group label {
-  color: #4f67b1;
-  font-weight: 800;
-}
-
-.detail-meta-grid strong,
-.detail-description p,
-.review-text,
-.reply-item p {
-  color: #4c566a;
-}
-
-.rating-summary-card {
-  background-color: #fefaf0 !important;
-}
-
-.rating-summary-card h3 {
-  color: #891d1a;
-}
-
-.rating-summary-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin: 0.2rem 0 1.35rem;
-  text-align: center;
-}
-
-.rating-summary-main .rating-score {
-  flex: 0 0 auto;
-}
-
-.rating-summary-main .rating-summary-stars {
-  margin: 0;
-  align-self: center;
-  justify-content: center;
-  width: 100%;
-}
-
-.rating-track {
-  background-color: rgba(79, 103, 177, 0.2);
-}
-
-.rating-bar {
-  background-color: #4f67b1;
-}
-
-.btn-add-review,
-.inline-review-actions .btn-submit,
-.reply-form button {
-  background-color: #4f67b1;
-  color: #fff;
-}
-
-.btn-add-review:hover,
-.inline-review-actions .btn-submit:hover,
-.reply-form button:hover {
-  background-color: #465da2;
-}
-
-.review-action-btn {
-  min-height: 36px;
-  padding: 0.5rem 0.85rem;
-  border: 1px solid rgba(79, 103, 177, 0.18);
-  border-radius: 999px;
-  background-color: #fff8e7;
-  color: #4f67b1;
-}
-
-.review-action-btn:hover {
-  border-color: #4f67b1;
-  background-color: #edf2ff;
-  color: #2b2f44;
-}
-
-.review-action-btn.liked {
-  border-color: #f4b4c2;
-  background-color: #fff1f4;
-  color: #d92d50;
-}
-
-.review-replies {
-  border-color: rgba(199, 77, 48, 0.24);
-}
-
-.reply-item {
-  background-color: rgba(202, 221, 138, 0.34);
-}
-
-.reply-children {
-  border-color: rgba(199, 77, 48, 0.24);
-}
-
-.reply-form input,
-.inline-review-form textarea {
-  background-color: #fff8e7;
 }
 
 @media (max-width: 1024px) {
@@ -2426,21 +2065,6 @@ button {
     gap: 1rem;
   }
 
-  .detail-meta-grid div {
-    padding: 0;
-  }
-
-  .detail-meta-grid div + div {
-    padding-top: 1rem;
-    border-top: 2px dotted rgba(79, 103, 177, 0.36);
-    border-left: 0;
-  }
-
-  .rating-summary-main {
-    flex-direction: column;
-    gap: 0.6rem;
-  }
-
   .rating-summary-stars {
     font-size: 1.25rem;
   }
@@ -2457,10 +2081,6 @@ button {
 
   .inline-review-actions {
     flex-direction: column;
-  }
-
-  #loginModal .register-fields {
-    grid-template-columns: 1fr;
   }
 
   .review-action-btn {
@@ -2488,78 +2108,4 @@ button {
   .register-fields {
     grid-template-columns: 1fr;
   }
-}
-
-/* =========================================
-   滿版大門與手繪角色選單樣式
-   ========================================= */
-/* 🌟 貼在 style.css 的最底部 */
-.landing-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: #4f67b1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999; /* 大門設為 9999 */
-  transition: opacity 0.4s ease;
-}
-
-#roleModal {
-  z-index: 100000 !important; /* 角色視窗 */
-}
-
-#loginModal {
-  z-index: 100005 !important; /* 藍色登入視窗強制壓在最前面 */
-}
-
-.landing-content {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.landing-title {
-  color: #fefaf0; /* 草圖手繪的亮藍色 */
-  font-size: clamp(2.8rem, 5vw, 4.5rem);
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-}
-
-.landing-subtitle {
-  color: #ffd8b9; /* 你們經典的深紅棕色 */
-  font-size: clamp(1.4rem, 2.5vw, 2.2rem);
-  margin-bottom: 3.5rem;
-  font-weight: 500;
-}
-
-.landing-subtitle .squiggle {
-  text-decoration: underline;
-  text-decoration-style: wavy;
-}
-
-.landing-actions {
-  display: flex;
-  gap: 1.5rem;
-}
-
-.btn-outline {
-  background-color: #ffd8b9;
-  color: #891d1a;
-  border-radius: var(--radius-md);
-  padding: 0.6rem 2.5rem;
-  font-size: 1.6rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-outline:hover {
-  background-color: #891d1a;
-  color: #fefaf0;
-  transform: translateY(-2px);
 }
