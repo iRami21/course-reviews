@@ -20,8 +20,10 @@ const sampleCourses = [
     rating: 4.5,
     reviewCount: 2,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 1,
+    tags: ["Computer Science", "Programming", "Foundation"],
     description: "Fundamental concepts of computer science and programming",
   },
   {
@@ -35,8 +37,10 @@ const sampleCourses = [
     rating: 3.0,
     reviewCount: 1,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 1,
+    tags: ["Mathematics", "Calculus", "Workload"],
     description:
       "Advanced techniques for integration, series, and applications",
   },
@@ -51,8 +55,10 @@ const sampleCourses = [
     rating: 5.0,
     reviewCount: 1,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 2,
+    tags: ["Writing", "Research", "Feedback"],
     description:
       "Academic essay structure, research writing, and revision skills",
   },
@@ -67,8 +73,10 @@ const sampleCourses = [
     rating: 4.0,
     reviewCount: 3,
     followed: false,
+    saveCount: 0,
     year: 2023,
     semester: 2,
+    tags: ["Physics", "Lab", "Mechanics"],
     description:
       "Mechanics, motion, forces, energy, and foundational physics models",
   },
@@ -383,13 +391,33 @@ document.addEventListener("DOMContentLoaded", function () {
 // Setup event listeners
 function setupEventListeners() {
   document.getElementById("loginBtn").addEventListener("click", openLoginModal);
-  document.getElementById("userAvatar").addEventListener("click", function () {
-    if (currentUser) {
+  document
+    .getElementById("userAvatar")
+    .addEventListener("click", toggleUserMenu);
+  document
+    .getElementById("profileMenuBtn")
+    .addEventListener("click", openProfileModal);
+  document
+    .getElementById("favoritesMenuBtn")
+    .addEventListener("click", function () {
+      closeUserMenu();
       showFavorites();
-    } else {
-      openLoginModal();
-    }
-  });
+    });
+  document
+    .getElementById("signOutMenuBtn")
+    .addEventListener("click", function () {
+      closeUserMenu();
+      logout();
+    });
+  document.getElementById("profileForm").addEventListener("submit", saveProfile);
+  document
+    .getElementById("profileAvatarAnimal")
+    .addEventListener("change", updateProfileAvatarPreview);
+  document
+    .getElementById("profileGender")
+    .addEventListener("change", updateProfileAvatarPreview);
+  document.addEventListener("click", closeUserMenuOnOutsideClick);
+  document.addEventListener("keydown", closeMenusOnEscape);
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("authForm").addEventListener("submit", login);
   document.getElementById("searchBox").addEventListener("input", filterCourses);
@@ -417,7 +445,9 @@ function setupEventListeners() {
   document
     .getElementById("avatarAnimal")
     .addEventListener("change", updateAvatarPreview);
-  document.getElementById("gender").addEventListener("change", updateAvatarPreview);
+  document
+    .getElementById("gender")
+    .addEventListener("change", updateAvatarPreview);
 }
 
 // Display courses
@@ -472,7 +502,7 @@ function renderCourseCards(container, courses, emptyText) {
                     <span class="stat-save-display">
                         ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">${commentIcon()} ${course.reviewCount}</span>
+                    <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
             </div>
@@ -514,13 +544,29 @@ function sortCourses(courses, sortBy) {
   const sorted = [...courses];
 
   if (sortBy === "ratingDesc") {
-    sorted.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount);
+    sorted.sort(
+      (a, b) =>
+        b.rating - a.rating ||
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
+    );
   } else if (sortBy === "ratingAsc") {
-    sorted.sort((a, b) => a.rating - b.rating || b.reviewCount - a.reviewCount);
+    sorted.sort(
+      (a, b) =>
+        a.rating - b.rating ||
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
+    );
   } else if (sortBy === "reviewsDesc") {
-    sorted.sort((a, b) => b.reviewCount - a.reviewCount || b.rating - a.rating);
+    sorted.sort(
+      (a, b) =>
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id) ||
+        b.rating - a.rating,
+    );
   } else if (sortBy === "reviewsAsc") {
-    sorted.sort((a, b) => a.reviewCount - b.reviewCount || b.rating - a.rating);
+    sorted.sort(
+      (a, b) =>
+        getCourseCommentTotal(a.id) - getCourseCommentTotal(b.id) ||
+        b.rating - a.rating,
+    );
   }
 
   return sorted;
@@ -537,6 +583,10 @@ function toggleFollow(courseId) {
   const course = allCourses.find((c) => c.id === courseId);
   if (course) {
     course.followed = !course.followed;
+    course.saveCount = Math.max(
+      0,
+      (course.saveCount || 0) + (course.followed ? 1 : -1),
+    );
     if (document.getElementById("favoritesPage").style.display === "block") {
       renderFavorites();
     } else {
@@ -545,30 +595,68 @@ function toggleFollow(courseId) {
   }
 
   const countSpan = document.getElementById(`save-count-${courseId}`);
-  if (!countSpan) return; 
+  if (countSpan && course) {
+    countSpan.textContent = course.saveCount || 0;
+  }
+  syncDetailFollowButton(courseId);
+  updateDetailSocialStats(courseId);
+}
 
-  let currentCount = parseInt(countSpan.textContent);
+function syncDetailFollowButton(courseId) {
+  const detailFollowBtn = document.getElementById("detailFollowBtn");
+  const course = allCourses.find((c) => c.id === courseId);
+  if (!detailFollowBtn || !course) return;
 
-  // 2. 透過判斷右上角按鈕現在有沒有 "followed" 這個 class，來決定數字加減
-  // 先找出那一張卡片的按鈕元素
-  const btn = document.querySelector(`[onclick*="toggleFollow(${courseId})"]`);
-    
-    if (btn) {
-        // 如果點擊後按鈕身上有 followed，代表剛才的動作是「新增收藏」，數字 +1
-        if (btn.classList.contains('followed')) {
-            currentCount += 1;
-        } else {
-            // 反之，如果 class 沒了，代表是「取消收藏」，數字 -1
-            currentCount -= 1;
-        }  
-    }
+  detailFollowBtn.className = `course-follow-btn detail-follow-btn ${course.followed ? "followed" : ""}`;
+  detailFollowBtn.innerHTML = heartIcon();
+  detailFollowBtn.setAttribute(
+    "aria-label",
+    course.followed ? "Unsave course" : "Save course",
+  );
+  detailFollowBtn.title = course.followed ? "Saved" : "Save course";
+  detailFollowBtn.onclick = (event) => {
+    event.stopPropagation();
+    toggleFollow(courseId);
+  };
+}
 
-    if (currentCount < 0) {
-        currentCount = 0; // 用一個等號來重新賦值
-    }
+function renderDetailTags(course) {
+  const tagList = document.getElementById("detailTagList");
+  if (!tagList) return;
 
-    // 3. 把算好的新數字塞回左下角畫面上
-    countSpan.textContent = currentCount;
+  const tags = course.tags?.length
+    ? course.tags
+    : [course.department, `${course.year} S${course.semester}`];
+  tagList.innerHTML = tags
+    .map((tag) => `<span class="detail-tag-chip">${escapeHtml(tag)}</span>`)
+    .join("");
+}
+
+function getCourseLikeTotal(courseId) {
+  const course = allCourses.find((c) => c.id === courseId);
+  return course?.saveCount || 0;
+}
+
+function getCourseCommentTotal(courseId) {
+  const reviews = getReviewsForCourse(courseId);
+  return reviews.reduce(
+    (total, review) => total + 1 + (review.replies || []).length,
+    0,
+  );
+}
+
+function updateDetailSocialStats(courseId) {
+  const stats = document.getElementById("detailCourseSocialStats");
+  if (!stats) return;
+
+  stats.innerHTML = `
+    <span class="detail-social-stat stat-save-display">
+      ${heartIcon()} <span>${getCourseLikeTotal(courseId)}</span>
+    </span>
+    <span class="detail-social-stat stat-comment">
+      ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
+    </span>
+  `;
 }
 
 function showFavorites() {
@@ -592,6 +680,117 @@ function showBrowseCourses() {
   document.querySelector(".filters").style.display = "";
   document.getElementById("coursesContainer").style.display = "";
   filterCourses();
+}
+
+function toggleUserMenu(event) {
+  event.stopPropagation();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  const dropdown = document.getElementById("userDropdown");
+  dropdown.hidden = !dropdown.hidden;
+}
+
+function closeUserMenu() {
+  const dropdown = document.getElementById("userDropdown");
+  if (dropdown) dropdown.hidden = true;
+}
+
+function closeUserMenuOnOutsideClick(event) {
+  const userMenu = document.getElementById("userMenu");
+  if (!userMenu || userMenu.contains(event.target)) return;
+  closeUserMenu();
+}
+
+function closeMenusOnEscape(event) {
+  if (event.key !== "Escape") return;
+  closeUserMenu();
+  closeProfileModal();
+}
+
+function updateProfileAvatarPreview() {
+  const preview = document.getElementById("profileAvatarPreview");
+  const profile = {
+    avatarAnimal: document.getElementById("profileAvatarAnimal").value,
+    gender: document.getElementById("profileGender").value,
+  };
+
+  preview.className = `avatar-preview ${getGenderClass(profile.gender)}`;
+  preview.innerHTML = avatarIcon(profile);
+}
+
+function openProfileModal() {
+  closeUserMenu();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  document.getElementById("profileUsername").value =
+    getDisplayName(currentUser) || "";
+  document.getElementById("profileEmail").value = currentUser.email || "";
+  document.getElementById("profileAvatarAnimal").value =
+    currentUser.avatarAnimal || "question";
+  document.getElementById("profileGender").value =
+    currentUser.gender || "undisclosed";
+  updateProfileAvatarPreview();
+  document.getElementById("profileModal").style.display = "block";
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById("profileModal");
+  if (modal) modal.style.display = "none";
+}
+
+function saveProfile(event) {
+  event.preventDefault();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  const previousUsername = getDisplayName(currentUser);
+  const username = document.getElementById("profileUsername").value.trim();
+  if (!username) {
+    alert("Username is required.");
+    return;
+  }
+
+  currentUser = {
+    ...currentUser,
+    username: username,
+    avatarAnimal: document.getElementById("profileAvatarAnimal").value,
+    gender: document.getElementById("profileGender").value,
+  };
+  syncUserContentProfile(previousUsername);
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  updateAuthUI();
+  if (currentCourseId) loadReviews(currentCourseId);
+  closeProfileModal();
+}
+
+function syncUserContentProfile(previousUsername) {
+  const profile = {
+    avatarAnimal: currentUser.avatarAnimal,
+    gender: currentUser.gender,
+  };
+
+  Object.values(courseReviews).forEach((reviews) => {
+    reviews.forEach((review) => {
+      if (review.author === previousUsername) {
+        review.author = getDisplayName(currentUser);
+        review.avatar = profile;
+      }
+      (review.replies || []).forEach((reply) => {
+        if (reply.author === previousUsername) {
+          reply.author = getDisplayName(currentUser);
+          reply.avatar = profile;
+        }
+      });
+    });
+  });
 }
 
 function renderFavorites() {
@@ -704,6 +903,8 @@ function login(event) {
 function logout() {
   currentUser = null;
   localStorage.removeItem("currentUser");
+  closeUserMenu();
+  closeProfileModal();
   updateAuthUI();
   showBrowseCourses();
 }
@@ -726,6 +927,7 @@ function checkUserLogin() {
 function updateAuthUI() {
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
+  const userMenu = document.getElementById("userMenu");
   const userAvatar = document.getElementById("userAvatar");
 
   userAvatar.className = `user-avatar ${getGenderClass(currentUser?.gender)}`;
@@ -733,16 +935,20 @@ function updateAuthUI() {
 
   if (currentUser) {
     loginBtn.style.display = "none";
-    userAvatar.style.display = "inline-flex";
-    logoutBtn.style.display = "block";
-    logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
-    userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
+    userMenu.style.display = "inline-flex";
+    logoutBtn.style.display = "none";
+    logoutBtn.textContent = "Logout";
+    userAvatar.setAttribute(
+      "aria-label",
+      `${getDisplayName(currentUser)} account menu`,
+    );
   } else {
     loginBtn.style.display = "inline-flex";
     loginBtn.textContent = "Login / Sign in";
-    userAvatar.style.display = "none";
+    userMenu.style.display = "none";
     logoutBtn.style.display = "none";
-    userAvatar.setAttribute("aria-label", "My favorites");
+    closeUserMenu();
+    userAvatar.setAttribute("aria-label", "Account menu");
   }
 }
 
@@ -759,6 +965,7 @@ function openCourseDetail(courseId) {
   document.getElementById("detailCourseTerm").textContent =
     `${course.year} S${course.semester}`;
   document.getElementById("detailCourseTitle").textContent = course.title;
+  syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
   document.getElementById("detailCourseProfessor").textContent =
     course.professor;
@@ -767,6 +974,8 @@ function openCourseDetail(courseId) {
   document.getElementById("detailCourseCredits").textContent = course.credits;
   document.getElementById("detailCourseDescription").textContent =
     course.description;
+  renderDetailTags(course);
+  updateDetailSocialStats(courseId);
   document.getElementById("detailRatingValue").textContent =
     averageRating.toFixed(1);
   document.getElementById("detailStars").innerHTML =
@@ -839,6 +1048,8 @@ function loadReviews(courseId) {
 
   const reviewsList = document.getElementById("reviewsList");
   reviewsList.innerHTML = "";
+  updateStudentReviewStats(reviews);
+  updateDetailSocialStats(courseId);
 
   if (reviews.length === 0) {
     reviewsList.innerHTML =
@@ -907,6 +1118,33 @@ function loadReviews(courseId) {
 
     reviewsList.appendChild(reviewItem);
   });
+}
+
+function updateStudentReviewStats(reviews = []) {
+  const statsContainer = document.getElementById("studentReviewStats");
+  if (!statsContainer) return;
+
+  const totals = reviews.reduce(
+    (stats, review) => {
+      const replies = review.replies || [];
+      stats.likes += review.likes ?? 0;
+      stats.comments += 1 + replies.length;
+      replies.forEach((reply) => {
+        stats.likes += reply.likes ?? 0;
+      });
+      return stats;
+    },
+    { likes: 0, comments: 0 },
+  );
+
+  statsContainer.innerHTML = `
+    <span class="student-review-stat stat-save-display">
+      ${heartIcon()} <span>${totals.likes}</span>
+    </span>
+    <span class="student-review-stat stat-comment">
+      ${commentIcon()} <span>${totals.comments}</span>
+    </span>
+  `;
 }
 
 function renderReplies(replies = [], reviewId) {
@@ -1013,7 +1251,12 @@ function handleQuickLike(event, reviewId, replyId = null) {
   applyReaction(reviewId, "❤️", replyId);
 }
 
-function selectReviewEmoji(event, reviewId, replyIdOrReaction, maybeReaction = null) {
+function selectReviewEmoji(
+  event,
+  reviewId,
+  replyIdOrReaction,
+  maybeReaction = null,
+) {
   event.stopPropagation();
 
   const hasReplyId = maybeReaction !== null;
@@ -1213,13 +1456,17 @@ function submitReview(event) {
 // Close modals when clicking outside
 window.onclick = function (event) {
   const loginModal = document.getElementById("loginModal");
+  const profileModal = document.getElementById("profileModal");
 
   if (event.target === loginModal) {
     loginModal.style.display = "none";
   }
+  if (event.target === profileModal) {
+    profileModal.style.display = "none";
+  }
 };
 
-window.switchAuthTab = function(mode) {
+window.switchAuthTab = function (mode) {
   const tabLogin = document.getElementById("tabLogin");
   const tabRegister = document.getElementById("tabRegister");
   const submitButton = document.getElementById("authSubmitBtn");

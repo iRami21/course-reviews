@@ -26,7 +26,14 @@
               id="searchBox"
             />
           </div>
-          <button class="user-avatar" id="userAvatar" type="button" aria-label="My favorites" style="display: none"></button>
+          <div class="user-menu" id="userMenu" style="display: none">
+            <button class="user-avatar" id="userAvatar" type="button" aria-label="Account menu"></button>
+            <div class="user-dropdown" id="userDropdown" hidden>
+              <button type="button" id="profileMenuBtn">Profile</button>
+              <button type="button" id="favoritesMenuBtn">Favorite</button>
+              <button type="button" id="signOutMenuBtn">Sign out</button>
+            </div>
+          </div>
           <button class="btn-logout" id="logoutBtn" style="display: none">
             Logout
           </button>
@@ -94,6 +101,42 @@
           </div>
 
           <button type="submit" class="btn-submit" id="authSubmitBtn">Login</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="profileModal" class="modal" style="display: none">
+      <div class="modal-content profile-modal-content">
+        <button class="close" type="button" onclick="closeProfileModal()" aria-label="Close">&times;</button>
+        <h2>Profile</h2>
+        <form id="profileForm">
+          <div class="register-fields profile-fields">
+            <div class="avatar-preview" id="profileAvatarPreview" aria-hidden="true"></div>
+            <div class="form-group">
+              <label for="profileAvatarAnimal">Avatar</label>
+              <select id="profileAvatarAnimal">
+                <option value="question">Default</option>
+                <option value="cat">Cat</option>
+                <option value="dog">Dog</option>
+                <option value="bear">Bear</option>
+                <option value="monkey">Monkey</option>
+                <option value="elephant">Elephant</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="profileGender">Gender</label>
+              <select id="profileGender">
+                <option value="undisclosed">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-groups">
+            <input type="text" placeholder="Username" id="profileUsername" required />
+            <input type="email" placeholder="Email" id="profileEmail" disabled />
+          </div>
+          <button type="submit" class="btn-submit">Save Profile</button>
         </form>
       </div>
     </div>
@@ -232,6 +275,17 @@
             <div class="detail-description">
               <span>Description</span>
               <p id="detailCourseDescription"></p>
+            </div>
+            <div class="detail-tag-list" id="detailTagList"></div>
+            <div class="detail-social-row">
+              <div class="detail-social-stats" id="detailCourseSocialStats"></div>
+              <button
+                class="course-follow-btn detail-follow-btn"
+                id="detailFollowBtn"
+                type="button"
+                aria-label="Save course"
+                title="Save course"
+              ></button>
             </div>
           </article>
 

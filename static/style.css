@@ -116,6 +116,11 @@ body {
   box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
 }
 
+.user-menu {
+  position: relative;
+  align-items: center;
+}
+
 .user-avatar {
   display: flex;
   align-items: center;
@@ -131,6 +136,47 @@ body {
 
 .user-avatar:hover {
   transform: scale(1.1);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 180px;
+  padding: 0.45rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 8px;
+  background-color: #fefaf0;
+  box-shadow: 0 14px 30px rgba(43, 47, 68, 0.18);
+}
+
+.user-dropdown[hidden] {
+  display: none;
+}
+
+.user-dropdown button {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 0;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #2b2f44;
+  cursor: pointer;
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.user-dropdown button:hover {
+  background-color: #edf2ff;
+  color: #4f67b1;
+}
+
+.user-dropdown button:last-child:hover {
+  background-color: #fff1f4;
+  color: #d92d50;
 }
 
 .user-avatar img {
@@ -695,13 +741,13 @@ body {
   width: 20px;
   height: 20px;
   font-size: 15px;
-  background-color: #ffffff; /* 白色底座，重疊時才不會透過去 */
-  border: 1px solid #ffffff; /* 漂亮的白色小外框線，製造層次感 */
-  border-radius: 50%;
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
   
   /* 🌟 核心魔法：負邊距！讓後面的表情跟前面的貼貼在一起 */
   margin-left: -6px; 
-  box-shadow: -2px 0 4px rgba(0,0,0,0.05); /* 淡淡的左側陰影，立體感爆棚 */
+  box-shadow: none;
 }
 
 /* 讓最新被點出來的那個表情，進場時有個軟萌的放大動畫 */
@@ -1004,10 +1050,26 @@ body {
   margin-bottom: 1.7rem;
 }
 
+.student-reviews-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .student-reviews-header h2 {
   color: #050507;
   font-size: 2.25rem;
   line-height: 1.2;
+}
+
+.student-review-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.student-review-stat {
+  padding: 0.25rem 0;
 }
 
 /* Reviews Section */
@@ -2043,18 +2105,21 @@ button {
 
 .user-avatar.avatar-male,
 .avatar-preview.avatar-male,
+.profile-avatar.avatar-male,
 .reply-avatar.avatar-male {
   background-color: #dbeafe;
 }
 
 .user-avatar.avatar-female,
 .avatar-preview.avatar-female,
+.profile-avatar.avatar-female,
 .reply-avatar.avatar-female {
   background-color: #fce7f3;
 }
 
 .user-avatar.avatar-undisclosed,
 .avatar-preview.avatar-undisclosed,
+.profile-avatar.avatar-undisclosed,
 .reply-avatar.avatar-undisclosed {
   background-color: #ede9fe;
 }
@@ -2077,12 +2142,14 @@ button {
 }
 
 /* Colorful Auth Modal */
-#loginModal {
+#loginModal,
+#profileModal {
   background-color: rgba(79, 103, 177, 0.32);
   backdrop-filter: blur(4px);
 }
 
-#loginModal .modal-content {
+#loginModal .modal-content,
+#profileModal .modal-content {
   overflow: hidden;
   border: 1px solid rgba(137, 29, 26, 0.14);
   border-radius: 16px;
@@ -2090,18 +2157,24 @@ button {
   box-shadow: 0 18px 38px rgba(79, 103, 177, 0.22);
 }
 
-#loginModal .modal-content h2 {
+#loginModal .modal-content h2,
+#profileModal .modal-content h2 {
   color: #2b2f44;
   font-size: clamp(1.7rem, 4vw, 2.25rem);
   line-height: 1.1;
 }
 
-#loginModal #authForm {
+#loginModal #authForm,
+#profileModal #profileForm {
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
 }
 
 #loginModal #authForm input,
-#loginModal .form-group select {
+#loginModal .form-group select,
+#profileModal #profileForm input,
+#profileModal .form-group select {
   min-height: 46px;
   border: 1px solid rgba(79, 103, 177, 0.16);
   border-radius: 999px;
@@ -2111,44 +2184,58 @@ button {
   font-weight: 400;
 }
 
-#loginModal #authForm input {
+#loginModal #authForm input,
+#profileModal #profileForm input {
   padding: 0.72rem 1rem;
 }
 
-#loginModal .form-group select {
+#loginModal .form-group select,
+#profileModal .form-group select {
   padding: 0.72rem 0.95rem;
 }
 
-#loginModal #authForm input::placeholder {
+#loginModal #authForm input::placeholder,
+#profileModal #profileForm input::placeholder {
   color: rgba(76, 86, 106, 0.76);
 }
 
 #loginModal #authForm input:focus,
-#loginModal .form-group select:focus {
+#loginModal .form-group select:focus,
+#profileModal #profileForm input:focus,
+#profileModal .form-group select:focus {
   border-color: #4f67b1;
   box-shadow: 0 0 0 3px rgba(79, 103, 177, 0.16);
 }
 
-#loginModal .form-group label {
+#profileModal #profileEmail {
+  opacity: 0.76;
+  cursor: not-allowed;
+}
+
+#loginModal .form-group label,
+#profileModal .form-group label {
   color: #4f67b1;
   font-weight: 800;
 }
 
-#loginModal .register-fields {
+#loginModal .register-fields,
+#profileModal .profile-fields {
   padding: 1rem;
   border: 1px solid rgba(79, 103, 177, 0.12);
   border-radius: var(--radius-md);
   background-color: rgba(255, 216, 185, 0.34);
 }
 
-#loginModal .avatar-preview {
+#loginModal .avatar-preview,
+#profileModal .avatar-preview {
   width: 5rem;
   height: 5rem;
   border-color: rgba(79, 103, 177, 0.14);
   box-shadow: 0 8px 18px rgba(79, 103, 177, 0.14);
 }
 
-#loginModal .btn-submit {
+#loginModal .btn-submit,
+#profileModal .btn-submit {
   min-height: 46px;
   border-radius: 999px;
   background-color: #4f67b1;
@@ -2156,7 +2243,8 @@ button {
   font-weight: 850;
 }
 
-#loginModal .btn-submit:hover {
+#loginModal .btn-submit:hover,
+#profileModal .btn-submit:hover {
   background-color: #465da2;
 }
 
@@ -2176,13 +2264,74 @@ button {
   text-decoration: underline;
 }
 
-#loginModal .close {
+#loginModal .close,
+#profileModal .close {
   background-color: #ffcf76;
   color: #891d1a;
 }
 
-#loginModal .close:hover {
+#loginModal .close:hover,
+#profileModal .close:hover {
   background-color: #ffdca0;
+}
+
+.profile-modal-content {
+  max-width: 420px;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.3rem;
+}
+
+.profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card-header h2 {
+  margin: 0;
+  color: #2b2f44;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.profile-detail-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-detail-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background-color: #fff8e7;
+}
+
+.profile-detail-list span {
+  color: #4f67b1;
+  font-weight: 800;
+}
+
+.profile-detail-list strong {
+  color: #2b2f44;
+  font-weight: 850;
 }
 
 .star {
@@ -2254,6 +2403,41 @@ button {
   margin-bottom: 0;
 }
 
+.detail-follow-btn {
+  flex: 0 0 auto;
+  width: 3.05rem;
+  height: 3.05rem;
+  border-color: transparent;
+  background-color: #f0f0f1;
+  color: #9a9aa0;
+}
+
+.detail-follow-btn .heart-icon {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.detail-follow-btn:not(.followed) .heart-icon {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.detail-follow-btn:hover {
+  border-color: rgba(217, 45, 80, 0.16);
+  background-color: #fff1f4;
+  color: #d92d50;
+}
+
+.detail-follow-btn.followed {
+  border-color: #d92d50;
+  background-color: #d92d50;
+  color: #fff;
+}
+
+.detail-follow-btn.followed:hover {
+  background-color: #b4233f;
+}
+
 .detail-course-term {
   display: inline-flex;
   align-items: center;
@@ -2299,6 +2483,67 @@ button {
   border: 1px solid rgba(79, 103, 177, 0.12);
   border-radius: var(--radius-md);
   background-color: rgba(255, 216, 185, 0.34);
+}
+
+.detail-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.25rem;
+}
+
+.detail-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background-color: #f0f0f1;
+  color: #2b2f44;
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.detail-social-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.detail-social-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+}
+
+.detail-social-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #9a9aa0;
+  font-size: 1.35rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.detail-social-stat .heart-icon,
+.detail-social-stat .comment-icon {
+  width: 1.55em;
+  height: 1.55em;
+  stroke-width: 2.5;
+}
+
+.detail-social-stat .heart-icon {
+  color: #ef5350;
+  fill: currentColor;
+}
+
+.detail-social-stat .comment-icon {
+  color: #2f9bd4;
 }
 
 .detail-meta-grid span,
@@ -2525,6 +2770,11 @@ button {
     font-size: 1.8rem;
   }
 
+  .detail-follow-btn {
+    width: 2.7rem;
+    height: 2.7rem;
+  }
+
   .detail-course-title-zh {
     margin-bottom: 1.8rem;
     font-size: 1.2rem;
@@ -2543,6 +2793,14 @@ button {
     padding-top: 1rem;
     border-top: 2px dotted rgba(79, 103, 177, 0.36);
     border-left: 0;
+  }
+
+  .detail-social-row {
+    align-items: center;
+  }
+
+  .detail-social-stat {
+    font-size: 1.15rem;
   }
 
   .rating-summary-main {
