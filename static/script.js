@@ -557,7 +557,18 @@ function openLoginModal() {
 }
 
 function closeLoginModal() {
+  // 1. 隱藏登入蓋台彈窗
   document.getElementById("loginModal").style.display = "none";
+  
+  // 2. 移除全螢幕的粉藍色蓋台樣式（讓畫面不會被鎖死）
+  document.getElementById("loginModal").classList.remove("login-page-overlay");
+
+  // 3. 【核心關鍵】成功登入後，立刻將後台主畫面與導覽列打開，進入主頁！
+  const navBlock = document.getElementById("navBlock");
+  const mainContentBlock = document.getElementById("mainContentBlock");
+  
+  if (navBlock) navBlock.style.display = "block";
+  if (mainContentBlock) mainContentBlock.style.display = "block";
 }
 
 function updateAvatarPreview() {
@@ -603,8 +614,10 @@ function login(event) {
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  const isRegistering =
-    document.querySelector("#authForm .btn-submit").dataset.mode === "register";
+  // 在 function login(event) 內，將原本獲取 mode 的那行改成這樣：
+// 【核心修改】確認是用我們新設定的 id "authSubmitBtn" 來抓取目前的模式 (login 還是 register)
+  const submitButton = document.getElementById("authSubmitBtn");
+  const isRegistering = submitButton.dataset.mode === "register";
 
   if (isRegistering && password !== confirmPassword) {
     alert("Passwords do not match.");
@@ -626,12 +639,37 @@ function login(event) {
     document.getElementById("authForm").reset();
     setRegisterMode(false);
   }
-}
+
+  // ... 以上保持不變 ...
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    
+    updateAuthUI();
+    closeLoginModal();
+    document.getElementById("authForm").reset();
+    setRegisterMode(false);
+
+    // 【核心新增】登入成功後，把主畫面、導覽列顯示出來，並拔掉全螢幕遮罩
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
+  }
 
 function logout() {
   currentUser = null;
   localStorage.removeItem("currentUser");
   updateAuthUI();
+
+  // 登出後，徹底隱藏後台
+  document.getElementById("navBlock").style.display = "none";
+  document.getElementById("mainContentBlock").style.display = "none";
+  
+  // 讓登入彈窗以滿版蓋台方式出現
+  document.getElementById("loginModal").style.display = "block";
+  document.getElementById("loginModal").classList.add("login-page-overlay");
+  
+  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
+  document.getElementById("welcomeStartSection").style.display = "block";
+  document.getElementById("authCoreSection").style.display = "none";
 }
 
 function checkUserLogin() {
@@ -642,6 +680,18 @@ function checkUserLogin() {
     } catch (error) {
       currentUser = getDefaultProfile(savedUser);
     }
+    
+    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    document.getElementById("loginModal").style.display = "none";
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
+  } else {
+    // 如果沒有登入，確保登入蓋台和樣式都有啟動
+    document.getElementById("navBlock").style.display = "none";
+    document.getElementById("mainContentBlock").style.display = "none";
+    document.getElementById("loginModal").style.display = "block";
+    document.getElementById("loginModal").classList.add("login-page-overlay");
   }
   updateAuthUI();
 }
@@ -1125,3 +1175,84 @@ window.onclick = function (event) {
     loginModal.style.display = "none";
   }
 };
+
+window.switchAuthTab = function(mode) {
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+  const submitButton = document.getElementById("authSubmitBtn");
+  const registerFields = document.getElementById("registerFields");
+  const registerOnlyFields = document.querySelectorAll(".register-only");
+
+  if (!submitButton) return;
+
+  if (mode === "login") {
+    tabLogin.classList.add("active");
+    tabRegister.classList.remove("active");
+    submitButton.dataset.mode = "login";
+    submitButton.textContent = "Login"; // 按鈕文字變 Login
+    registerFields.style.display = "none";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "none";
+      field.required = false;
+    });
+  } else {
+    tabRegister.classList.add("active");
+    tabLogin.classList.remove("active");
+    submitButton.dataset.mode = "register";
+    submitButton.textContent = "Create Account"; // 按鈕文字變註冊
+    registerFields.style.display = "grid";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "block";
+      field.required = true;
+    });
+    updateAvatarPreview();
+  }
+}
+
+// 新增：按下 Start 按鈕後，展現 Login / Register 區塊
+window.showAuthFields = function() {
+  // 隱藏原本的 Start 按鈕區塊
+  document.getElementById("welcomeStartSection").style.display = "none";
+  // 展現登入註冊的核心輸入區
+  document.getElementById("authCoreSection").style.display = "block";
+}
+
+// 新增：處理首頁 Login / Register 左右標籤切換（維持上一步的邏輯）
+window.switchAuthTab = function(mode) {
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+  const submitButton = document.getElementById("authSubmitBtn");
+  const registerFields = document.getElementById("registerFields");
+  const registerOnlyFields = document.querySelectorAll(".register-only");
+
+  if (mode === "login") {
+    tabLogin.classList.add("active");
+    tabRegister.classList.remove("active");
+    submitButton.dataset.mode = "login";
+    submitButton.textContent = "Login";
+    registerFields.style.display = "none";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "none";
+      field.required = false;
+    });
+  } else {
+    tabRegister.classList.add("active");
+    tabLogin.classList.remove("active");
+    submitButton.dataset.mode = "register";
+    submitButton.textContent = "Create Account";
+    registerFields.style.display = "grid";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "block";
+      field.required = true;
+    });
+    updateAvatarPreview();
+  }
+}
+
+// 按下 Start 按鈕後切換區塊
+window.showAuthFields = function() {
+  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
+  document.getElementById("welcomeStartSection").style.display = "none";
+  // 2. 把第二階段的白色登入卡片方塊顯示出來
+  document.getElementById("authCoreSection").style.display = "block";
+}
