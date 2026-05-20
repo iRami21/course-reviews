@@ -793,17 +793,32 @@ function loadReviews(courseId) {
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
             <div class="review-text">${escapeHtml(review.text)}</div>
+            
             <div class="review-actions">
-              <button class="review-action-btn ${review.liked ? "liked" : ""}" onclick="toggleReviewLike('${review.id}')">
-                ${heartIcon()}
-                <span>${review.likes ?? 0}</span>
-              </button>
+              <div class="reaction-container" data-review-id="${review.id}">
+                
+                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="handleQuickLike(event, '${review.id}')">
+                  <span class="emoji-stack" id="emoji-stack-${review.id}">
+                    <span class="emoji-item">${heartIcon()}</span>
+                  </span>
+                  <span class="like-count-num" id="like-count-${review.id}">${review.likes ?? 0}</span>
+                </button>
+
+                <div class="reaction-palette">
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️', 'main')">❤️</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮', 'main')">😮</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍', 'main')">👍</button>
+                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥', 'main')">🔥</button>
+                </div>
+              </div>
+
               <button class="review-action-btn" onclick="toggleReplyForm('${review.id}')">
                 ${replyIcon()}
                 <span>${replyCountText}</span>
               </button>
             </div>
-            <div class="reply-form" id="replyForm-${review.id}" style="display: none">
+
+              <div class="reply-form" id="replyForm-${review.id}" style="display: none">
               <input
                 type="text"
                 id="replyInput-${review.id}"
