@@ -512,10 +512,52 @@ function renderCourseCards(container, courses, emptyText) {
   });
 }
 
+function parseSearchTokens(raw) {
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  const years = [];
+  const semesters = [];
+  const text = [];
+
+  tokens.forEach((token) => {
+    const lower = token.toLowerCase();
+    if (/^\d{4}$/.test(lower)) {
+      years.push(parseInt(lower, 10));
+      return;
+    }
+
+    if (
+      lower === "s1" ||
+      lower === "sem1" ||
+      lower === "semester1" ||
+      lower === "semester-1" ||
+      lower === "semester_1"
+    ) {
+      semesters.push(1);
+      return;
+    }
+
+    if (
+      lower === "s2" ||
+      lower === "sem2" ||
+      lower === "semester2" ||
+      lower === "semester-2" ||
+      lower === "semester_2"
+    ) {
+      semesters.push(2);
+      return;
+    }
+
+    text.push(lower);
+  });
+
+  return { years, semesters, text };
+}
+
 // Filter courses based on search and filters
 function filterCourses() {
-  const searchTerm = document.getElementById("searchBox").value.toLowerCase();
-  const year = document.getElementById("yearFilter").value;
+  const searchTerm = document.getElementById("searchBox").value.trim();
+  const { years, semesters, text } = parseSearchTokens(searchTerm);
+  const yearFilter = document.getElementById("yearFilter").value;
   const department = document.getElementById("departmentFilter").value;
   const minRating = document.getElementById("ratingFilter").value
     ? parseFloat(document.getElementById("ratingFilter").value)
@@ -523,16 +565,37 @@ function filterCourses() {
   const sortBy = document.getElementById("sortFilter").value;
 
   let filtered = allCourses.filter((course) => {
-    const matchSearch =
-      course.code.toLowerCase().includes(searchTerm) ||
-      course.title.toLowerCase().includes(searchTerm) ||
-      course.titleZh.includes(searchTerm) ||
-      course.professor.toLowerCase().includes(searchTerm);
+    const code = String(course.code || "").toLowerCase();
+    const title = String(course.title || "").toLowerCase();
+    const titleZh = String(course.titleZh || "").toLowerCase();
+    const professor = String(course.professor || "").toLowerCase();
 
+    const matchText =
+      text.length === 0 ||
+      text.some(
+        (token) =>
+          code.includes(token) ||
+          title.includes(token) ||
+          titleZh.includes(token) ||
+          professor.includes(token),
+      );
+    const matchYearToken =
+      years.length === 0 || years.includes(course.year);
+    const matchSemesterToken =
+      semesters.length === 0 || semesters.includes(course.semester);
+    const matchYearFilter =
+      !yearFilter || course.year === parseInt(yearFilter, 10);
     const matchDept = !department || course.department === department;
     const matchRating = course.rating >= minRating;
 
-    return matchSearch && matchDept && matchRating;
+    return (
+      matchText &&
+      matchYearToken &&
+      matchSemesterToken &&
+      matchYearFilter &&
+      matchDept &&
+      matchRating
+    );
   });
 
   filtered = sortCourses(filtered, sortBy);
@@ -744,7 +807,7 @@ function closeProfileModal() {
   if (modal) modal.style.display = "none";
 }
 
-function saveProfile(event) {
+async function saveProfile(event) {
   event.preventDefault();
   if (!currentUser) {
     openLoginModal();
@@ -758,17 +821,36 @@ function saveProfile(event) {
     return;
   }
 
-  currentUser = {
-    ...currentUser,
+  const payload = {
     username: username,
     avatarAnimal: document.getElementById("profileAvatarAnimal").value,
     gender: document.getElementById("profileGender").value,
   };
-  syncUserContentProfile(previousUsername);
-  localStorage.setItem("currentUser", JSON.stringify(currentUser));
-  updateAuthUI();
-  if (currentCourseId) loadReviews(currentCourseId);
-  closeProfileModal();
+
+  try {
+    const response = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to update profile.");
+      return;
+    }
+
+    currentUser = data.user;
+    syncUserContentProfile(previousUsername);
+    updateAuthUI();
+    if (currentCourseId) loadReviews(currentCourseId);
+    closeProfileModal();
+  } catch (error) {
+    alert("Unable to update profile right now.");
+  }
 }
 
 function syncUserContentProfile(previousUsername) {
@@ -844,6 +926,7 @@ function setRegisterMode(isRegistering) {
   const registerOnlyFields = document.querySelectorAll(".register-only");
   const tabLogin = document.getElementById("tabLogin");
   const tabRegister = document.getElementById("tabRegister");
+  const usernameInput = document.getElementById("username");
 
   submitButton.dataset.mode = isRegistering ? "register" : "login";
   submitButton.textContent = isRegistering ? "Create Account" : "Login";
@@ -854,6 +937,11 @@ function setRegisterMode(isRegistering) {
     field.style.display = isRegistering ? "block" : "none";
     field.required = isRegistering;
   });
+  if (usernameInput) {
+    usernameInput.placeholder = isRegistering
+      ? "Username"
+      : "Email or Username";
+  }
   if (isRegistering) updateAvatarPreview();
   if (toggleText) {
     toggleText.innerHTML = isRegistering
@@ -869,10 +957,10 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
-function login(event) {
+async function login(event) {
   event.preventDefault();
-  const username = document.getElementById("username").value;
-  const email = document.getElementById("email").value;
+  const username = document.getElementById("username").value.trim();
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
   const submitButton = document.getElementById("authSubmitBtn");
@@ -883,41 +971,92 @@ function login(event) {
     return;
   }
 
-  if (username && password && (!isRegistering || email)) {
-    currentUser = isRegistering
-      ? {
-          username: username,
-          email: email,
-          avatarAnimal: document.getElementById("avatarAnimal").value,
-          gender: document.getElementById("gender").value,
-        }
-      : getDefaultProfile(username);
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  if (isRegistering) {
+    if (!username || !email || !password) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+  } else if (!username || !password) {
+    alert("Please enter your email or username and password.");
+    return;
+  }
+
+  const payload = isRegistering
+    ? {
+        username: username,
+        email: email,
+        password: password,
+        avatarAnimal: document.getElementById("avatarAnimal").value,
+        gender: document.getElementById("gender").value,
+      }
+    : {
+        identifier: username,
+        password: password,
+      };
+
+  const endpoint = isRegistering ? "/api/register" : "/api/login";
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to sign in right now.");
+      return;
+    }
+
+    if (isRegistering) {
+      alert("Account created. Please log in.");
+      setRegisterMode(false);
+      document.getElementById("authForm").reset();
+      return;
+    }
+
+    currentUser = data.user;
     updateAuthUI();
     closeLoginModal();
     document.getElementById("authForm").reset();
     setRegisterMode(false);
+  } catch (error) {
+    alert("Unable to reach the server right now.");
   }
 }
 
-function logout() {
+async function logout() {
+  try {
+    await fetch("/api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch (error) {
+    // Ignore logout failures to keep UI responsive.
+  }
+
   currentUser = null;
-  localStorage.removeItem("currentUser");
   closeUserMenu();
   closeProfileModal();
   updateAuthUI();
   showBrowseCourses();
 }
 
-function checkUserLogin() {
-  const savedUser = localStorage.getItem("currentUser");
-  if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-    } catch (error) {
-      currentUser = getDefaultProfile(savedUser);
-    }
+async function checkUserLogin() {
+  try {
+    const response = await fetch("/api/session", {
+      credentials: "same-origin",
+    });
+    const data = await response.json();
+    currentUser = data.authenticated ? data.user : null;
+  } catch (error) {
+    currentUser = null;
   }
+
   document.getElementById("navBlock").style.display = "";
   document.getElementById("mainContentBlock").style.display = "";
   document.getElementById("loginModal").style.display = "none";
@@ -1472,6 +1611,7 @@ window.switchAuthTab = function (mode) {
   const submitButton = document.getElementById("authSubmitBtn");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
+  const usernameInput = document.getElementById("username");
 
   if (!submitButton) return;
 
@@ -1485,6 +1625,9 @@ window.switchAuthTab = function (mode) {
       field.style.display = "none";
       field.required = false;
     });
+    if (usernameInput) {
+      usernameInput.placeholder = "Email or Username";
+    }
   } else {
     tabRegister.classList.add("active");
     tabLogin.classList.remove("active");
@@ -1495,6 +1638,9 @@ window.switchAuthTab = function (mode) {
       field.style.display = "block";
       field.required = true;
     });
+    if (usernameInput) {
+      usernameInput.placeholder = "Username";
+    }
     updateAvatarPreview();
   }
 };

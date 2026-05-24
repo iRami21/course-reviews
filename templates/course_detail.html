@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ course.code }} - {{ course.title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="course-detail-page">
+      <a class="back-button" href="{{ url_for('courses') }}">Back to Courses</a>
+
+      <section class="detail-card course-overview-card">
+        <div class="detail-course-tags">
+          <span class="detail-course-code">{{ course.code }}</span>
+          <span class="detail-course-term">{{ course.year }} S{{ course.semester }}</span>
+        </div>
+        <h1>{{ course.title }}</h1>
+        {% if course.title_zh %}
+          <p class="detail-course-title-zh">{{ course.title_zh }}</p>
+        {% endif %}
+
+        <div class="detail-meta-grid">
+          <div>
+            <span>Professor</span>
+            <strong>{{ course.professor or "TBD" }}</strong>
+          </div>
+          <div>
+            <span>Department</span>
+            <strong>{{ course.department or "TBD" }}</strong>
+          </div>
+          <div>
+            <span>Credits</span>
+            <strong>{{ course.credits or "-" }}</strong>
+          </div>
+        </div>
+
+        {% if course.description %}
+          <div class="detail-description">
+            <span>Description</span>
+            <p>{{ course.description }}</p>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="student-reviews-section">
+        <div class="student-reviews-header">
+          <h2>Student Reviews</h2>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for message in messages %}
+                <p class="flash-message">{{ message }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% if current_user.is_authenticated %}
+          <form
+            class="inline-review-form"
+            method="post"
+            action="{{ url_for('submit_review', course_id=course.id) }}"
+          >
+            <div class="form-group">
+              <label for="rating">Rating</label>
+              <select id="rating" name="rating" required>
+                <option value="">Select rating</option>
+                {% for value in range(1, 6) %}
+                  <option value="{{ value }}">{{ value }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="comment">Review</label>
+              <textarea
+                id="comment"
+                name="comment"
+                placeholder="Write your review..."
+                required
+              ></textarea>
+            </div>
+            <button type="submit" class="btn-submit">Submit Review</button>
+          </form>
+        {% else %}
+          <p class="empty-reviews">
+            Please log in to submit a review.
+            <a href="{{ url_for('login', next=request.path) }}">Login</a>
+          </p>
+        {% endif %}
+
+        {% if reviews %}
+          <div class="reviews-list">
+            {% for review in reviews %}
+              <article class="review-item">
+                <div class="review-header">
+                  <div class="review-meta">
+                    <span class="review-author">
+                      {{ review.author.username if review.author else "Anonymous" }}
+                    </span>
+                    <span class="review-dot"></span>
+                    <span class="review-date">{{ review.created_at.strftime('%Y-%m-%d') }}</span>
+                  </div>
+                  <span class="review-language">{{ review.language }}</span>
+                </div>
+                <div class="review-rating-line">
+                  <span class="review-score">Rating: {{ review.rating }}</span>
+                </div>
+                <p class="review-text">{{ review.text }}</p>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-reviews">No reviews yet.</p>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>

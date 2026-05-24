@@ -1,1 +1,4 @@
-套件清單
+flask
+flask-login
+flask-sqlalchemy
+werkzeug
