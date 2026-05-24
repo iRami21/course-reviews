@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Courses</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="course-list-page">
+      <header class="section-heading">
+        <div>
+          <p class="page-kicker">NSYSU Course Reviews</p>
+          <h1>All Courses</h1>
+        </div>
+        <a class="btn-secondary" href="{{ url_for('index') }}">Back to Home</a>
+      </header>
+
+      <form class="course-search-form" method="get" action="{{ url_for('courses') }}">
+        <input
+          type="text"
+          name="q"
+          placeholder="Search by course name, code, or instructor"
+          value="{{ q or '' }}"
+          class="search-box"
+        />
+        <button type="submit" class="btn-reviews-card">Search</button>
+      </form>
+
+      {% if courses %}
+        <div class="courses-container">
+          {% for course in courses %}
+            <article class="course-card">
+              <div class="course-card-header">
+                <div class="course-card-tags">
+                  <div class="course-code">{{ course.code }}</div>
+                  <div class="course-semester">{{ course.year }} S{{ course.semester }}</div>
+                </div>
+              </div>
+              <div class="course-title-section">
+                <div class="course-title-copy">
+                  <div class="course-title">{{ course.title }}</div>
+                  {% if course.title_zh %}
+                    <div class="course-title-zh">{{ course.title_zh }}</div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="course-divider"></div>
+              <div class="course-footer">
+                <div class="course-reviews-count">
+                  <span>{{ course.department or "" }}</span>
+                </div>
+                <a class="btn-reviews-card" href="{{ url_for('course_detail', course_id=course.id) }}">
+                  View Details
+                </a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-state">
+          {% if q %}
+            No courses found for "{{ q }}".
+          {% else %}
+            No courses found.
+          {% endif %}
+        </p>
+      {% endif %}
+    </main>
+  </body>
+</html>
