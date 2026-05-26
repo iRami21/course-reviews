@@ -2208,6 +2208,7 @@ button {
 #profileModal {
   background-color: rgba(79, 103, 177, 0.32);
   backdrop-filter: blur(4px);
+  
 }
 
 #loginModal .modal-content,
@@ -2294,6 +2295,7 @@ button {
   height: 5rem;
   border-color: rgba(79, 103, 177, 0.14);
   box-shadow: 0 8px 18px rgba(79, 103, 177, 0.14);
+  display:flex;
 }
 
 #loginModal .btn-submit,

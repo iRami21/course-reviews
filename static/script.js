@@ -389,65 +389,49 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 // Setup event listeners
+// Setup event listeners
 function setupEventListeners() {
-  document.getElementById("loginBtn").addEventListener("click", openLoginModal);
-  document
-    .getElementById("userAvatar")
-    .addEventListener("click", toggleUserMenu);
-  document
-    .getElementById("profileMenuBtn")
-    .addEventListener("click", openProfileModal);
-  document
-    .getElementById("favoritesMenuBtn")
-    .addEventListener("click", function () {
-      closeUserMenu();
-      showFavorites();
-    });
-  document
-    .getElementById("signOutMenuBtn")
-    .addEventListener("click", function () {
-      closeUserMenu();
-      logout();
-    });
-  document.getElementById("profileForm").addEventListener("submit", saveProfile);
-  document
-    .getElementById("profileAvatarAnimal")
-    .addEventListener("change", updateProfileAvatarPreview);
-  document
-    .getElementById("profileGender")
-    .addEventListener("change", updateProfileAvatarPreview);
+  // 建立一個小工具：如果畫面上找不到這個元素，就跳過不綁定，避免 JS 當機
+  const safeAddListener = (id, eventType, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(eventType, handler);
+  };
+
+  // 上方導覽列按鈕
+  safeAddListener("loginBtn", "click", openLoginModal);
+  safeAddListener("userAvatar", "click", toggleUserMenu);
+  safeAddListener("profileMenuBtn", "click", openProfileModal);
+  safeAddListener("favoritesMenuBtn", "click", function () {
+    closeUserMenu();
+    showFavorites();
+  });
+  safeAddListener("signOutMenuBtn", "click", function () {
+    closeUserMenu();
+    logout();
+  });
+  safeAddListener("logoutBtn", "click", logout);
+
+  // 🔴 這裡就是原本會當機的地方，現在加上保護了！等之後你加上 Profile 的 HTML 就能直接無縫接軌
+  safeAddListener("profileForm", "submit", saveProfile);
+  safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
+  safeAddListener("profileGender", "change", updateProfileAvatarPreview);
+
+  // 登入相關與全域事件
   document.addEventListener("click", closeUserMenuOnOutsideClick);
   document.addEventListener("keydown", closeMenusOnEscape);
-  document.getElementById("logoutBtn").addEventListener("click", logout);
-  document.getElementById("authForm").addEventListener("submit", login);
-  document.getElementById("searchBox").addEventListener("input", filterCourses);
-  document
-    .getElementById("yearFilter")
-    .addEventListener("change", filterCourses);
-  document
-    .getElementById("departmentFilter")
-    .addEventListener("change", filterCourses);
-  document
-    .getElementById("ratingFilter")
-    .addEventListener("change", filterCourses);
-  document
-    .getElementById("sortFilter")
-    .addEventListener("change", filterCourses);
-  document
-    .getElementById("favoriteDepartmentFilter")
-    .addEventListener("change", renderFavorites);
-  document
-    .getElementById("favoriteRatingFilter")
-    .addEventListener("change", renderFavorites);
-  document
-    .getElementById("favoriteSortFilter")
-    .addEventListener("change", renderFavorites);
-  document
-    .getElementById("avatarAnimal")
-    .addEventListener("change", updateAvatarPreview);
-  document
-    .getElementById("gender")
-    .addEventListener("change", updateAvatarPreview);
+  safeAddListener("authForm", "submit", login); // 你的 login 終於可以順利綁定上了！
+
+  // 篩選與註冊表單事件
+  safeAddListener("searchBox", "input", filterCourses);
+  safeAddListener("yearFilter", "change", filterCourses);
+  safeAddListener("departmentFilter", "change", filterCourses);
+  safeAddListener("ratingFilter", "change", filterCourses);
+  safeAddListener("sortFilter", "change", filterCourses);
+  safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
+  safeAddListener("favoriteRatingFilter", "change", renderFavorites);
+  safeAddListener("favoriteSortFilter", "change", renderFavorites);
+  safeAddListener("avatarAnimal", "change", updateAvatarPreview);
+  safeAddListener("gender", "change", updateAvatarPreview);
 }
 
 // Display courses
@@ -871,10 +855,13 @@ function toggleRegister(event) {
 
 function login(event) {
   event.preventDefault();
+  
   const username = document.getElementById("username").value;
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
+  
+  // 抓取目前的模式 (login 還是 register)
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -883,7 +870,9 @@ function login(event) {
     return;
   }
 
+  // 確認必填欄位都有填寫
   if (username && password && (!isRegistering || email)) {
+    // 建立使用者資料
     currentUser = isRegistering
       ? {
           username: username,
@@ -892,21 +881,38 @@ function login(event) {
           gender: document.getElementById("gender").value,
         }
       : getDefaultProfile(username);
+      
+    // 儲存到瀏覽器
     localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    updateAuthUI();
-    closeLoginModal();
+    
+    // 【關鍵修正】直接呼叫 checkUserLogin()！
+    // 它裡面已經寫好了打開 navBlock、打開 mainContentBlock、隱藏 modal 並更新頭像的完美邏輯
+    checkUserLogin(); 
+    
+    // 清空輸入框
     document.getElementById("authForm").reset();
-    setRegisterMode(false);
+    
+    // 確保下次打開是登入狀態
+    switchAuthTab("login"); 
   }
 }
 
 function logout() {
   currentUser = null;
   localStorage.removeItem("currentUser");
-  closeUserMenu();
-  closeProfileModal();
   updateAuthUI();
-  showBrowseCourses();
+
+  // 登出後，徹底隱藏後台
+  document.getElementById("navBlock").style.display = "none";
+  document.getElementById("mainContentBlock").style.display = "none";
+  
+  // 讓登入彈窗以滿版蓋台方式出現
+  document.getElementById("loginModal").style.display = "block";
+  document.getElementById("loginModal").classList.add("login-page-overlay");
+  
+  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
+  document.getElementById("welcomeStartSection").style.display = "block";
+  document.getElementById("authCoreSection").style.display = "none";
 }
 
 function checkUserLogin() {

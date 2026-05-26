@@ -113,6 +113,51 @@
       
     </div>
 
+    <div id="profileModal" class="modal" style="display: none;">
+      <div class="modal-content profile-modal-content">
+        <span class="close" onclick="closeProfileModal()">&times;</span>
+        <div class="profile-card-header">
+          <h2>My Profile</h2>
+        </div>
+        
+        <form id="profileForm">
+          <div class="profile-fields">
+            <div class="avatar-preview" id="profileAvatarPreview"></div>
+            <div class="form-group">
+              <label for="profileAvatarAnimal">Avatar</label>
+              <select id="profileAvatarAnimal">
+                <option value="question">Default</option>
+                <option value="cat">Cat</option>
+                <option value="dog">Dog</option>
+                <option value="bear">Bear</option>
+                <option value="monkey">Monkey</option>
+                <option value="elephant">Elephant</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="profileGender">Gender</label>
+              <select id="profileGender">
+                <option value="undisclosed">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="input-groups">
+            <div class="form-group">
+              <input type="text" placeholder="Username" id="profileUsername" required />
+            </div>
+            <div class="form-group">
+              <input type="email" placeholder="Email" id="profileEmail" readonly />
+            </div>
+          </div>
+          
+          <button type="submit" class="btn-submit">Save Changes</button>
+        </form>
+      </div>
+    </div>
+
 
     <!-- Main Content -->
     <main class="main-content" id="mainContentBlock">
