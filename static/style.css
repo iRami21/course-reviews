@@ -218,6 +218,66 @@ body {
   background-color: #c82333;
 }
 
+/* === 全螢幕歡迎與登入蓋台 === */
+.login-page-overlay {
+  background-color: #4f67b1 !important; /* 全螢幕粉藍色背景 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 99999;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 第一階段：純文字與Start按鈕外殼（完全透明） */
+.welcome-pure-text {
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: center;
+  width: min(92vw, 500px);
+}
+
+.welcome-header h1 {
+  color: #fefaf0;
+  font-size: 2.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.welcome-subtitle {
+  color: #ffd8b9;
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  font-weight: 700;
+}
+
+#startExploreBtn {
+  font-size: 1.2rem;
+  padding: 0.9rem 2.5rem;
+  width: auto;
+  display: inline-block;
+  background-color: #c74d30;
+}
+
+/* 第二階段：點了 Start 才出現的白色方塊卡片 */
+.welcome-white-box {
+  background: #ffffff !important; /* 维持底下白色底 */
+  padding: 2.5rem 2rem;
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.15);
+  width: min(92vw, 400px);
+  text-align: center;
+  animation: fadeIn 0.3s ease-in-out; /* 加上一個順滑的淡入效果 */
+}
+
+/* 簡單的淡入動畫 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* 左右並排分頁標籤 */
 .auth-tabs {
   display: grid;
