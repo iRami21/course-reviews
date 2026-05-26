@@ -917,10 +917,19 @@ function checkUserLogin() {
     } catch (error) {
       currentUser = getDefaultProfile(savedUser);
     }
+    
+    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    document.getElementById("loginModal").style.display = "none";
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
+  } else {
+    // 如果沒有登入，確保登入蓋台和樣式都有啟動
+    document.getElementById("navBlock").style.display = "none";
+    document.getElementById("mainContentBlock").style.display = "none";
+    document.getElementById("loginModal").style.display = "block";
+    document.getElementById("loginModal").classList.add("login-page-overlay");
   }
-  document.getElementById("navBlock").style.display = "";
-  document.getElementById("mainContentBlock").style.display = "";
-  document.getElementById("loginModal").style.display = "none";
   updateAuthUI();
 }
 
