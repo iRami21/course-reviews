@@ -1507,3 +1507,11 @@ window.switchAuthTab = function (mode) {
     updateAvatarPreview();
   }
 };
+
+// 按下 Start 按鈕後切換區塊
+window.showAuthFields = function() {
+  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
+  document.getElementById("welcomeStartSection").style.display = "none";
+  // 2. 把第二階段的白色登入卡片方塊顯示出來
+  document.getElementById("authCoreSection").style.display = "block";
+}
