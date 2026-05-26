@@ -901,11 +901,21 @@ function renderFavorites() {
 // Login modal
 function openLoginModal() {
   document.getElementById("loginModal").style.display = "block";
-  switchAuthTab("login");
 }
 
 function closeLoginModal() {
+  // 1. 隱藏登入蓋台彈窗
   document.getElementById("loginModal").style.display = "none";
+  
+  // 2. 移除全螢幕的粉藍色蓋台樣式（讓畫面不會被鎖死）
+  document.getElementById("loginModal").classList.remove("login-page-overlay");
+
+  // 3. 【核心關鍵】成功登入後，立刻將後台主畫面與導覽列打開，進入主頁！
+  const navBlock = document.getElementById("navBlock");
+  const mainContentBlock = document.getElementById("mainContentBlock");
+  
+  if (navBlock) navBlock.style.display = "block";
+  if (mainContentBlock) mainContentBlock.style.display = "block";
 }
 
 function updateAvatarPreview() {
@@ -920,34 +930,22 @@ function updateAvatarPreview() {
 }
 
 function setRegisterMode(isRegistering) {
-  const submitButton = document.getElementById("authSubmitBtn");
+  const submitButton = document.querySelector("#authForm .btn-submit");
   const toggleText = document.querySelector(".toggle-register");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
-  const tabLogin = document.getElementById("tabLogin");
-  const tabRegister = document.getElementById("tabRegister");
-  const usernameInput = document.getElementById("username");
 
   submitButton.dataset.mode = isRegistering ? "register" : "login";
   submitButton.textContent = isRegistering ? "Create Account" : "Login";
   registerFields.style.display = isRegistering ? "grid" : "none";
-  tabLogin.classList.toggle("active", !isRegistering);
-  tabRegister.classList.toggle("active", isRegistering);
   registerOnlyFields.forEach((field) => {
     field.style.display = isRegistering ? "block" : "none";
     field.required = isRegistering;
   });
-  if (usernameInput) {
-    usernameInput.placeholder = isRegistering
-      ? "Username"
-      : "Email or Username";
-  }
   if (isRegistering) updateAvatarPreview();
-  if (toggleText) {
-    toggleText.innerHTML = isRegistering
-      ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
-      : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
-  }
+  toggleText.innerHTML = isRegistering
+    ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
+    : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
 }
 
 function toggleRegister(event) {
@@ -957,12 +955,14 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
-async function login(event) {
+function login(event) {
   event.preventDefault();
-  const username = document.getElementById("username").value.trim();
-  const email = document.getElementById("email").value.trim();
+  const username = document.getElementById("username").value;
+  const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
+  // 在 function login(event) 內，將原本獲取 mode 的那行改成這樣：
+// 【核心修改】確認是用我們新設定的 id "authSubmitBtn" 來抓取目前的模式 (login 還是 register)
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -971,102 +971,81 @@ async function login(event) {
     return;
   }
 
-  if (isRegistering) {
-    if (!username || !email || !password) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-  } else if (!username || !password) {
-    alert("Please enter your email or username and password.");
-    return;
-  }
-
-  const payload = isRegistering
-    ? {
-        username: username,
-        email: email,
-        password: password,
-        avatarAnimal: document.getElementById("avatarAnimal").value,
-        gender: document.getElementById("gender").value,
-      }
-    : {
-        identifier: username,
-        password: password,
-      };
-
-  const endpoint = isRegistering ? "/api/register" : "/api/login";
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Unable to sign in right now.");
-      return;
-    }
-
-    if (isRegistering) {
-      alert("Account created. Please log in.");
-      setRegisterMode(false);
-      document.getElementById("authForm").reset();
-      return;
-    }
-
-    currentUser = data.user;
+  if (username && password && (!isRegistering || email)) {
+    currentUser = isRegistering
+      ? {
+          username: username,
+          email: email,
+          avatarAnimal: document.getElementById("avatarAnimal").value,
+          gender: document.getElementById("gender").value,
+        }
+      : getDefaultProfile(username);
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
     updateAuthUI();
     closeLoginModal();
     document.getElementById("authForm").reset();
     setRegisterMode(false);
-  } catch (error) {
-    alert("Unable to reach the server right now.");
-  }
-}
-
-async function logout() {
-  try {
-    await fetch("/api/logout", {
-      method: "POST",
-      credentials: "same-origin",
-    });
-  } catch (error) {
-    // Ignore logout failures to keep UI responsive.
   }
 
+  // ... 以上保持不變 ...
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    
+    updateAuthUI();
+    closeLoginModal();
+    document.getElementById("authForm").reset();
+    setRegisterMode(false);
+
+    // 【核心新增】登入成功後，把主畫面、導覽列顯示出來，並拔掉全螢幕遮罩
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
+  }
+
+function logout() {
   currentUser = null;
-  closeUserMenu();
-  closeProfileModal();
+  localStorage.removeItem("currentUser");
   updateAuthUI();
-  showBrowseCourses();
+
+  // 登出後，徹底隱藏後台
+  document.getElementById("navBlock").style.display = "none";
+  document.getElementById("mainContentBlock").style.display = "none";
+  
+  // 讓登入彈窗以滿版蓋台方式出現
+  document.getElementById("loginModal").style.display = "block";
+  document.getElementById("loginModal").classList.add("login-page-overlay");
+  
+  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
+  document.getElementById("welcomeStartSection").style.display = "block";
+  document.getElementById("authCoreSection").style.display = "none";
 }
 
-async function checkUserLogin() {
-  try {
-    const response = await fetch("/api/session", {
-      credentials: "same-origin",
-    });
-    const data = await response.json();
-    currentUser = data.authenticated ? data.user : null;
-  } catch (error) {
-    currentUser = null;
+function checkUserLogin() {
+  const savedUser = localStorage.getItem("currentUser");
+  if (savedUser) {
+    try {
+      currentUser = JSON.parse(savedUser);
+    } catch (error) {
+      currentUser = getDefaultProfile(savedUser);
+    }
+    
+    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    document.getElementById("loginModal").style.display = "none";
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
+  } else {
+    // 如果沒有登入，確保登入蓋台和樣式都有啟動
+    document.getElementById("navBlock").style.display = "none";
+    document.getElementById("mainContentBlock").style.display = "none";
+    document.getElementById("loginModal").style.display = "block";
+    document.getElementById("loginModal").classList.add("login-page-overlay");
   }
-
-  document.getElementById("navBlock").style.display = "";
-  document.getElementById("mainContentBlock").style.display = "";
-  document.getElementById("loginModal").style.display = "none";
   updateAuthUI();
 }
 
 function updateAuthUI() {
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
-  const userMenu = document.getElementById("userMenu");
   const userAvatar = document.getElementById("userAvatar");
 
   userAvatar.className = `user-avatar ${getGenderClass(currentUser?.gender)}`;
@@ -1074,21 +1053,52 @@ function updateAuthUI() {
 
   if (currentUser) {
     loginBtn.style.display = "none";
-    userMenu.style.display = "inline-flex";
-    logoutBtn.style.display = "none";
-    logoutBtn.textContent = "Logout";
-    userAvatar.setAttribute(
-      "aria-label",
-      `${getDisplayName(currentUser)} account menu`,
-    );
+    logoutBtn.style.display = "block";
+    logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
+    userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
   } else {
-    loginBtn.style.display = "inline-flex";
-    loginBtn.textContent = "Login / Sign in";
-    userMenu.style.display = "none";
+    loginBtn.style.display = "none";
     logoutBtn.style.display = "none";
-    closeUserMenu();
-    userAvatar.setAttribute("aria-label", "Account menu");
+    userAvatar.setAttribute("aria-label", "Login");
   }
+}
+
+// Course detail page
+function openCourseDetail(courseId) {
+  const course = allCourses.find((c) => c.id === courseId);
+  if (!course) return;
+
+  currentCourseId = courseId;
+  const reviews = getReviewsForCourse(courseId);
+  const averageRating = getAverageRating(reviews, course.rating);
+
+  document.getElementById("detailCourseCode").textContent = course.code;
+  document.getElementById("detailCourseTitle").textContent = course.title;
+  document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
+  document.getElementById("detailCourseProfessor").textContent =
+    course.professor;
+  document.getElementById("detailCourseDepartment").textContent =
+    course.department;
+  document.getElementById("detailCourseCredits").textContent = course.credits;
+  document.getElementById("detailCourseDescription").textContent =
+    course.description;
+  document.getElementById("detailRatingValue").textContent =
+    averageRating.toFixed(1);
+  document.getElementById("detailStars").innerHTML =
+    generateStars(averageRating);
+  document.getElementById("detailReviewCount").textContent =
+    `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
+
+  renderRatingBreakdown(reviews);
+  loadReviews(courseId);
+
+  document.body.classList.add("detail-open");
+  document.querySelector(".navbar").style.display = "none";
+  document.getElementById("pageHeading").style.display = "none";
+  document.querySelector(".filters").style.display = "none";
+  document.getElementById("coursesContainer").style.display = "none";
+  document.getElementById("courseDetailPage").style.display = "block";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 // Course detail page
