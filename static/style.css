@@ -93,21 +93,12 @@ body {
 }
 
 .search-box {
-  padding-left: 50px !important;
-  
-  /* 以下維持你原本寫好的其他設定 */
-  border-radius: 20px;
-  font-family: "Sniglet", system-ui;
-  font-weight: 400;
-}
-
-.search-box {
   padding: 0.5rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   width: 250px;
   font-size: 1rem;
-  background-color: #ffd8b9 !important;
+  background-color: #ffeada !important;
 }
 
 .search-box:focus {
@@ -121,17 +112,19 @@ body {
   align-items: center;
 }
 
+/* 確保導覽列的頭像永遠在最上層，且滑鼠滑過去一定能正確點擊 */
 .user-avatar {
+  position: relative;
+  z-index: 10000 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important; /* 強制開啟滑鼠事件 */
+}
+
+/* 確保下拉選單容器不會被旁邊的元件壓扁 */
+.avatar-dropdown-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  background-color: #f0f0f0;
-  cursor: pointer;
-  transition: transform 0.3s ease;
 }
 
 .user-avatar:hover {
@@ -258,7 +251,7 @@ body {
   padding: 0.9rem 2.5rem;
   width: auto;
   display: inline-block;
-  background-color: #c74d30;
+  background-color: #c74d30 !important;
 }
 
 /* 第二階段：點了 Start 才出現的白色方塊卡片 */
@@ -327,7 +320,6 @@ body {
 .filters {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
   flex-wrap: wrap;
 }
 
@@ -881,8 +873,8 @@ body {
 }
 
 .language-icon {
-  width: 1.1em;
-  height: 1.1em;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -1704,6 +1696,7 @@ button {
   justify-content: space-between;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+  margin-top:1.5rem;
 }
 
 .section-heading {
@@ -1711,6 +1704,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  margin-top: 1.5rem;
   margin-bottom: 1.25rem;
 }
 
@@ -1751,15 +1745,9 @@ button {
   font-size: 1rem;
 }
 
-.filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.8rem;
-  margin-bottom: 1.25rem;
-}
-
 .favorites-filters {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+
 }
 
 .filter-group {
@@ -2483,21 +2471,74 @@ button {
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
+
+/* === Horizontal Scrollable Filter Bar Fix === */
+
 .filter-row {
   display: flex;
   align-items: center;
-  margin-bottom: 1rem;
+  flex-wrap: nowrap !important; /* Forces items into a single row */
+  gap: 0.75rem;                 /* Adds healthy spacing between the label and buttons */
+  width: 100%;
+  overflow-x: auto;            /* Enables horizontal scrolling */
+  overflow-y: hidden; 
+  -webkit-overflow-scrolling: touch; 
+  padding: 0.5rem 0;           /* Gives padding so button shadows don't get cut off */
 }
 
-.filter-row:last-child {
-  margin-bottom: 0;
-}
-
+/* Ensure the label text doesn't shrink or get overlapped */
 .filter-label {
-  min-width: 60px;
-  color: #7b8494;
-  font-weight: 800;
-  font-size: 1.05rem;
+  flex: 0 0 auto !important;   /* Prevents the text "Department |" from getting crushed */
+  font-weight: 1000;
+  color: #000409;
+  font-size: 1.3rem;
+  margin-right: 0.5rem;        /* Forces a clear boundary before the first button */
+  white-space: nowrap;
+}
+
+/* COMPLETE RESET: Wipes out the ugly default browser button style */
+.filter-tag-btn {
+  flex: 0 0 auto !important;   /* Prevents buttons from squishing */
+  white-space: nowrap !important; 
+  
+  /* Resetting browser native styles */
+  background: transparent;     /* Wipes default gray background */
+  border: none !important;     /* Wipes default boxy border */
+  outline: none;
+  margin: 0;
+  padding: 0.4rem 1rem;        /* Adds comfortable inner padding */
+  
+  /* Custom typography matching your other filters */
+  font-family: "Comic Relief", system-ui;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #5b6472;              /* Matches your --text-muted color */
+  border-radius: 20px;         /* Rounded capsule shape */
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Hover State */
+.filter-tag-btn:hover {
+  color: #111827;
+  background-color: rgba(16, 24, 40, 0.05) !important; /* Gentle hover highlight */
+}
+
+/* Active Selected State (Matches your beautiful blue capsule color) */
+.filter-tag-btn.active {
+  background-color: #c74d30 !important; /* Your signature navbar blue */
+  color: #ffffff !important;           /* Clear white text */
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(79, 103, 177, 0.25); /* Cute glow effect */
+}
+
+/* Hide scrollbar for a cleaner mobile app feel */
+.filter-row::-webkit-scrollbar {
+  height: 0px;
+  background: transparent;
+}
+.filter-row {
+  scrollbar-width: none; /* Firefox */
 }
 
 .filter-options {
@@ -2524,7 +2565,7 @@ button {
 
 /* 被選中時的樣式 (類似你截圖中亮起的綠字黑底) */
 .filter-pill.active {
-  background-color: #4f67b1;
+  background-color: #c74d30;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(79, 103, 177, 0.3);
 }
@@ -2985,23 +3026,6 @@ button {
     padding: 0 1rem;
   }
 
-  .page-heading {
-    margin-bottom: 1rem;
-  }
-
-  .section-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .page-heading h2 {
-    font-size: 1.8rem;
-  }
-
-  .page-heading > p {
-    font-size: 0.95rem;
-  }
-
   .filters {
     grid-template-columns: 1fr;
     gap: 0.65rem;
@@ -3153,4 +3177,235 @@ button {
   .register-fields {
     grid-template-columns: 1fr;
   }
+}
+
+/* === 熱門搜尋面板 (Zero-State Search) === */
+.search-dropdown-card {
+  position: absolute;
+  top: calc(100% + 12px); /* 釘在搜尋框正下方 */
+  left: 0;
+  width: 320px; 
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12); /* 立體陰影 */
+  padding: 1.25rem;
+  z-index: 10000;
+  animation: dropdownPop 0.2s ease;
+}
+
+.search-dropdown-header {
+  font-weight: 700 !important;
+  font-size: 1.2rem;
+  color: #cd002a;
+  margin-bottom: 0.85rem;
+}
+
+/* 標籤容器：自動換行排版 */
+.trending-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+/* 標籤按鈕本體 */
+.trending-tag-btn {
+  background: #f3f4f6; /* 淺灰底色 */
+  border: 1px solid transparent;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px; /* 俐落的微圓角方形 */
+  font-family: "Comic Relief", system-ui;
+  font-size: 0.9rem;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* 滑鼠滑過的點擊回饋 */
+.trending-tag-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #111827;
+  transform: translateY(-1px);
+}
+
+/* === 空白狀態提示卡片 (Empty State) === */
+.empty-state-card {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  padding: 4rem 2rem;
+  text-align: center;
+  width: 100%;
+  grid-column: 1 / -1; /* 確保它在網格排版中能置中並佔滿整排 */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+  margin-top: 1rem;
+}
+
+.empty-state-card .empty-icon {
+  font-size: 3.5rem;
+  display: block;
+  margin-bottom: 1rem;
+  opacity: 0.8;
+}
+
+.empty-state-card h3 {
+  font-family: "Sniglet", system-ui;
+  font-size: 1.5rem;
+  color: #4b5563;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-card p {
+  font-family: "Comic Relief", system-ui;
+  color: #6b7280;
+  font-size: 1.05rem;
+}
+
+/* === 評論編輯與刪除功能 === */
+.my-review-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 2px;
+}
+
+.icon-btn-small {
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  padding: 2px;
+}
+
+.icon-btn-small:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  background: #f9fafb;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* === 通知系統 UI === */
+.notification-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: #ef4444; /* 搶眼的紅色 */
+  color: white;
+  font-family: system-ui;
+  font-size: 0.7rem;
+  font-weight: bold;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  transform: translate(25%, -25%); /* 把紅點推到鈴鐺右上角邊緣 */
+}
+
+.notification-dropdown-card {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: -10px; /* 靠右對齊 */
+  width: 320px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  z-index: 10000;
+  animation: dropdownPop 0.2s ease;
+  overflow: hidden;
+  text-align: left;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  background: #f9fafb;
+}
+
+.notification-header h3 {
+  font-family: "Sniglet", system-ui;
+  font-size: 1.1rem;
+  color: #374151;
+  margin: 0;
+}
+
+.mark-read-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.mark-read-btn:hover {
+  text-decoration: underline;
+}
+
+.notification-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.notification-item:hover {
+  background: #f9fafb;
+}
+
+/* 未讀通知的淡藍色底 */
+.notification-item.unread {
+  background: #eff6ff;
+}
+
+.notification-item.unread:hover {
+  background: #e0f2fe;
+}
+
+.noti-icon {
+  font-size: 1.5rem;
+  margin-top: 2px;
+}
+
+.noti-content p {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.noti-time {
+  font-size: 0.8rem;
+  color: #6b7280;
 }

@@ -390,50 +390,126 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
-// Setup event listeners
-// Setup event listeners
+// 請將 setupEventListeners() 的前半段修改成這樣：
 function setupEventListeners() {
-  // 建立一個小工具：如果畫面上找不到這個元素，就跳過不綁定，避免 JS 當機
   const safeAddListener = (id, eventType, handler) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener(eventType, handler);
   };
 
-  // 上方導覽列按鈕
-  safeAddListener("loginBtn", "click", openLoginModal);
-  safeAddListener("userAvatar", "click", toggleUserMenu);
+  // 1. 對接你 HTML 原有的 userAvatar 與 userDropdown (使用 hidden 屬性切換)
+  const userAvatar = document.getElementById("userAvatar");
+  if (userAvatar) {
+    userAvatar.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (currentUser) {
+        const menu = document.getElementById("userDropdown");
+        if (menu) {
+          // 因為你的 HTML 是用 hidden 屬性，這裡直接切換 true/false 即可
+          menu.hidden = !menu.hidden;
+        }
+      } else {
+        openLoginModal();
+      }
+    });
+  }
+
+  // 點擊網頁任意地方，自動收起下拉選單
+  document.addEventListener("click", function () {
+    const menu = document.getElementById("userDropdown");
+    if (menu) menu.hidden = true;
+  });
+
+  // 2. 精準綁定你 HTML 裡面原本就有的選單按鈕 ID
   safeAddListener("profileMenuBtn", "click", openProfileModal);
-  safeAddListener("favoritesMenuBtn", "click", function () {
-    closeUserMenu();
-    showFavorites();
-  });
-  safeAddListener("signOutMenuBtn", "click", function () {
-    closeUserMenu();
-    logout();
-  });
+  safeAddListener("favoritesMenuBtn", "click", showFavorites);
+  safeAddListener("signOutMenuBtn", "click", logout);
+  
+  safeAddListener("loginBtn", "click", openLoginModal);
   safeAddListener("logoutBtn", "click", logout);
 
-  // 🔴 這裡就是原本會當機的地方，現在加上保護了！等之後你加上 Profile 的 HTML 就能直接無縫接軌
-  safeAddListener("profileForm", "submit", saveProfile);
-  safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
-  safeAddListener("profileGender", "change", updateProfileAvatarPreview);
-
-  // 登入相關與全域事件
-  document.addEventListener("click", closeUserMenuOnOutsideClick);
-  document.addEventListener("keydown", closeMenusOnEscape);
-  safeAddListener("authForm", "submit", login); // 你的 login 終於可以順利綁定上了！
-
-  // 篩選與註冊表單事件
+  // 表單與搜尋事件 (維持不變)
+  safeAddListener("authForm", "submit", login);
+  safeAddListener("avatarAnimal", "change", updateAvatarPreview);
+  safeAddListener("gender", "change", updateAvatarPreview);
   safeAddListener("searchBox", "input", filterCourses);
-  safeAddListener("yearFilter", "change", filterCourses);
-  safeAddListener("departmentFilter", "change", filterCourses);
-  safeAddListener("ratingFilter", "change", filterCourses);
-  safeAddListener("sortFilter", "change", filterCourses);
+
+  // 收藏頁面過濾器 (維持不變)
   safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
   safeAddListener("favoriteRatingFilter", "change", renderFavorites);
   safeAddListener("favoriteSortFilter", "change", renderFavorites);
-  safeAddListener("avatarAnimal", "change", updateAvatarPreview);
-  safeAddListener("gender", "change", updateAvatarPreview);
+
+  // ✅ 全新：補上個人資料 (Profile) 專屬的頭像切換事件
+  safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
+  safeAddListener("profileGender", "change", updateProfileAvatarPreview);
+  
+  safeAddListener("searchBox", "input", filterCourses);
+
+  // 3. 橫向篩選按鈕列事件 (維持不變)
+  const filterRows = ['yearFilterRow', 'deptFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
+  filterRows.forEach(rowId => {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const buttons = row.querySelectorAll('.filter-tag-btn');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', function () {
+        buttons.forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        filterCourses();
+      });
+    });
+  });
+
+  // === 全新：熱門搜尋面板連動邏輯 ===
+  const searchBox = document.getElementById("searchBox");
+  const searchDropdown = document.getElementById("searchDropdownCard");
+
+  if (searchBox && searchDropdown) {
+    // 1. 當點擊(聚焦)搜尋框時，展開熱門搜尋面板
+    searchBox.addEventListener("focus", function() {
+      searchDropdown.style.display = "block";
+    });
+
+    // 2. 點擊網頁其他地方時，自動收起面板
+    document.addEventListener("click", function(e) {
+      if (!searchBox.contains(e.target) && !searchDropdown.contains(e.target)) {
+        searchDropdown.style.display = "none";
+      }
+    });
+
+    // 3. 點擊熱門標籤時，自動填入搜尋框並立刻篩選！
+    const trendingBtns = searchDropdown.querySelectorAll(".trending-tag-btn");
+    
+    trendingBtns.forEach(btn => {
+      // 💡 關鍵修正：把 "click" 換成 "mousedown"
+      btn.addEventListener("mousedown", function(e) {
+        e.preventDefault(); // 終極防護：防止搜尋框失去焦點，面板就不會提早關閉
+        
+        searchBox.value = this.textContent.trim(); // 把按鈕上的字精準塞進輸入框
+        searchDropdown.style.display = "none";     // 點完後乖乖把面板收起來
+        filterCourses();                           // 立刻觸發底下的課程卡片重新過濾！
+      });
+    });
+  }
+
+  // === 全新：通知鈴鐺點擊邏輯 ===
+  const notiBtn = document.getElementById("notificationBtn");
+  const notiDropdown = document.getElementById("notificationDropdown");
+
+  if (notiBtn && notiDropdown) {
+    // 點鈴鐺開關卡片
+    notiBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      notiDropdown.style.display = notiDropdown.style.display === "none" ? "block" : "none";
+    });
+
+    // 點擊網頁其他地方收起卡片
+    document.addEventListener("click", function (e) {
+      if (!notiBtn.contains(e.target) && !notiDropdown.contains(e.target)) {
+        notiDropdown.style.display = "none";
+      }
+    });
+  }
 }
 
 // Display courses
@@ -443,6 +519,7 @@ function displayCourses(courses) {
 }
 
 function renderCourseCards(container, courses, emptyText) {
+
   container.innerHTML = "";
 
   if (courses.length === 0) {
@@ -502,37 +579,48 @@ function renderCourseCards(container, courses, emptyText) {
 function filterCourses() {
   const searchTerm = document.getElementById("searchBox").value.toLowerCase();
   
-  // 1. 抓取目前各個分類「亮起 (active)」的標籤數值
-  const activeDept = document.querySelector('#deptOptions .filter-pill.active')?.dataset.val || "";
-  const activeYear = document.querySelector('#yearOptions .filter-pill.active')?.dataset.val || "";
-  const activeRating = document.querySelector('#ratingOptions .filter-pill.active')?.dataset.val || "";
-  const minRating = activeRating ? parseFloat(activeRating) : 0;
+  // 【關鍵修正】精準抓取新版橫向按鈕身上亮燈（active）的 data-value 屬性
+  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
 
-  // 2. 進行搜尋與標籤過濾
+  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+
+  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
+  const minRating = ratingActiveBtn && ratingActiveBtn.dataset.value
+    ? parseFloat(ratingActiveBtn.dataset.value)
+    : 0;
+
+  // ✅ 換成這兩行新的
+  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
+
+  // ✅ 在下面補上這兩行，抓取學期的值：
+  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
+  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
+
+  // 進行搜尋與標籤過濾
   let filtered = allCourses.filter((course) => {
     const matchSearch = course.code.toLowerCase().includes(searchTerm) ||
                         course.title.toLowerCase().includes(searchTerm) ||
                         course.titleZh.includes(searchTerm) ||
                         course.professor.toLowerCase().includes(searchTerm);
-    const matchDept = !activeDept || course.department === activeDept;
-    const matchYear = !activeYear || course.year.toString() === activeYear;
+                        
+    // 因為按鈕抓出來的是字串，資料裡的 course.year 是數字，要 toString() 轉換
+    const matchYear = !year || course.year.toString() === year;
+    const matchDept = !department || course.department === department;
     const matchRating = course.rating >= minRating;
 
-    return matchSearch && matchDept && matchYear && matchRating;
+    // ✅ 補上這一行：如果沒有選學期就全過，有選的話就比對數字是否一樣
+    const matchSemester = !semester || course.semester.toString() === semester;
+
+    // ✅ 最後 return 的地方，也要把 matchSemester 加上去（用 && 連接）
+    return matchSearch && matchYear && matchDept && matchRating && matchSemester;
+  
   });
 
-  // 3. 執行純文字排序邏輯
-  const activeSortBtn = document.querySelector('.sort-text-btn.active');
-  const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : 'popular';
-
-  if (sortBy === 'popular') {
-    filtered.sort((a, b) => ((b.saveCount || 0) + getCourseCommentTotal(b.id)) - ((a.saveCount || 0) + getCourseCommentTotal(a.id)));
-  } else if (sortBy === 'latest') {
-    filtered.sort((a, b) => b.year - a.year || b.semester - a.semester);
-  } else if (sortBy === 'rating') {
-    filtered.sort((a, b) => b.rating - a.rating);
-  }
-
+  // 執行排序邏輯
+  filtered = sortCourses(filtered, sortBy);
   displayCourses(filtered);
 }
 
@@ -551,33 +639,23 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
+// === 新版：主頁面課程排序邏輯 ===
 function sortCourses(courses, sortBy) {
   const sorted = [...courses];
 
-  if (sortBy === "ratingDesc") {
-    sorted.sort(
-      (a, b) =>
-        b.rating - a.rating ||
-        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
-    );
-  } else if (sortBy === "ratingAsc") {
-    sorted.sort(
-      (a, b) =>
-        a.rating - b.rating ||
-        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
-    );
-  } else if (sortBy === "reviewsDesc") {
-    sorted.sort(
-      (a, b) =>
-        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id) ||
-        b.rating - a.rating,
-    );
-  } else if (sortBy === "reviewsAsc") {
-    sorted.sort(
-      (a, b) =>
-        getCourseCommentTotal(a.id) - getCourseCommentTotal(b.id) ||
-        b.rating - a.rating,
-    );
+  if (sortBy === "popular") {
+    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
+    sorted.sort((a, b) => {
+      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
+      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+      return bPopularity - aPopularity;
+    });
+  } else if (sortBy === "latest") {
+    // Latest (最新開課): 依照年份與學期由新到舊排序
+    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
+  } else if (sortBy === "rating") {
+    // Ratings (評分最高): 依照星星數由高到低排序
+    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }
 
   return sorted;
@@ -811,34 +889,59 @@ function syncUserContentProfile(previousUsername) {
   });
 }
 
+// === 新版：安全不當機的收藏頁面渲染邏輯 ===
 function renderFavorites() {
-  const department = document.getElementById("favoriteDepartmentFilter").value;
-  const minRating = document.getElementById("favoriteRatingFilter").value
-    ? parseFloat(document.getElementById("favoriteRatingFilter").value)
-    : 0;
-  const sortBy = document.getElementById("favoriteSortFilter").value;
-  const favorites = sortCourses(
-    allCourses.filter((course) => {
-      const matchSaved = course.followed;
-      const matchDept = !department || course.department === department;
-      const matchRating = course.rating >= minRating;
-      return matchSaved && matchDept && matchRating;
-    }),
-    sortBy,
-  );
+  // 1. 抓出所有被使用者按愛心 (followed === true) 的課程
+  let favorites = allCourses.filter(course => course.followed === true);
+  
+  // 2. 抓取目前亮起的純文字排序按鈕（Hottest / Latest / Ratings）
+  const activeSortBtn = document.querySelector('.fav-sort-btn.active');
+  const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : "popular";
 
-  renderCourseCards(
-    document.getElementById("favoritesContainer"),
-    favorites,
-    "No favorite courses yet.",
-  );
+  // 3. 安全的排序邏輯
+  if (sortBy === "popular") {
+    // Hottest: 依據愛心數量由多到少
+    favorites.sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0));
+  } else if (sortBy === "latest") {
+    // Latest: 依據年份與學期由新到舊
+    favorites.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
+  } else if (sortBy === "rating") {
+    // Ratings: 依據評分由高到低
+    favorites.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }
+
+  // 
+  const container = document.getElementById("favoritesContainer");
+  if (container) {
+    renderCourseCards(
+      container, 
+      favorites, 
+      "No favorite courses yet"
+    );
+  }
 }
 
 // Login modal
-function openLoginModal() {
-  document.getElementById("loginModal").style.display = "block";
-  switchAuthTab("login");
-}
+window.openLoginModal = function() {
+  const modal = document.getElementById("loginModal");
+  if (!modal) return;
+
+  // 1. 顯示滿版粉藍色登入蓋台
+  modal.style.display = "block";
+  modal.classList.add("login-page-overlay");
+
+  // 2. 重設：確保一進去時，先秀出帶有 "Start" 按鈕的歡迎文字區
+  const welcomeSection = document.getElementById("welcomeStartSection");
+  const authCoreSection = document.getElementById("authCoreSection");
+  
+  if (welcomeSection) welcomeSection.style.display = "block";
+  if (authCoreSection) authCoreSection.style.display = "none";
+
+  // 3. 預設切換回登入（Login）分頁，避免上次停在註冊畫面
+  if (typeof window.switchAuthTab === "function") {
+    window.switchAuthTab('login');
+  }
+};
 
 function closeLoginModal() {
   document.getElementById("loginModal").style.display = "none";
@@ -1120,6 +1223,15 @@ function loadReviews(courseId) {
         : "Reply";
     const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
+    // === 判斷這則評論是不是「我」發的 ===
+    const isMyReview = currentUser && review.author === getDisplayName(currentUser);
+    const myActionsHtml = isMyReview ? `
+      <div class="my-review-actions">
+        <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
+        <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
+      </div>
+    ` : "";
+
     reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
@@ -1128,13 +1240,28 @@ function loadReviews(courseId) {
                   <span class="review-dot"></span>
                   <span class="review-date">${escapeHtml(review.date)}</span>
                 </div>
-                <span class="review-language" title="${escapeHtml(review.language)}" aria-label="${escapeHtml(review.language)}">${translateIcon()}</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  ${myActionsHtml}
+                  <span class="review-language" title="${escapeHtml(review.language)}" aria-label="${escapeHtml(review.language)}">${translateIcon()}</span>
+                </div>
             </div>
+            
             <div class="review-rating-line">
                 <span class="review-rating">${starsHtml}</span>
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
-            ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
+            
+            <div id="text-display-${review.id}">
+              ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
+            </div>
+            
+            <div id="edit-form-${review.id}" style="display: none; margin: 10px 0;">
+              <textarea id="edit-input-${review.id}" class="edit-textarea">${escapeHtml(review.text)}</textarea>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <button type="button" class="btn-submit" onclick="saveEdit('${review.id}')" style="padding: 4px 12px; font-size: 0.85rem;">Save changes</button>
+                <button type="button" class="btn-secondary" onclick="cancelEdit('${review.id}')" style="padding: 4px 12px; font-size: 0.85rem;">Cancel</button>
+              </div>
+            </div>
             
             <div class="review-actions">
               ${renderReactionControl(review, review.id)}
@@ -1154,7 +1281,7 @@ function loadReviews(courseId) {
               }
             </div>
 
-              <div class="reply-form" id="replyForm-${review.id}" style="display: none">
+            <div class="reply-form" id="replyForm-${review.id}" style="display: none">
               <input
                 type="text"
                 id="replyInput-${review.id}"
@@ -1200,16 +1327,40 @@ function updateStudentReviewStats(reviews = []) {
 function renderReplies(replies = [], reviewId) {
   return replies
     .map((reply) => {
+      // === 判斷這則「回覆」是不是「我」發的 ===
+      const isMyReply = currentUser && reply.author === getDisplayName(currentUser);
+      
+      // 【關鍵修正】把 onclick 改成 editReply 和 deleteReply，並且傳入正確的 reviewId 和 reply.id！
+      const myReplyActionsHtml = isMyReply ? `
+        <div class="my-review-actions" style="margin-left: auto;">
+          <button type="button" class="icon-btn-small" onclick="editReply('${reviewId}', '${reply.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
+          <button type="button" class="icon-btn-small" onclick="deleteReply('${reviewId}', '${reply.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
+        </div>
+      ` : "";
+
       return `
         <div class="reply-thread">
           <div class="reply-item">
-            <div class="reply-content">
-              <div class="reply-meta">
+            <div class="reply-content" style="width: 100%;">
+              <div class="reply-meta" style="display: flex; align-items: center; width: 100%;">
                 <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
                 <strong>${escapeHtml(reply.author)}</strong>
-                <span>${escapeHtml(reply.date)}</span>
+                <span style="margin-left: 8px;">${escapeHtml(reply.date)}</span>
+                ${myReplyActionsHtml}
               </div>
-              ${renderExpandableText(reply.text, `reply-${reviewId}-${reply.id}`, "reply-text")}
+              
+              <div id="text-display-${reply.id}">
+                ${renderExpandableText(reply.text, `reply-${reviewId}-${reply.id}`, "reply-text")}
+              </div>
+              
+              <div id="edit-form-${reply.id}" style="display: none; margin: 10px 0;">
+                <textarea id="edit-input-${reply.id}" class="edit-textarea">${escapeHtml(reply.text)}</textarea>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                  <button type="button" class="btn-submit" onclick="saveEditReply('${reviewId}', '${reply.id}')" style="padding: 4px 12px; font-size: 0.85rem;">Save Change</button>
+                  <button type="button" class="btn-secondary" onclick="cancelEditReply('${reply.id}')" style="padding: 4px 12px; font-size: 0.85rem;">Cancel</button>
+                </div>
+              </div>
+
               <div class="reply-actions">
                 ${renderReactionControl(reply, reviewId, reply.id)}
               </div>
@@ -1580,4 +1731,252 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     });
   });
+});
+
+// === 強效修正：確保頭像點擊絕對能開關選單 ===
+document.addEventListener("DOMContentLoaded", function() {
+  const userAvatar = document.getElementById("userAvatar");
+  
+  if (userAvatar) {
+    // 移除舊的監聽，重新綁定一個最直接、不會壞的點擊事件
+    userAvatar.onclick = function(e) {
+      e.stopPropagation(); // 阻止事件擴散
+      
+      // 如果還沒登入，就打開歡迎/登入視窗
+      if (!currentUser) {
+        if (typeof window.openLoginModal === "function") {
+          window.openLoginModal();
+        }
+        return;
+      }
+      
+      // 如果已經登入，就精準開關我們的 Google 風格卡片
+      const menuCard = document.getElementById("avatarMenuCard");
+      if (menuCard) {
+        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
+        menuCard.style.display = isHidden ? "block" : "none";
+      } else {
+        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
+      }
+    };
+  }
+});
+
+// === 控制 Filter 面板的開關與一鍵重置 ===
+window.toggleFilterPanel = function() {
+  const panel = document.getElementById('filterPanel');
+  const courseDetailPage = document.getElementById("courseDetailPage");
+  const favoritesPage = document.getElementById("favoritesPage");
+  
+  let wasOnOtherPage = false;
+
+  // 1. 如果在其他頁面，先回到主頁
+  if (courseDetailPage && courseDetailPage.style.display === "block") {
+    if (typeof closeCourseDetail === "function") closeCourseDetail();
+    wasOnOtherPage = true;
+  }
+  if (favoritesPage && favoritesPage.style.display === "block") {
+    if (typeof showBrowseCourses === "function") showBrowseCourses();
+    wasOnOtherPage = true;
+  }
+
+  if (panel) {
+    if (wasOnOtherPage) {
+      // 從別頁回來，強制展開面板
+      panel.style.display = 'block';
+    } else {
+      // 在主頁點擊漏斗：判斷現在是開還是關
+      const isCurrentlyOpen = panel.style.display !== 'none';
+      
+      if (isCurrentlyOpen) {
+        // 【核心新增】如果面板要「關閉」，就一併把條件重置、讓課程全部跑出來！
+        panel.style.display = 'none';
+        resetAllFilters();
+      } else {
+        // 如果面板是關的，就單純打開它
+        panel.style.display = 'block';
+      }
+    }
+  }
+};
+
+// === 專屬的標籤重置小幫手 ===
+window.resetAllFilters = function() {
+  const filterRows = ['yearFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow', 'semesterFilterRow'];
+  
+  filterRows.forEach(rowId => {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    
+    const buttons = row.querySelectorAll('.filter-tag-btn');
+    // 把這一行所有按鈕的 active 藍色/橘色底拔掉
+    buttons.forEach(b => b.classList.remove('active'));
+    
+    // 找出代表「全部 (All)」的按鈕（它的 data-value 是空的 ""），幫它點亮
+    const allBtn = Array.from(buttons).find(b => b.dataset.value === "");
+    if (allBtn) {
+      allBtn.classList.add('active');
+    }
+  });
+
+  // 清空搜尋框（如果有的話）
+  const searchBox = document.getElementById("searchBox");
+  if (searchBox) searchBox.value = "";
+
+  // 重新跑一次篩選函數，讓所有被隱藏的課程卡片瞬間回來！
+  if (typeof filterCourses === "function") filterCourses();
+};
+
+
+// === 刪除評論邏輯 ===
+window.deleteReview = function(reviewId) {
+  if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
+
+  const reviews = courseReviews[currentCourseId];
+  if (!reviews) return;
+
+  // 找出該則評論在陣列中的位置並刪除
+  const index = reviews.findIndex(r => r.id === reviewId);
+  if (index !== -1) {
+    reviews.splice(index, 1); // 刪除資料
+
+    // 重新計算這堂課的平均星星數與評論總數
+    const course = allCourses.find(c => c.id === currentCourseId);
+    if (course) {
+      course.reviewCount = reviews.length;
+      course.rating = getAverageRating(reviews, course.rating);
+    }
+
+    // 重新渲染畫面
+    loadReviews(currentCourseId);
+    
+    // 如果有打開上方課程詳細卡片，也一併更新右上角的星星數字
+    if (document.getElementById("courseDetailPage").style.display === "block") {
+      document.getElementById("detailRatingValue").textContent = course.rating.toFixed(1);
+      document.getElementById("detailStars").innerHTML = generateStars(course.rating);
+      document.getElementById("detailReviewCount").textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
+    }
+  }
+};
+
+// === 開啟編輯模式 ===
+window.editReview = function(reviewId) {
+  document.getElementById(`text-display-${reviewId}`).style.display = 'none';
+  document.getElementById(`edit-form-${reviewId}`).style.display = 'block';
+};
+
+// === 取消編輯模式 ===
+window.cancelEdit = function(reviewId) {
+  document.getElementById(`text-display-${reviewId}`).style.display = 'block';
+  document.getElementById(`edit-form-${reviewId}`).style.display = 'none';
+};
+
+// === 儲存修改的內容 ===
+window.saveEdit = function(reviewId) {
+  const newText = document.getElementById(`edit-input-${reviewId}`).value.trim();
+  
+  if (!newText) {
+    alert("評論內容不能為空喔！");
+    return;
+  }
+
+  const review = findReviewById(reviewId);
+  if (review) {
+    review.text = newText;
+    // 更新完畢後，重新渲染評論列表
+    loadReviews(currentCourseId);
+  }
+};
+
+// === 刪除子回覆邏輯 ===
+window.deleteReply = function(reviewId, replyId) {
+  if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
+
+  const review = findReviewById(reviewId);
+  if (!review || !review.replies) return;
+
+  // 找出該則回覆在陣列中的位置並刪除
+  const index = review.replies.findIndex(r => r.id === replyId);
+  if (index !== -1) {
+    review.replies.splice(index, 1);
+    
+    // 重新渲染畫面
+    loadReviews(currentCourseId);
+  }
+};
+
+// === 開啟子回覆編輯模式 ===
+window.editReply = function(reviewId, replyId) {
+  document.getElementById(`text-display-${replyId}`).style.display = 'none';
+  document.getElementById(`edit-form-${replyId}`).style.display = 'block';
+};
+
+// === 取消子回覆編輯模式 ===
+window.cancelEditReply = function(replyId) {
+  document.getElementById(`text-display-${replyId}`).style.display = 'block';
+  document.getElementById(`edit-form-${replyId}`).style.display = 'none';
+};
+
+// === 儲存子回覆修改的內容 ===
+window.saveEditReply = function(reviewId, replyId) {
+  const newText = document.getElementById(`edit-input-${replyId}`).value.trim();
+  
+  if (!newText) {
+    alert("回覆內容不能為空喔！");
+    return;
+  }
+
+  const reply = findReplyById(reviewId, replyId);
+  if (reply) {
+    reply.text = newText;
+    // 更新完畢後，重新渲染
+    loadReviews(currentCourseId);
+  }
+};
+
+// === 自動生成熱門搜尋標籤 ===
+function generateDynamicTrending() {
+  const trendingContainer = document.querySelector(".trending-tags");
+  if (!trendingContainer) return;
+
+  // 1. 把所有課程拿來排序，依據「收藏數 + 評論數」由高到低排
+  const sortedCourses = [...allCourses].sort((a, b) => {
+    const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
+    const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+    return bPopularity - aPopularity;
+  });
+
+  // 2. 抓出前 5 名最紅的課程，提取它們的「系所」或「課程名稱」或「教授」當關鍵字
+  const topKeywords = new Set(); // 用 Set 避免重複的字
+  sortedCourses.forEach(course => {
+    if (topKeywords.size < 5) {
+      // 這裡可以自己決定要放什麼，例如放課程名稱
+      topKeywords.add(course.title); 
+    }
+  });
+
+  // 3. 把算出來的關鍵字畫成按鈕，塞進 HTML 裡
+  trendingContainer.innerHTML = Array.from(topKeywords).map(keyword => 
+    `<button type="button" class="trending-tag-btn">${escapeHtml(keyword)}</button>`
+  ).join("");
+
+  // 4. 重新綁定「點擊自動搜尋」的防失焦事件
+  const newBtns = trendingContainer.querySelectorAll(".trending-tag-btn");
+  const searchBox = document.getElementById("searchBox");
+  const searchDropdown = document.getElementById("searchDropdownCard");
+  
+  newBtns.forEach(btn => {
+    btn.addEventListener("mousedown", function(e) {
+      e.preventDefault(); 
+      searchBox.value = this.textContent.trim(); 
+      searchDropdown.style.display = "none";     
+      filterCourses();                           
+    });
+  });
+}
+
+// 確保在網頁載入時執行這支自動生成函數
+document.addEventListener("DOMContentLoaded", function() {
+  // 等假資料都載入後，呼叫生成函數
+  setTimeout(generateDynamicTrending, 100); 
 });

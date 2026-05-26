@@ -20,17 +20,55 @@
           
           <div class="nav-search-group">
             
-            <div class="expandable-search">
+            <div class="expandable-search" id="searchContainer" style="position: relative;">
               <img src="../static/icons/search2.png" class="search-icon">
-              <input type="text" placeholder="Search courses..." class="search-box" id="searchBox" />
+              <input type="text" placeholder="Search courses..." class="search-box" id="searchBox" autocomplete="off" />
+              
+              <div class="search-dropdown-card" id="searchDropdownCard" style="display: none;">
+                <div class="search-dropdown-header">Hot Search 🔥</div>
+                <div class="trending-tags">
+                  <button type="button" class="trending-tag-btn">Calculus</button>
+                  <button type="button" class="trending-tag-btn">Computer Science</button>
+                  <button type="button" class="trending-tag-btn">Dr. Lin</button>
+                  <button type="button" class="trending-tag-btn">Writing</button>
+                  <button type="button" class="trending-tag-btn">Physics</button>
+                </div>
+              </div>
             </div>
 
-            <button class="icon-btn" aria-label="Notifications" title="Notifications">
-              <svg viewBox="0 0 448 512" width="20" height="20" fill="currentColor">
-                <path d="M224 0c-17.7 0-32 14.3-32 32V51.2C119 66 64 130.6 64 208v11.3c0 8.5-2.4 16.8-6.9 24L11.5 321.4c-9.2 14.6-9.8 33-1.6 48.2s24.6 24.4 41.8 24.4H402.1c17.2 0 33.6-9.2 41.8-24.4s7.7-33.6-1.6-48.2L390.9 243.3c-4.5-7.1-6.9-15.5-6.9-24V208c0-77.4-55-142-128-156.8V32c0-17.7-14.3-32-32-32zm48 448H176c0 26.5 21.5 48 48 48s48-21.5 48-48z"/>
-                <circle cx="350" cy="120" r="55" />
-              </svg>
-            </button>
+            <div class="notification-container" style="position: relative;">
+              <button class="icon-btn" id="notificationBtn" aria-label="Notifications" title="Notifications" type="button">
+                <svg viewBox="0 0 448 512" width="20" height="20" fill="currentColor">
+                  <path d="M224 0c-17.7 0-32 14.3-32 32V51.2C119 66 64 130.6 64 208v11.3c0 8.5-2.4 16.8-6.9 24L11.5 321.4c-9.2 14.6-9.8 33-1.6 48.2s24.6 24.4 41.8 24.4H402.1c17.2 0 33.6-9.2 41.8-24.4s7.7-33.6-1.6-48.2L390.9 243.3c-4.5-7.1-6.9-15.5-6.9-24V208c0-77.4-55-142-128-156.8V32c0-17.7-14.3-32-32-32zm48 448H176c0 26.5 21.5 48 48 48s48-21.5 48-48z"/>
+                </svg>
+                <span class="notification-badge" id="notiBadge">2</span>
+              </button>
+
+              <div class="notification-dropdown-card" id="notificationDropdown" style="display: none;">
+                <div class="notification-header">
+                  <h3>Notifications</h3>
+                  <button type="button" class="mark-read-btn" onclick="markAllAsRead()">Mark all as read</button>
+                </div>
+                
+                <div class="notification-list">
+                  <div class="notification-item unread">
+                    <div class="noti-icon">📚</div>
+                    <div class="noti-content">
+                      <p>There is 1 new review on your saved course <strong>Calculus II</strong>!</p>
+                      <span class="noti-time">10 minutes ago</span>
+                    </div>
+                  </div>
+                  
+                  <div class="notification-item unread">
+                    <div class="noti-icon">💬</div>
+                    <div class="noti-content">
+                      <p>Someone replied to your review in <strong>Introduction to Computer Science</strong>!</p>
+                      <span class="noti-time">2 hours ago</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <button class="icon-btn" onclick="toggleFilterPanel()" aria-label="Filter" title="Filter">
               <svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor">
@@ -54,7 +92,7 @@
         </div>
     </nav>
 
-<!-- Login Modal -->
+    <!-- Login Modal -->
     <div id="loginModal" class="modal login-page-overlay" style="display: block">
       
       <div id="welcomeStartSection" class="welcome-pure-text">
@@ -165,7 +203,9 @@
             </div>
           </div>
           
-          <button type="submit" class="btn-submit">Save Changes</button>
+          <button type="button" class="btn-submit" onclick="saveProfile(event)">
+            Save Changes
+          </button>
         </form>
       </div>
     </div>
@@ -174,52 +214,60 @@
     <!-- Main Content -->
     <main class="main-content" id="mainContentBlock">
       <section class="page-heading" id="pageHeading">
-        <div>
-
+          <div>
+            <p class="page-kicker"> Let's explore!</p>
+            <h2>All Courses</h2>
+          </div>
         </div>
       </section>
 
       <!-- Filters -->
       <div class="quick-sort-menu" id="quickSortMenu">
         <button type="button" class="sort-text-btn active" data-sort="popular">Hottest</button>
-        <span class="sort-divider">|</span>
         <button type="button" class="sort-text-btn" data-sort="latest">Latest</button>
-        <span class="sort-divider">|</span>
         <button type="button" class="sort-text-btn" data-sort="rating">Ratings</button>
       </div>
 
       <div class="filter-panel" id="filterPanel" style="display: none;">
         
-        <div class="filter-row">
-          <span class="filter-label">Department</span>
-          <div class="filter-options" id="deptOptions">
-            <button class="filter-pill active" data-val="">All</button>
-            <button class="filter-pill" data-val="Computer Science">Computer Science</button>
-            <button class="filter-pill" data-val="Mathematics">Mathematics</button>
-            <button class="filter-pill" data-val="English">English</button>
-            <button class="filter-pill" data-val="Physics">Physics</button>
-          </div>
+        <div class="filter-row" id="deptFilterRow">
+          <span class="filter-label">Department │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="Computer Science">Computer Science</button>
+          <button type="button" class="filter-tag-btn" data-value="Information Management">Information Management</button>
+          <button type="button" class="filter-tag-btn" data-value="Business Administration">Business Administration</button>
+          <button type="button" class="filter-tag-btn" data-value="Finance">Finance</button>
+          <button type="button" class="filter-tag-btn" data-value="Mathematics">Mathematics</button>
+          <button type="button" class="filter-tag-btn" data-value="English">English</button>
+          <button type="button" class="filter-tag-btn" data-value="Physics">Physics</button>
+          <button type="button" class="filter-tag-btn" data-value="Electrical Engineering">Electrical Engineering</button>
+          <button type="button" class="filter-tag-btn" data-value="Mechanical Engineering">Mechanical Engineering</button>
         </div>
 
-        <div class="filter-row">
-          <span class="filter-label">Year</span>
-          <div class="filter-options" id="yearOptions">
-            <button class="filter-pill active" data-val="">All</button>
-            <button class="filter-pill" data-val="2024">2024</button>
-            <button class="filter-pill" data-val="2023">2023</button>
-            <button class="filter-pill" data-val="2022">2022</button>
-          </div>
+        <div class="filter-row" id="yearFilterRow">
+          <span class="filter-label">Year │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="2024">2024</button>
+          <button type="button" class="filter-tag-btn" data-value="2023">2023</button>
+          <button type="button" class="filter-tag-btn" data-value="2022">2022</button>
         </div>
 
-        <div class="filter-row">
-          <span class="filter-label">Rating</span>
-          <div class="filter-options" id="ratingOptions">
-            <button class="filter-pill active" data-val="">All</button>
-            <button class="filter-pill" data-val="5">5 Stars</button>
-            <button class="filter-pill" data-val="4">4+ Stars</button>
-            <button class="filter-pill" data-val="3">3+ Stars</button>
-            <button class="filter-pill" data-val="1">1+ Stars</button>
-          </div>
+        <div class="filter-row" id="semesterFilterRow">
+          <span class="filter-label">Semester │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="1">S1</button>
+          <button type="button" class="filter-tag-btn" data-value="2">S2</button>
+          <button type="button" class="filter-tag-btn" data-value="3">Summer Vacation</button>
+        </div>
+
+        <div class="filter-row" id="ratingFilterRow">
+          <span class="filter-label">Rating │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="5">5 Stars</button>
+          <button type="button" class="filter-tag-btn" data-value="4">4+ Stars</button>
+          <button type="button" class="filter-tag-btn" data-value="3">3+ Stars</button>
+          <button type="button" class="filter-tag-btn" data-value="2">2+ Stars</button>
+          <button type="button" class="filter-tag-btn" data-value="1">1+ Stars</button>
         </div>
         
       </div>
@@ -241,31 +289,13 @@
         </div>
         <div class="filters favorites-filters">
           <div class="filter-group">
-            <select id="favoriteDepartmentFilter" class="filter-select">
-              <option value="">All Departments</option>
-              <option value="Computer Science">Computer Science</option>
-              <option value="Mathematics">Mathematics</option>
-              <option value="English">English</option>
-              <option value="Physics">Physics</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <select id="favoriteRatingFilter" class="filter-select">
-              <option value="">All Ratings</option>
-              <option value="5">5 Stars</option>
-              <option value="4">4+ Stars</option>
-              <option value="3">3+ Stars</option>
-              <option value="1">1+ Stars</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <select id="favoriteSortFilter" class="filter-select">
-              <option value="default">Default Order</option>
-              <option value="ratingDesc">Rating: High to Low</option>
-              <option value="ratingAsc">Rating: Low to High</option>
-              <option value="reviewsDesc">Reviews: Most to Fewest</option>
-              <option value="reviewsAsc">Reviews: Fewest to Most</option>
-            </select>
+              <div class="quick-sort-menu" style="margin-bottom: 2rem;">
+                <button type="button" class="sort-text-btn fav-sort-btn active" data-sort="popular">Hottest</button>
+                <span class="sort-divider">|</span>
+                <button type="button" class="sort-text-btn fav-sort-btn" data-sort="latest">Latest</button>
+                <span class="sort-divider">|</span>
+                <button type="button" class="sort-text-btn fav-sort-btn" data-sort="rating">Ratings</button>
+              </div>
           </div>
         </div>
         <div class="courses-container" id="favoritesContainer"></div>
