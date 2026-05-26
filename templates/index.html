@@ -43,17 +43,10 @@
     </nav>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="modal login-page-overlay" style="display: block">
-      
-      <div id="welcomeStartSection" class="welcome-pure-text">
-        <div class="welcome-header">
-          <h1>Course Review Platform</h1>
-          <p class="welcome-subtitle">A platform that allows students to leave course reviews.</p>
-        </div>
-        <button type="button" class="btn-submit" id="startExploreBtn" onclick="showAuthFields()">Start</button>
-      </div>
-
-      <div id="authCoreSection" class="welcome-white-box" style="display: none;">
+    <div id="loginModal" class="modal" style="display: none">
+      <div class="modal-content auth-modal-content">
+        <button class="close" type="button" onclick="closeLoginModal()" aria-label="Close">&times;</button>
+        <h2>Login / Register</h2>
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
           <button type="button" id="tabRegister" class="tab-btn" onclick="switchAuthTab('register')">Register</button>
@@ -110,7 +103,42 @@
           <button type="submit" class="btn-submit" id="authSubmitBtn">Login</button>
         </form>
       </div>
-      
+    </div>
+
+    <div id="profileModal" class="modal" style="display: none">
+      <div class="modal-content profile-modal-content">
+        <button class="close" type="button" onclick="closeProfileModal()" aria-label="Close">&times;</button>
+        <h2>Profile</h2>
+        <form id="profileForm">
+          <div class="register-fields profile-fields">
+            <div class="avatar-preview" id="profileAvatarPreview" aria-hidden="true"></div>
+            <div class="form-group">
+              <label for="profileAvatarAnimal">Avatar</label>
+              <select id="profileAvatarAnimal">
+                <option value="question">Default</option>
+                <option value="cat">Cat</option>
+                <option value="dog">Dog</option>
+                <option value="bear">Bear</option>
+                <option value="monkey">Monkey</option>
+                <option value="elephant">Elephant</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="profileGender">Gender</label>
+              <select id="profileGender">
+                <option value="undisclosed">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-groups">
+            <input type="text" placeholder="Username" id="profileUsername" required />
+            <input type="email" placeholder="Email" id="profileEmail" disabled />
+          </div>
+          <button type="submit" class="btn-submit">Save Profile</button>
+        </form>
+      </div>
     </div>
 
     <!-- Main Content -->
