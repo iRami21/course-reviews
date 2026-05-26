@@ -1694,7 +1694,7 @@ button {
 
 .main-content {
   max-width: var(--container);
-  margin: 2rem auto 3.5rem;
+  margin: 1rem auto 3.5rem;
   padding: 0 1.5rem;
 }
 
@@ -2337,6 +2337,240 @@ button {
 #loginModal .close:hover,
 #profileModal .close:hover {
   background-color: #ffdca0;
+}
+
+/* === 純文字排序選單 === */
+/* === 搜尋框與 Filter 一體化膠囊按鈕設計 === */
+
+/* 1. 外層大膠囊容器 */
+/* === 純圖示按鈕風格 (Hami Video 風格) === */
+.nav-search-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+/* 1. 共用的圓形純圖示按鈕 (給 Filter 用的) */
+.icon-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 44px; /* 按鈕大小 */
+  height: 44px;
+  border-radius: 50%;
+  background-color: #4f67b1; 
+  color:  #fefaf0; 
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  border: none !important;
+  outline: none !important;
+}
+
+
+.icon-btn:hover {
+  background-color: #4f67b1;
+  transform: scale(1.05); /* 滑過稍微放大 */
+}
+
+.icon-btn:focus,
+.icon-btn:active,
+.icon-btn:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.btn-icon-img{
+  width: 30px;
+  height: 30px;
+  color: #fefaf0;
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 2. 伸縮搜尋列 (平時偽裝成 icon-btn) */
+.expandable-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* 放大鏡圖示永遠固定在左邊 */
+.expandable-search .search-icon {
+  position: absolute;
+  left: 12px;
+  width: 20px;
+  height: 20px;
+  pointer-events: none; /* 讓點擊可以穿透到下方的 input */
+  z-index: 2;
+}
+
+/* 輸入框本體 (預設縮成一顆圓球) */
+.expandable-search .search-box {
+  width: 44px; /* 預設寬度跟 Filter 按鈕一樣大 */
+  height: 44px;
+  border-radius: 22px;
+  border: 1px solid transparent;
+  background-color: #fefaf0;
+  padding: 8px 10px 8px 38px;
+  color: transparent; /* 沒展開時把輸入文字藏起來 */
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 滑順的伸縮動畫 */
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 隱藏預設的 placeholder 文字 */
+.expandable-search .search-box::placeholder {
+  color: transparent;
+}
+
+/* 滑鼠移過去時也有按鈕的效果 */
+.expandable-search:hover .search-box {
+  background-color: #edf2ff;
+}
+
+/* 3. 點擊輸入框 (Focus) 或裡面有文字時：向左伸長！ */
+.expandable-search .search-box:focus,
+.expandable-search .search-box:not(:placeholder-shown) {
+  width: 260px; /* 展開後的寬度 */
+  background-color: #ffffff;
+  border-color: #4f67b1;
+  color: #2b2f44; /* 顯示輸入的文字 */
+  cursor: text;
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.15);
+}
+
+/* 展開時把 placeholder 文字顯示出來 */
+.expandable-search .search-box:focus::placeholder {
+  color: #999999;
+}
+
+/* 3. 內嵌在右側的 Filter 按鈕 */
+.btn-filter-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px;
+  background-color: #4f67b1; /* 用深藍色當按鈕底，跳色顯眼 */
+  color: #ffffff;
+  border: none;
+  border-radius: 999px; /* 按鈕自己也是圓角 */
+  padding: 8px 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Filter 按鈕滑鼠移過去的特效 */
+.btn-filter-toggle:hover {
+  background-color: #3b508f;
+  transform: scale(1.02);
+}
+
+/* === 電影分類風格的 Filter 面板 === */
+
+.filter-panel {
+  background-color: #fefaf0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.filter-label {
+  min-width: 60px;
+  color: #7b8494;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-pill {
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 0.4rem 1.2rem;
+  color: #4b5565;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-pill:hover {
+  background-color: #f1f3f6;
+}
+
+/* 被選中時的樣式 (類似你截圖中亮起的綠字黑底) */
+.filter-pill.active {
+  background-color: #4f67b1;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(79, 103, 177, 0.3);
+}
+
+/* === 按鈕風格排序選單 === */
+.quick-sort-menu {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* 按鈕之間的間距 */
+  margin-bottom: 2rem;
+}
+
+/* 直接把原本的垂直線隱藏，這樣就不用回去改 HTML 了！ */
+.sort-divider {
+  display: none !important; 
+}
+
+/* 按鈕的預設外觀 (未選中) */
+.sort-text-btn {
+  background-color: #ffe9f7; 
+  border: 1px solid #ffe9f7;
+  border-radius: 999px; /* 完美的圓角膠囊形狀 */
+  color: #7b8494; /* 預設灰字 */
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0.45rem 1.25rem;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+/* 滑鼠移過去的特效 */
+.sort-text-btn:hover {
+  background-color: #edf2ff;
+  border-color: #ff99b5;
+  color: #ff99b5;
+  transform: translateY(-2px); /* 滑鼠游標移上去時會稍微浮起來 */
+}
+
+/* 被選中 (Active) 時的樣式 */
+.sort-text-btn.active {
+  background-color: #ff99b5; /* 變成你們專案的粉藍主題色 */
+  border-color: #ff99b5;
+  color: #ffffff; /* 文字反白 */
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3); /* 加上發光陰影，強調它被選中了 */
 }
 
 .profile-modal-content {

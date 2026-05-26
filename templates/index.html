@@ -17,15 +17,22 @@
           <h1>Course Review Platform</h1>
         </div>
         <div class="nav-menu">
-          <div class="search_img">
-            <img src="../static/icons/search2.png" class="search-icon">
-            <input
-              type="text"
-              placeholder="Search courses..."
-              class="search-box"
-              id="searchBox"
-            />
+          
+          <div class="nav-search-group">
+            
+            <div class="expandable-search">
+              <img src="../static/icons/search2.png" class="search-icon">
+              <input type="text" placeholder="Search courses..." class="search-box" id="searchBox" />
+            </div>
+
+            <button class="icon-btn" onclick="toggleFilterPanel()" aria-label="Filter" title="Filter">
+              <svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor">
+                <path d="M3.9 54.9C10.5 40.9 24.5 32 40 32H472c15.5 0 29.5 8.9 36.1 22.9s4.6 30.5-5.2 42.5L320 320.9V448c0 12.1-6.8 23.2-17.7 28.6s-23.8 4.3-33.5-3l-64-48c-8.1-6-12.8-15.5-12.8-25.6V320.9L9 97.3C-.7 85.4-2.8 68.8 3.9 54.9z"/>
+              </svg>
+            </button>
+            
           </div>
+
           <div class="user-menu" id="userMenu" style="display: none">
             <button class="user-avatar" id="userAvatar" type="button" aria-label="Account menu"></button>
             <div class="user-dropdown" id="userDropdown" hidden>
@@ -34,12 +41,10 @@
               <button type="button" id="signOutMenuBtn">Sign out</button>
             </div>
           </div>
-          <button class="btn-logout" id="logoutBtn" style="display: none">
-            Logout
-          </button>
+
+          <button class="btn-logout" id="logoutBtn" style="display: none">Logout</button>
           <button class="btn-login" id="loginBtn" type="button">Login / Sign in</button>
         </div>
-      </div>
     </nav>
 
 <!-- Login Modal -->
@@ -168,45 +173,48 @@
       </section>
 
       <!-- Filters -->
-      <div class="filters">
-        <div class="filter-group">
-          <select id="yearFilter" class="filter-select">
-            <option value="">All Years</option>
-            <option value="2024">2024</option>
-            <option value="2023">2023</option>
-            <option value="2022">2022</option>
-          </select>
+      <div class="quick-sort-menu" id="quickSortMenu">
+        <button type="button" class="sort-text-btn active" data-sort="popular">Hottest</button>
+        <span class="sort-divider">|</span>
+        <button type="button" class="sort-text-btn" data-sort="latest">Latest</button>
+        <span class="sort-divider">|</span>
+        <button type="button" class="sort-text-btn" data-sort="rating">Ratings</button>
+      </div>
+
+      <div class="filter-panel" id="filterPanel" style="display: none;">
+        
+        <div class="filter-row">
+          <span class="filter-label">Department</span>
+          <div class="filter-options" id="deptOptions">
+            <button class="filter-pill active" data-val="">All</button>
+            <button class="filter-pill" data-val="Computer Science">Computer Science</button>
+            <button class="filter-pill" data-val="Mathematics">Mathematics</button>
+            <button class="filter-pill" data-val="English">English</button>
+            <button class="filter-pill" data-val="Physics">Physics</button>
+          </div>
         </div>
 
-        <div class="filter-group">
-          <select id="departmentFilter" class="filter-select">
-            <option value="">All Departments</option>
-            <option value="Computer Science">Computer Science</option>
-            <option value="Mathematics">Mathematics</option>
-            <option value="English">English</option>
-            <option value="Physics">Physics</option>
-          </select>
+        <div class="filter-row">
+          <span class="filter-label">Year</span>
+          <div class="filter-options" id="yearOptions">
+            <button class="filter-pill active" data-val="">All</button>
+            <button class="filter-pill" data-val="2024">2024</button>
+            <button class="filter-pill" data-val="2023">2023</button>
+            <button class="filter-pill" data-val="2022">2022</button>
+          </div>
         </div>
 
-        <div class="filter-group">
-          <select id="ratingFilter" class="filter-select">
-            <option value="">All Ratings</option>
-            <option value="5">5 Stars</option>
-            <option value="4">4+ Stars</option>
-            <option value="3">3+ Stars</option>
-            <option value="1">1+ Stars</option>
-          </select>
+        <div class="filter-row">
+          <span class="filter-label">Rating</span>
+          <div class="filter-options" id="ratingOptions">
+            <button class="filter-pill active" data-val="">All</button>
+            <button class="filter-pill" data-val="5">5 Stars</button>
+            <button class="filter-pill" data-val="4">4+ Stars</button>
+            <button class="filter-pill" data-val="3">3+ Stars</button>
+            <button class="filter-pill" data-val="1">1+ Stars</button>
+          </div>
         </div>
-
-        <div class="filter-group">
-          <select id="sortFilter" class="filter-select">
-            <option value="default">Default Order</option>
-            <option value="ratingDesc">Rating: High to Low</option>
-            <option value="ratingAsc">Rating: Low to High</option>
-            <option value="reviewsDesc">Reviews: Most to Fewest</option>
-            <option value="reviewsAsc">Reviews: Fewest to Most</option>
-          </select>
-        </div>
+        
       </div>
 
       <!-- Courses Grid -->

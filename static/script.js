@@ -388,6 +388,8 @@ document.addEventListener("DOMContentLoaded", function () {
   checkUserLogin();
 });
 
+
+
 // Setup event listeners
 // Setup event listeners
 function setupEventListeners() {
@@ -499,30 +501,55 @@ function renderCourseCards(container, courses, emptyText) {
 // Filter courses based on search and filters
 function filterCourses() {
   const searchTerm = document.getElementById("searchBox").value.toLowerCase();
-  const year = document.getElementById("yearFilter").value;
-  const department = document.getElementById("departmentFilter").value;
-  const minRating = document.getElementById("ratingFilter").value
-    ? parseFloat(document.getElementById("ratingFilter").value)
-    : 0;
-  const sortBy = document.getElementById("sortFilter").value;
+  
+  // 1. 抓取目前各個分類「亮起 (active)」的標籤數值
+  const activeDept = document.querySelector('#deptOptions .filter-pill.active')?.dataset.val || "";
+  const activeYear = document.querySelector('#yearOptions .filter-pill.active')?.dataset.val || "";
+  const activeRating = document.querySelector('#ratingOptions .filter-pill.active')?.dataset.val || "";
+  const minRating = activeRating ? parseFloat(activeRating) : 0;
 
+  // 2. 進行搜尋與標籤過濾
   let filtered = allCourses.filter((course) => {
-    const matchSearch =
-      course.code.toLowerCase().includes(searchTerm) ||
-      course.title.toLowerCase().includes(searchTerm) ||
-      course.titleZh.includes(searchTerm) ||
-      course.professor.toLowerCase().includes(searchTerm);
-
-    const matchDept = !department || course.department === department;
+    const matchSearch = course.code.toLowerCase().includes(searchTerm) ||
+                        course.title.toLowerCase().includes(searchTerm) ||
+                        course.titleZh.includes(searchTerm) ||
+                        course.professor.toLowerCase().includes(searchTerm);
+    const matchDept = !activeDept || course.department === activeDept;
+    const matchYear = !activeYear || course.year.toString() === activeYear;
     const matchRating = course.rating >= minRating;
 
-    return matchSearch && matchDept && matchRating;
+    return matchSearch && matchDept && matchYear && matchRating;
   });
 
-  filtered = sortCourses(filtered, sortBy);
+  // 3. 執行純文字排序邏輯
+  const activeSortBtn = document.querySelector('.sort-text-btn.active');
+  const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : 'popular';
+
+  if (sortBy === 'popular') {
+    filtered.sort((a, b) => ((b.saveCount || 0) + getCourseCommentTotal(b.id)) - ((a.saveCount || 0) + getCourseCommentTotal(a.id)));
+  } else if (sortBy === 'latest') {
+    filtered.sort((a, b) => b.year - a.year || b.semester - a.semester);
+  } else if (sortBy === 'rating') {
+    filtered.sort((a, b) => b.rating - a.rating);
+  }
 
   displayCourses(filtered);
 }
+
+// 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
+document.addEventListener("DOMContentLoaded", function() {
+  const sortBtns = document.querySelectorAll('.sort-text-btn');
+  sortBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      // 把所有按鈕的 active 拔掉
+      sortBtns.forEach(b => b.classList.remove('active'));
+      // 幫目前點擊的按鈕加上 active
+      e.target.classList.add('active');
+      // 觸發重新排序與渲染
+      filterCourses();
+    });
+  });
+});
 
 function sortCourses(courses, sortBy) {
   const sorted = [...courses];
@@ -651,7 +678,11 @@ function showFavorites() {
   }
 
   document.getElementById("pageHeading").style.display = "none";
-  document.querySelector(".filters").style.display = "none";
+  
+  // 🔴 修正：在收藏頁面也把主頁的選單藏起來
+  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+
   document.getElementById("coursesContainer").style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
@@ -661,7 +692,10 @@ function showFavorites() {
 function showBrowseCourses() {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("pageHeading").style.display = "";
-  document.querySelector(".filters").style.display = "";
+  
+  // 🟢 修正：回到主頁時，再次把選單顯示出來
+  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
+
   document.getElementById("coursesContainer").style.display = "";
   filterCourses();
 }
@@ -977,26 +1011,19 @@ function openCourseDetail(courseId) {
   const averageRating = getAverageRating(reviews, course.rating);
 
   document.getElementById("detailCourseCode").textContent = course.code;
-  document.getElementById("detailCourseTerm").textContent =
-    `${course.year} S${course.semester}`;
+  document.getElementById("detailCourseTerm").textContent = `${course.year} S${course.semester}`;
   document.getElementById("detailCourseTitle").textContent = course.title;
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
-  document.getElementById("detailCourseProfessor").textContent =
-    course.professor;
-  document.getElementById("detailCourseDepartment").textContent =
-    course.department;
+  document.getElementById("detailCourseProfessor").textContent = course.professor;
+  document.getElementById("detailCourseDepartment").textContent = course.department;
   document.getElementById("detailCourseCredits").textContent = course.credits;
-  document.getElementById("detailCourseDescription").textContent =
-    course.description;
+  document.getElementById("detailCourseDescription").textContent = course.description;
   renderDetailTags(course);
   updateDetailSocialStats(courseId);
-  document.getElementById("detailRatingValue").textContent =
-    averageRating.toFixed(1);
-  document.getElementById("detailStars").innerHTML =
-    generateStars(averageRating);
-  document.getElementById("detailReviewCount").textContent =
-    `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
+  document.getElementById("detailRatingValue").textContent = averageRating.toFixed(1);
+  document.getElementById("detailStars").innerHTML = generateStars(averageRating);
+  document.getElementById("detailReviewCount").textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
 
   renderRatingBreakdown(reviews);
   loadReviews(courseId);
@@ -1004,7 +1031,11 @@ function openCourseDetail(courseId) {
   document.body.classList.add("detail-open");
   document.querySelector(".navbar").style.display = "none";
   document.getElementById("pageHeading").style.display = "none";
-  document.querySelector(".filters").style.display = "none";
+  
+  // 🔴 修正：隱藏全新的排序與標籤面板
+  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+  
   document.getElementById("coursesContainer").style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1020,7 +1051,11 @@ function closeCourseDetail() {
   document.body.classList.remove("detail-open");
   document.querySelector(".navbar").style.display = "";
   document.getElementById("pageHeading").style.display = "";
-  document.querySelector(".filters").style.display = "";
+  
+  // 🟢 修正：回到主頁時，把排序面板顯示回來，過濾面板維持收合
+  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+
   document.getElementById("coursesContainer").style.display = "";
   currentCourseId = null;
 }
@@ -1521,3 +1556,28 @@ window.showAuthFields = function() {
   // 2. 把第二階段的白色登入卡片方塊顯示出來
   document.getElementById("authCoreSection").style.display = "block";
 }
+
+// 控制 Filter 面板的開關
+window.toggleFilterPanel = function() {
+  const panel = document.getElementById('filterPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+};
+
+// 綁定「標籤」的點擊事件
+document.addEventListener("DOMContentLoaded", function() {
+  const filterOptions = document.querySelectorAll('.filter-options');
+  
+  filterOptions.forEach(group => {
+    const pills = group.querySelectorAll('.filter-pill');
+    pills.forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        // 把同一個 row 裡面的標籤全部取消 active
+        pills.forEach(p => p.classList.remove('active'));
+        // 幫剛點擊的標籤加上 active
+        e.target.classList.add('active');
+        // 觸發重新篩選
+        filterCourses();
+      });
+    });
+  });
+});
