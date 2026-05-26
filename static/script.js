@@ -3,6 +3,9 @@ let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
 let selectedRating = 0;
+const expandedReplyGroups = new Set();
+const expandedTextItems = new Set();
+const TEXT_PREVIEW_LIMIT = 200;
 
 // Sample course data (will be replaced with API calls)
 const sampleCourses = [
@@ -17,8 +20,10 @@ const sampleCourses = [
     rating: 4.5,
     reviewCount: 2,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 1,
+    tags: ["Computer Science", "Programming", "Foundation"],
     description: "Fundamental concepts of computer science and programming",
   },
   {
@@ -32,8 +37,10 @@ const sampleCourses = [
     rating: 3.0,
     reviewCount: 1,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 1,
+    tags: ["Mathematics", "Calculus", "Workload"],
     description:
       "Advanced techniques for integration, series, and applications",
   },
@@ -48,8 +55,10 @@ const sampleCourses = [
     rating: 5.0,
     reviewCount: 1,
     followed: false,
+    saveCount: 0,
     year: 2024,
     semester: 2,
+    tags: ["Writing", "Research", "Feedback"],
     description:
       "Academic essay structure, research writing, and revision skills",
   },
@@ -64,8 +73,10 @@ const sampleCourses = [
     rating: 4.0,
     reviewCount: 3,
     followed: false,
+    saveCount: 0,
     year: 2023,
     semester: 2,
+    tags: ["Physics", "Lab", "Mechanics"],
     description:
       "Mechanics, motion, forces, energy, and foundational physics models",
   },
@@ -226,6 +237,14 @@ function bookmarkIcon() {
   `;
 }
 
+function commentIcon() {
+  return `
+    <svg class="comment-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0z"></path>
+    </svg>
+  `;
+}
+
 function questionIcon() {
   return avatarImage("question");
 }
@@ -280,6 +299,36 @@ function heartIcon() {
   `;
 }
 
+function reactionIcon(reaction) {
+  return reaction || heartIcon();
+}
+
+function renderReactionControl(item, reviewId, replyId = null) {
+  const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
+  const selectedReaction = item.reaction || (item.liked ? "❤️" : "");
+
+  return `
+    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
+      <button
+        class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
+        onclick="handleQuickLike(event, ${targetArgs})"
+        type="button"
+      >
+        <span class="emoji-stack">
+          <span class="emoji-item">${reactionIcon(selectedReaction)}</span>
+        </span>
+        <span class="like-count-num">${item.likes ?? 0}</span>
+      </button>
+      <div class="reaction-palette">
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '❤️')">❤️</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😮')">😮</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '👍')">👍</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🔥')">🔥</button>
+      </div>
+    </div>
+  `;
+}
+
 function replyIcon() {
   return `
     <svg class="reply-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -298,6 +347,39 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function renderExpandableText(text, key, className) {
+  const value = String(text || "");
+  const firstSentence = getFirstSentence(value);
+  const isLong = value.trim().length > TEXT_PREVIEW_LIMIT;
+  const isExpanded = expandedTextItems.has(key);
+  const visibleText = isLong && !isExpanded ? firstSentence : value;
+  const toggle = isLong
+    ? ` <button class="read-more-btn" type="button" onclick="toggleExpandedText(event, '${key}')">${isExpanded ? "Read less" : "Read more"}</button>`
+    : "";
+
+  return `<p class="${className}">${escapeHtml(visibleText)}${toggle}</p>`;
+}
+
+function getFirstSentence(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^.*?[.!?。！？](?=\s|$)/);
+  if (match) return match[0].trim();
+
+  return text.length > TEXT_PREVIEW_LIMIT
+    ? `${text.slice(0, TEXT_PREVIEW_LIMIT).trim()}...`
+    : text;
+}
+
+function toggleExpandedText(event, key) {
+  event.stopPropagation();
+  if (expandedTextItems.has(key)) {
+    expandedTextItems.delete(key);
+  } else {
+    expandedTextItems.add(key);
+  }
+  loadReviews(currentCourseId);
+}
+
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
   allCourses = JSON.parse(JSON.stringify(sampleCourses));
@@ -309,13 +391,33 @@ document.addEventListener("DOMContentLoaded", function () {
 // Setup event listeners
 function setupEventListeners() {
   document.getElementById("loginBtn").addEventListener("click", openLoginModal);
-  document.getElementById("userAvatar").addEventListener("click", function () {
-    if (currentUser) {
+  document
+    .getElementById("userAvatar")
+    .addEventListener("click", toggleUserMenu);
+  document
+    .getElementById("profileMenuBtn")
+    .addEventListener("click", openProfileModal);
+  document
+    .getElementById("favoritesMenuBtn")
+    .addEventListener("click", function () {
+      closeUserMenu();
       showFavorites();
-    } else {
-      openLoginModal();
-    }
-  });
+    });
+  document
+    .getElementById("signOutMenuBtn")
+    .addEventListener("click", function () {
+      closeUserMenu();
+      logout();
+    });
+  document.getElementById("profileForm").addEventListener("submit", saveProfile);
+  document
+    .getElementById("profileAvatarAnimal")
+    .addEventListener("change", updateProfileAvatarPreview);
+  document
+    .getElementById("profileGender")
+    .addEventListener("change", updateProfileAvatarPreview);
+  document.addEventListener("click", closeUserMenuOnOutsideClick);
+  document.addEventListener("keydown", closeMenusOnEscape);
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("authForm").addEventListener("submit", login);
   document.getElementById("searchBox").addEventListener("input", filterCourses);
@@ -343,7 +445,9 @@ function setupEventListeners() {
   document
     .getElementById("avatarAnimal")
     .addEventListener("change", updateAvatarPreview);
-  document.getElementById("gender").addEventListener("change", updateAvatarPreview);
+  document
+    .getElementById("gender")
+    .addEventListener("change", updateAvatarPreview);
 }
 
 // Display courses
@@ -379,7 +483,7 @@ function renderCourseCards(container, courses, emptyText) {
                   aria-label="${course.followed ? "Unfollow course" : "Follow course"}"
                   title="${course.followed ? "Saved" : "Save course"}"
                 >
-                  ${bookmarkIcon()}
+                  ${heartIcon()}
                 </button>
             </div>
             
@@ -396,9 +500,9 @@ function renderCourseCards(container, courses, emptyText) {
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
                     <span class="stat-save-display">
-                        🔖 <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
+                        ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">💬 ${course.reviewCount}</span>
+                    <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
             </div>
@@ -408,10 +512,52 @@ function renderCourseCards(container, courses, emptyText) {
   });
 }
 
+function parseSearchTokens(raw) {
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  const years = [];
+  const semesters = [];
+  const text = [];
+
+  tokens.forEach((token) => {
+    const lower = token.toLowerCase();
+    if (/^\d{4}$/.test(lower)) {
+      years.push(parseInt(lower, 10));
+      return;
+    }
+
+    if (
+      lower === "s1" ||
+      lower === "sem1" ||
+      lower === "semester1" ||
+      lower === "semester-1" ||
+      lower === "semester_1"
+    ) {
+      semesters.push(1);
+      return;
+    }
+
+    if (
+      lower === "s2" ||
+      lower === "sem2" ||
+      lower === "semester2" ||
+      lower === "semester-2" ||
+      lower === "semester_2"
+    ) {
+      semesters.push(2);
+      return;
+    }
+
+    text.push(lower);
+  });
+
+  return { years, semesters, text };
+}
+
 // Filter courses based on search and filters
 function filterCourses() {
-  const searchTerm = document.getElementById("searchBox").value.toLowerCase();
-  const year = document.getElementById("yearFilter").value;
+  const searchTerm = document.getElementById("searchBox").value.trim();
+  const { years, semesters, text } = parseSearchTokens(searchTerm);
+  const yearFilter = document.getElementById("yearFilter").value;
   const department = document.getElementById("departmentFilter").value;
   const minRating = document.getElementById("ratingFilter").value
     ? parseFloat(document.getElementById("ratingFilter").value)
@@ -419,16 +565,37 @@ function filterCourses() {
   const sortBy = document.getElementById("sortFilter").value;
 
   let filtered = allCourses.filter((course) => {
-    const matchSearch =
-      course.code.toLowerCase().includes(searchTerm) ||
-      course.title.toLowerCase().includes(searchTerm) ||
-      course.titleZh.includes(searchTerm) ||
-      course.professor.toLowerCase().includes(searchTerm);
+    const code = String(course.code || "").toLowerCase();
+    const title = String(course.title || "").toLowerCase();
+    const titleZh = String(course.titleZh || "").toLowerCase();
+    const professor = String(course.professor || "").toLowerCase();
 
+    const matchText =
+      text.length === 0 ||
+      text.some(
+        (token) =>
+          code.includes(token) ||
+          title.includes(token) ||
+          titleZh.includes(token) ||
+          professor.includes(token),
+      );
+    const matchYearToken =
+      years.length === 0 || years.includes(course.year);
+    const matchSemesterToken =
+      semesters.length === 0 || semesters.includes(course.semester);
+    const matchYearFilter =
+      !yearFilter || course.year === parseInt(yearFilter, 10);
     const matchDept = !department || course.department === department;
     const matchRating = course.rating >= minRating;
 
-    return matchSearch && matchDept && matchRating;
+    return (
+      matchText &&
+      matchYearToken &&
+      matchSemesterToken &&
+      matchYearFilter &&
+      matchDept &&
+      matchRating
+    );
   });
 
   filtered = sortCourses(filtered, sortBy);
@@ -440,13 +607,29 @@ function sortCourses(courses, sortBy) {
   const sorted = [...courses];
 
   if (sortBy === "ratingDesc") {
-    sorted.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount);
+    sorted.sort(
+      (a, b) =>
+        b.rating - a.rating ||
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
+    );
   } else if (sortBy === "ratingAsc") {
-    sorted.sort((a, b) => a.rating - b.rating || b.reviewCount - a.reviewCount);
+    sorted.sort(
+      (a, b) =>
+        a.rating - b.rating ||
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id),
+    );
   } else if (sortBy === "reviewsDesc") {
-    sorted.sort((a, b) => b.reviewCount - a.reviewCount || b.rating - a.rating);
+    sorted.sort(
+      (a, b) =>
+        getCourseCommentTotal(b.id) - getCourseCommentTotal(a.id) ||
+        b.rating - a.rating,
+    );
   } else if (sortBy === "reviewsAsc") {
-    sorted.sort((a, b) => a.reviewCount - b.reviewCount || b.rating - a.rating);
+    sorted.sort(
+      (a, b) =>
+        getCourseCommentTotal(a.id) - getCourseCommentTotal(b.id) ||
+        b.rating - a.rating,
+    );
   }
 
   return sorted;
@@ -463,6 +646,10 @@ function toggleFollow(courseId) {
   const course = allCourses.find((c) => c.id === courseId);
   if (course) {
     course.followed = !course.followed;
+    course.saveCount = Math.max(
+      0,
+      (course.saveCount || 0) + (course.followed ? 1 : -1),
+    );
     if (document.getElementById("favoritesPage").style.display === "block") {
       renderFavorites();
     } else {
@@ -471,30 +658,68 @@ function toggleFollow(courseId) {
   }
 
   const countSpan = document.getElementById(`save-count-${courseId}`);
-  if (!countSpan) return; 
+  if (countSpan && course) {
+    countSpan.textContent = course.saveCount || 0;
+  }
+  syncDetailFollowButton(courseId);
+  updateDetailSocialStats(courseId);
+}
 
-  let currentCount = parseInt(countSpan.textContent);
+function syncDetailFollowButton(courseId) {
+  const detailFollowBtn = document.getElementById("detailFollowBtn");
+  const course = allCourses.find((c) => c.id === courseId);
+  if (!detailFollowBtn || !course) return;
 
-  // 2. 透過判斷右上角按鈕現在有沒有 "followed" 這個 class，來決定數字加減
-  // 先找出那一張卡片的按鈕元素
-  const btn = document.querySelector(`[onclick*="toggleFollow(${courseId})"]`);
-    
-    if (btn) {
-        // 如果點擊後按鈕身上有 followed，代表剛才的動作是「新增收藏」，數字 +1
-        if (btn.classList.contains('followed')) {
-            currentCount += 1;
-        } else {
-            // 反之，如果 class 沒了，代表是「取消收藏」，數字 -1
-            currentCount -= 1;
-        }  
-    }
+  detailFollowBtn.className = `course-follow-btn detail-follow-btn ${course.followed ? "followed" : ""}`;
+  detailFollowBtn.innerHTML = heartIcon();
+  detailFollowBtn.setAttribute(
+    "aria-label",
+    course.followed ? "Unsave course" : "Save course",
+  );
+  detailFollowBtn.title = course.followed ? "Saved" : "Save course";
+  detailFollowBtn.onclick = (event) => {
+    event.stopPropagation();
+    toggleFollow(courseId);
+  };
+}
 
-    if (currentCount < 0) {
-        currentCount = 0; // 用一個等號來重新賦值
-    }
+function renderDetailTags(course) {
+  const tagList = document.getElementById("detailTagList");
+  if (!tagList) return;
 
-    // 3. 把算好的新數字塞回左下角畫面上
-    countSpan.textContent = currentCount;
+  const tags = course.tags?.length
+    ? course.tags
+    : [course.department, `${course.year} S${course.semester}`];
+  tagList.innerHTML = tags
+    .map((tag) => `<span class="detail-tag-chip">${escapeHtml(tag)}</span>`)
+    .join("");
+}
+
+function getCourseLikeTotal(courseId) {
+  const course = allCourses.find((c) => c.id === courseId);
+  return course?.saveCount || 0;
+}
+
+function getCourseCommentTotal(courseId) {
+  const reviews = getReviewsForCourse(courseId);
+  return reviews.reduce(
+    (total, review) => total + 1 + (review.replies || []).length,
+    0,
+  );
+}
+
+function updateDetailSocialStats(courseId) {
+  const stats = document.getElementById("detailCourseSocialStats");
+  if (!stats) return;
+
+  stats.innerHTML = `
+    <span class="detail-social-stat stat-save-display">
+      ${heartIcon()} <span>${getCourseLikeTotal(courseId)}</span>
+    </span>
+    <span class="detail-social-stat stat-comment">
+      ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
+    </span>
+  `;
 }
 
 function showFavorites() {
@@ -518,6 +743,136 @@ function showBrowseCourses() {
   document.querySelector(".filters").style.display = "";
   document.getElementById("coursesContainer").style.display = "";
   filterCourses();
+}
+
+function toggleUserMenu(event) {
+  event.stopPropagation();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  const dropdown = document.getElementById("userDropdown");
+  dropdown.hidden = !dropdown.hidden;
+}
+
+function closeUserMenu() {
+  const dropdown = document.getElementById("userDropdown");
+  if (dropdown) dropdown.hidden = true;
+}
+
+function closeUserMenuOnOutsideClick(event) {
+  const userMenu = document.getElementById("userMenu");
+  if (!userMenu || userMenu.contains(event.target)) return;
+  closeUserMenu();
+}
+
+function closeMenusOnEscape(event) {
+  if (event.key !== "Escape") return;
+  closeUserMenu();
+  closeProfileModal();
+}
+
+function updateProfileAvatarPreview() {
+  const preview = document.getElementById("profileAvatarPreview");
+  const profile = {
+    avatarAnimal: document.getElementById("profileAvatarAnimal").value,
+    gender: document.getElementById("profileGender").value,
+  };
+
+  preview.className = `avatar-preview ${getGenderClass(profile.gender)}`;
+  preview.innerHTML = avatarIcon(profile);
+}
+
+function openProfileModal() {
+  closeUserMenu();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  document.getElementById("profileUsername").value =
+    getDisplayName(currentUser) || "";
+  document.getElementById("profileEmail").value = currentUser.email || "";
+  document.getElementById("profileAvatarAnimal").value =
+    currentUser.avatarAnimal || "question";
+  document.getElementById("profileGender").value =
+    currentUser.gender || "undisclosed";
+  updateProfileAvatarPreview();
+  document.getElementById("profileModal").style.display = "block";
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById("profileModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  if (!currentUser) {
+    openLoginModal();
+    return;
+  }
+
+  const previousUsername = getDisplayName(currentUser);
+  const username = document.getElementById("profileUsername").value.trim();
+  if (!username) {
+    alert("Username is required.");
+    return;
+  }
+
+  const payload = {
+    username: username,
+    avatarAnimal: document.getElementById("profileAvatarAnimal").value,
+    gender: document.getElementById("profileGender").value,
+  };
+
+  try {
+    const response = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to update profile.");
+      return;
+    }
+
+    currentUser = data.user;
+    syncUserContentProfile(previousUsername);
+    updateAuthUI();
+    if (currentCourseId) loadReviews(currentCourseId);
+    closeProfileModal();
+  } catch (error) {
+    alert("Unable to update profile right now.");
+  }
+}
+
+function syncUserContentProfile(previousUsername) {
+  const profile = {
+    avatarAnimal: currentUser.avatarAnimal,
+    gender: currentUser.gender,
+  };
+
+  Object.values(courseReviews).forEach((reviews) => {
+    reviews.forEach((review) => {
+      if (review.author === previousUsername) {
+        review.author = getDisplayName(currentUser);
+        review.avatar = profile;
+      }
+      (review.replies || []).forEach((reply) => {
+        if (reply.author === previousUsername) {
+          reply.author = getDisplayName(currentUser);
+          reply.avatar = profile;
+        }
+      });
+    });
+  });
 }
 
 function renderFavorites() {
@@ -546,21 +901,11 @@ function renderFavorites() {
 // Login modal
 function openLoginModal() {
   document.getElementById("loginModal").style.display = "block";
+  switchAuthTab("login");
 }
 
 function closeLoginModal() {
-  // 1. 隱藏登入蓋台彈窗
   document.getElementById("loginModal").style.display = "none";
-  
-  // 2. 移除全螢幕的粉藍色蓋台樣式（讓畫面不會被鎖死）
-  document.getElementById("loginModal").classList.remove("login-page-overlay");
-
-  // 3. 【核心關鍵】成功登入後，立刻將後台主畫面與導覽列打開，進入主頁！
-  const navBlock = document.getElementById("navBlock");
-  const mainContentBlock = document.getElementById("mainContentBlock");
-  
-  if (navBlock) navBlock.style.display = "block";
-  if (mainContentBlock) mainContentBlock.style.display = "block";
 }
 
 function updateAvatarPreview() {
@@ -575,22 +920,34 @@ function updateAvatarPreview() {
 }
 
 function setRegisterMode(isRegistering) {
-  const submitButton = document.querySelector("#authForm .btn-submit");
+  const submitButton = document.getElementById("authSubmitBtn");
   const toggleText = document.querySelector(".toggle-register");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+  const usernameInput = document.getElementById("username");
 
   submitButton.dataset.mode = isRegistering ? "register" : "login";
   submitButton.textContent = isRegistering ? "Create Account" : "Login";
   registerFields.style.display = isRegistering ? "grid" : "none";
+  tabLogin.classList.toggle("active", !isRegistering);
+  tabRegister.classList.toggle("active", isRegistering);
   registerOnlyFields.forEach((field) => {
     field.style.display = isRegistering ? "block" : "none";
     field.required = isRegistering;
   });
+  if (usernameInput) {
+    usernameInput.placeholder = isRegistering
+      ? "Username"
+      : "Email or Username";
+  }
   if (isRegistering) updateAvatarPreview();
-  toggleText.innerHTML = isRegistering
-    ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
-    : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
+  if (toggleText) {
+    toggleText.innerHTML = isRegistering
+      ? 'Already have an account? <a href="#" onclick="toggleRegister(event)">Login here</a>'
+      : 'Don\'t have an account? <a href="#" onclick="toggleRegister(event)">Register here</a>';
+  }
 }
 
 function toggleRegister(event) {
@@ -600,14 +957,12 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
-function login(event) {
+async function login(event) {
   event.preventDefault();
-  const username = document.getElementById("username").value;
-  const email = document.getElementById("email").value;
+  const username = document.getElementById("username").value.trim();
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  // 在 function login(event) 內，將原本獲取 mode 的那行改成這樣：
-// 【核心修改】確認是用我們新設定的 id "authSubmitBtn" 來抓取目前的模式 (login 還是 register)
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -616,81 +971,102 @@ function login(event) {
     return;
   }
 
-  if (username && password && (!isRegistering || email)) {
-    currentUser = isRegistering
-      ? {
-          username: username,
-          email: email,
-          avatarAnimal: document.getElementById("avatarAnimal").value,
-          gender: document.getElementById("gender").value,
-        }
-      : getDefaultProfile(username);
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  if (isRegistering) {
+    if (!username || !email || !password) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+  } else if (!username || !password) {
+    alert("Please enter your email or username and password.");
+    return;
+  }
+
+  const payload = isRegistering
+    ? {
+        username: username,
+        email: email,
+        password: password,
+        avatarAnimal: document.getElementById("avatarAnimal").value,
+        gender: document.getElementById("gender").value,
+      }
+    : {
+        identifier: username,
+        password: password,
+      };
+
+  const endpoint = isRegistering ? "/api/register" : "/api/login";
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to sign in right now.");
+      return;
+    }
+
+    if (isRegistering) {
+      alert("Account created. Please log in.");
+      setRegisterMode(false);
+      document.getElementById("authForm").reset();
+      return;
+    }
+
+    currentUser = data.user;
     updateAuthUI();
     closeLoginModal();
     document.getElementById("authForm").reset();
     setRegisterMode(false);
+  } catch (error) {
+    alert("Unable to reach the server right now.");
   }
-
-  // ... 以上保持不變 ...
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    
-    updateAuthUI();
-    closeLoginModal();
-    document.getElementById("authForm").reset();
-    setRegisterMode(false);
-
-    // 【核心新增】登入成功後，把主畫面、導覽列顯示出來，並拔掉全螢幕遮罩
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
-  }
-
-function logout() {
-  currentUser = null;
-  localStorage.removeItem("currentUser");
-  updateAuthUI();
-
-  // 登出後，徹底隱藏後台
-  document.getElementById("navBlock").style.display = "none";
-  document.getElementById("mainContentBlock").style.display = "none";
-  
-  // 讓登入彈窗以滿版蓋台方式出現
-  document.getElementById("loginModal").style.display = "block";
-  document.getElementById("loginModal").classList.add("login-page-overlay");
-  
-  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
-  document.getElementById("welcomeStartSection").style.display = "block";
-  document.getElementById("authCoreSection").style.display = "none";
 }
 
-function checkUserLogin() {
-  const savedUser = localStorage.getItem("currentUser");
-  if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-    } catch (error) {
-      currentUser = getDefaultProfile(savedUser);
-    }
-    
-    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    document.getElementById("loginModal").style.display = "none";
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
-  } else {
-    // 如果沒有登入，確保登入蓋台和樣式都有啟動
-    document.getElementById("navBlock").style.display = "none";
-    document.getElementById("mainContentBlock").style.display = "none";
-    document.getElementById("loginModal").style.display = "block";
-    document.getElementById("loginModal").classList.add("login-page-overlay");
+async function logout() {
+  try {
+    await fetch("/api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch (error) {
+    // Ignore logout failures to keep UI responsive.
   }
+
+  currentUser = null;
+  closeUserMenu();
+  closeProfileModal();
+  updateAuthUI();
+  showBrowseCourses();
+}
+
+async function checkUserLogin() {
+  try {
+    const response = await fetch("/api/session", {
+      credentials: "same-origin",
+    });
+    const data = await response.json();
+    currentUser = data.authenticated ? data.user : null;
+  } catch (error) {
+    currentUser = null;
+  }
+
+  document.getElementById("navBlock").style.display = "";
+  document.getElementById("mainContentBlock").style.display = "";
+  document.getElementById("loginModal").style.display = "none";
   updateAuthUI();
 }
 
 function updateAuthUI() {
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
+  const userMenu = document.getElementById("userMenu");
   const userAvatar = document.getElementById("userAvatar");
 
   userAvatar.className = `user-avatar ${getGenderClass(currentUser?.gender)}`;
@@ -698,13 +1074,20 @@ function updateAuthUI() {
 
   if (currentUser) {
     loginBtn.style.display = "none";
-    logoutBtn.style.display = "block";
-    logoutBtn.textContent = `Logout (${getDisplayName(currentUser)})`;
-    userAvatar.setAttribute("aria-label", getDisplayName(currentUser));
-  } else {
-    loginBtn.style.display = "none";
+    userMenu.style.display = "inline-flex";
     logoutBtn.style.display = "none";
-    userAvatar.setAttribute("aria-label", "Login");
+    logoutBtn.textContent = "Logout";
+    userAvatar.setAttribute(
+      "aria-label",
+      `${getDisplayName(currentUser)} account menu`,
+    );
+  } else {
+    loginBtn.style.display = "inline-flex";
+    loginBtn.textContent = "Login / Sign in";
+    userMenu.style.display = "none";
+    logoutBtn.style.display = "none";
+    closeUserMenu();
+    userAvatar.setAttribute("aria-label", "Account menu");
   }
 }
 
@@ -718,7 +1101,10 @@ function openCourseDetail(courseId) {
   const averageRating = getAverageRating(reviews, course.rating);
 
   document.getElementById("detailCourseCode").textContent = course.code;
+  document.getElementById("detailCourseTerm").textContent =
+    `${course.year} S${course.semester}`;
   document.getElementById("detailCourseTitle").textContent = course.title;
+  syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
   document.getElementById("detailCourseProfessor").textContent =
     course.professor;
@@ -727,6 +1113,8 @@ function openCourseDetail(courseId) {
   document.getElementById("detailCourseCredits").textContent = course.credits;
   document.getElementById("detailCourseDescription").textContent =
     course.description;
+  renderDetailTags(course);
+  updateDetailSocialStats(courseId);
   document.getElementById("detailRatingValue").textContent =
     averageRating.toFixed(1);
   document.getElementById("detailStars").innerHTML =
@@ -799,6 +1187,8 @@ function loadReviews(courseId) {
 
   const reviewsList = document.getElementById("reviewsList");
   reviewsList.innerHTML = "";
+  updateStudentReviewStats(reviews);
+  updateDetailSocialStats(courseId);
 
   if (reviews.length === 0) {
     reviewsList.innerHTML =
@@ -812,10 +1202,12 @@ function loadReviews(courseId) {
 
     const starsHtml = generateStars(review.rating);
     const replies = review.replies || [];
+    const totalReplies = replies.length;
     const replyCountText =
-      replies.length > 0
-        ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`
+      totalReplies > 0
+        ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
         : "Reply";
+    const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
     reviewItem.innerHTML = `
             <div class="review-header">
@@ -831,30 +1223,24 @@ function loadReviews(courseId) {
                 <span class="review-rating">${starsHtml}</span>
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
-            <div class="review-text">${escapeHtml(review.text)}</div>
+            ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
             
             <div class="review-actions">
-              <div class="reaction-container" data-review-id="${review.id}">
-                
-                <button class="review-action-btn main-reaction-btn ${review.liked ? "liked" : ""}" onclick="handleQuickLike(event, '${review.id}')">
-                  <span class="emoji-stack" id="emoji-stack-${review.id}">
-                    <span class="emoji-item">${heartIcon()}</span>
-                  </span>
-                  <span class="like-count-num" id="like-count-${review.id}">${review.likes ?? 0}</span>
-                </button>
+              ${renderReactionControl(review, review.id)}
 
-                <div class="reaction-palette">
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '❤️', 'main')">❤️</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '😮', 'main')">😮</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '👍', 'main')">👍</button>
-                  <button type="button" onclick="selectReviewEmoji(event, '${review.id}', '🔥', 'main')">🔥</button>
-                </div>
-              </div>
-
-              <button class="review-action-btn" onclick="toggleReplyForm('${review.id}')">
+              <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
+                ${commentIcon()}
+              </button>
+              ${
+                totalReplies > 0
+                  ? `
+              <button class="review-action-btn replies-toggle-btn" onclick="toggleRepliesGroup('${review.id}', 'root')">
                 ${replyIcon()}
                 <span>${replyCountText}</span>
               </button>
+                  `
+                  : ""
+              }
             </div>
 
               <div class="reply-form" id="replyForm-${review.id}" style="display: none">
@@ -862,113 +1248,76 @@ function loadReviews(courseId) {
                 type="text"
                 id="replyInput-${review.id}"
                 placeholder="Write a reply..."
+                onkeydown="handleReplyKeydown(event, '${review.id}')"
               />
               <button type="button" onclick="submitReply('${review.id}')">Post</button>
             </div>
-            <div class="review-replies">
-                ${replies
-                  .map(
-                    (reply) => `
-                      <div class="reply-item">
-                        <div class="reply-content">
-                          <div class="reply-meta">
-                            <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
-                            <strong>${escapeHtml(reply.author)}</strong>
-                            <span>${escapeHtml(reply.date)}</span>
-                          </div>
-                          <p>${escapeHtml(reply.text)}</p>
-                        </div>
-                        
-                        <div class="reaction-container" data-reply-id="${reply.id}">
-                          
-                          <button class="review-action-btn main-reaction-btn ${reply.liked ? "liked" : ""}" onclick="window.selectReviewEmoji(event, '${reply.id}', '❤️', 'reply')">
-                            <span class="emoji-stack" id="reply-emoji-stack-${reply.id}">
-                              <span class="emoji-item">❤️</span>
-                            </span>
-                            <span class="like-count-num" id="reply-like-count-${reply.id}">${reply.likes ?? 0}</span>
-                          </button>
-
-                          <div class="reaction-palette">
-                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '❤️', 'reply')">❤️</button>
-                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '😮', 'reply')">😮</button>
-                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '👍', 'reply')">👍</button>
-                            <button type="button" onclick="selectReviewEmoji(event, '${reply.id}', '🔥', 'reply')">🔥</button>
-                          </div>
-                        </div>
-                        
-                      </div>
-                    `,
-                  )
-                  .join("")}
-              </div>
+            ${showReplies ? `<div class="review-replies">${renderReplies(replies, review.id)}</div>` : ""}
         `;
 
     reviewsList.appendChild(reviewItem);
   });
 }
 
-// 依然維持這兩個獨立的記憶庫
-const userReactedMainReviews = new Set(); 
-const userReactedSubReplies = new Set();   
+function updateStudentReviewStats(reviews = []) {
+  const statsContainer = document.getElementById("studentReviewStats");
+  if (!statsContainer) return;
 
-window.selectReviewEmoji = function(event, id, selectedEmoji, type = 'main') {
-    event.stopPropagation();
-    event.preventDefault();
+  const totals = reviews.reduce(
+    (stats, review) => {
+      const replies = review.replies || [];
+      stats.likes += review.likes ?? 0;
+      stats.comments += 1 + replies.length;
+      replies.forEach((reply) => {
+        stats.likes += reply.likes ?? 0;
+      });
+      return stats;
+    },
+    { likes: 0, comments: 0 },
+  );
 
-    let countSpan, stackContainer, memorySet, defaultHeart;
+  statsContainer.innerHTML = `
+    <span class="student-review-stat stat-save-display">
+      ${heartIcon()} <span>${totals.likes}</span>
+    </span>
+    <span class="student-review-stat stat-comment">
+      ${commentIcon()} <span>${totals.comments}</span>
+    </span>
+  `;
+}
 
-    // 1. 根據傳入的類型分流，並設定預設的愛心（主評論和子回覆可能用不同的 heartIcon）
-    if (type === 'main') {
-        countSpan = document.getElementById(`like-count-${id}`);
-        stackContainer = document.getElementById(`emoji-stack-${id}`);
-        memorySet = userReactedMainReviews;
-        defaultHeart = '❤️'; // 如果你們主評論原本有特殊的 heartIcon，也可以換成字串模板
-    } else {
-        countSpan = document.getElementById(`reply-like-count-${id}`);
-        stackContainer = document.getElementById(`reply-emoji-stack-${id}`);
-        memorySet = userReactedSubReplies;
-        defaultHeart = '❤️';
-    }
+function renderReplies(replies = [], reviewId) {
+  return replies
+    .map((reply) => {
+      return `
+        <div class="reply-thread">
+          <div class="reply-item">
+            <div class="reply-content">
+              <div class="reply-meta">
+                <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
+                <strong>${escapeHtml(reply.author)}</strong>
+                <span>${escapeHtml(reply.date)}</span>
+              </div>
+              ${renderExpandableText(reply.text, `reply-${reviewId}-${reply.id}`, "reply-text")}
+              <div class="reply-actions">
+                ${renderReactionControl(reply, reviewId, reply.id)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
 
-    if (!countSpan || !stackContainer) return;
-    let currentCount = parseInt(countSpan.textContent) || 0;
-
-    // 🌟 2. 【關鍵：判斷是不是點到同一個表情，進而「收回表態」】
-    // 我們可以偷看目前堆疊容器裡的第一個表情是不是就是現在點的這個
-    const firstEmoji = stackContainer.querySelector('.emoji-item')?.textContent;
-
-    if (memorySet.has(id) && firstEmoji === selectedEmoji) {
-        // 👉 情況 A：已經點過了，而且又按了同一個表情 ＝ 收回！
-        currentCount -= 1;
-        if (currentCount < 0) currentCount = 0; // 防呆
-        
-        countSpan.textContent = currentCount;
-        memorySet.delete(id); // 從記憶庫移除（解鎖）
-
-        // 將堆疊還原成原本最初只有一顆愛心的乾淨狀態
-        stackContainer.innerHTML = `<span class="emoji-item">${heartIcon()}</span>`;
-        return; // 結束函式
-    } 
-    
-    if (memorySet.has(id) && firstEmoji !== selectedEmoji) {
-        // 👉 情況 B：已經點過了，但點了「不一樣」的表情 ＝ 換心情（不加減數字）
-        // 直接換掉最前面的表情即可，不需要過關
-        stackContainer.innerHTML = `
-            <span class="emoji-item active-pop">${selectedEmoji}</span>
-            <span class="emoji-item">${heartIcon()}</span>
-        `;
-        return;
-    }
-
-    // 👉 情況 C：完全沒點過 ＝ 正常第一次點讚（數字 +1）
-    currentCount += 1;
-    countSpan.textContent = currentCount;
-    memorySet.add(id); // 鎖定
-
-    // 產生雙表情堆疊效果
-    stackContainer.innerHTML = `
-        <span class="emoji-item active-pop">${selectedEmoji}</span>
-    `;
+function toggleRepliesGroup(reviewId, parentReplyId) {
+  const groupKey = `${reviewId}:${parentReplyId}`;
+  if (expandedReplyGroups.has(groupKey)) {
+    expandedReplyGroups.delete(groupKey);
+  } else {
+    expandedReplyGroups.add(groupKey);
+  }
+  loadReviews(currentCourseId);
 }
 
 function findReviewById(reviewId) {
@@ -994,7 +1343,65 @@ function toggleReviewLike(reviewId) {
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
-  return review.replies.find((reply) => reply.id === replyId);
+  return review.replies.find((reply) => reply.id === replyId) || null;
+}
+
+function findReactionTarget(reviewId, replyId = null) {
+  return replyId ? findReplyById(reviewId, replyId) : findReviewById(reviewId);
+}
+
+function applyReaction(reviewId, reaction = "❤️", replyId = null) {
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
+  }
+
+  const target = findReactionTarget(reviewId, replyId);
+  if (!target) return;
+
+  if (!target.liked) {
+    target.likes = (target.likes ?? 0) + 1;
+  }
+
+  target.liked = true;
+  target.reaction = reaction;
+  loadReviews(currentCourseId);
+}
+
+function handleQuickLike(event, reviewId, replyId = null) {
+  event.stopPropagation();
+
+  const target = findReactionTarget(reviewId, replyId);
+  if (target?.liked && (target.reaction || "❤️") === "❤️") {
+    if (!currentUser) {
+      alert("Please login to react.");
+      openLoginModal();
+      return;
+    }
+
+    target.liked = false;
+    target.reaction = "";
+    target.likes = Math.max(0, (target.likes ?? 0) - 1);
+    loadReviews(currentCourseId);
+    return;
+  }
+
+  applyReaction(reviewId, "❤️", replyId);
+}
+
+function selectReviewEmoji(
+  event,
+  reviewId,
+  replyIdOrReaction,
+  maybeReaction = null,
+) {
+  event.stopPropagation();
+
+  const hasReplyId = maybeReaction !== null;
+  const replyId = hasReplyId ? replyIdOrReaction : null;
+  const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
+  applyReaction(reviewId, reaction, replyId);
 }
 
 function toggleReplyLike(reviewId, replyId) {
@@ -1019,15 +1426,24 @@ function toggleReplyForm(reviewId) {
     return;
   }
 
-  const replyForm = document.getElementById(`replyForm-${reviewId}`);
+  const formId = `replyForm-${reviewId}`;
+  const inputId = `replyInput-${reviewId}`;
+  const replyForm = document.getElementById(formId);
   if (!replyForm) return;
 
   const isOpen = replyForm.style.display === "flex";
   replyForm.style.display = isOpen ? "none" : "flex";
 
   if (!isOpen) {
-    document.getElementById(`replyInput-${reviewId}`).focus();
+    document.getElementById(inputId).focus();
   }
+}
+
+function handleReplyKeydown(event, reviewId) {
+  if (event.key !== "Enter" || event.shiftKey) return;
+
+  event.preventDefault();
+  submitReply(reviewId);
 }
 
 function submitReply(reviewId) {
@@ -1038,7 +1454,8 @@ function submitReply(reviewId) {
   }
 
   const review = findReviewById(reviewId);
-  const input = document.getElementById(`replyInput-${reviewId}`);
+  const inputId = `replyInput-${reviewId}`;
+  const input = document.getElementById(inputId);
   if (!review || !input) return;
 
   const text = input.value.trim();
@@ -1059,8 +1476,11 @@ function submitReply(reviewId) {
     text: text,
     likes: 0,
     liked: false,
+    reaction: "",
+    replies: [],
   });
 
+  expandedReplyGroups.add(`${reviewId}:root`);
   loadReviews(currentCourseId);
 }
 
@@ -1137,6 +1557,7 @@ function submitReview(event) {
     text: reviewText,
     likes: 0,
     liked: false,
+    reaction: "",
     replies: [],
   };
 
@@ -1174,18 +1595,23 @@ function submitReview(event) {
 // Close modals when clicking outside
 window.onclick = function (event) {
   const loginModal = document.getElementById("loginModal");
+  const profileModal = document.getElementById("profileModal");
 
   if (event.target === loginModal) {
     loginModal.style.display = "none";
   }
+  if (event.target === profileModal) {
+    profileModal.style.display = "none";
+  }
 };
 
-window.switchAuthTab = function(mode) {
+window.switchAuthTab = function (mode) {
   const tabLogin = document.getElementById("tabLogin");
   const tabRegister = document.getElementById("tabRegister");
   const submitButton = document.getElementById("authSubmitBtn");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
+  const usernameInput = document.getElementById("username");
 
   if (!submitButton) return;
 
@@ -1199,6 +1625,9 @@ window.switchAuthTab = function(mode) {
       field.style.display = "none";
       field.required = false;
     });
+    if (usernameInput) {
+      usernameInput.placeholder = "Email or Username";
+    }
   } else {
     tabRegister.classList.add("active");
     tabLogin.classList.remove("active");
@@ -1209,54 +1638,9 @@ window.switchAuthTab = function(mode) {
       field.style.display = "block";
       field.required = true;
     });
+    if (usernameInput) {
+      usernameInput.placeholder = "Username";
+    }
     updateAvatarPreview();
   }
-}
-
-// 新增：按下 Start 按鈕後，展現 Login / Register 區塊
-window.showAuthFields = function() {
-  // 隱藏原本的 Start 按鈕區塊
-  document.getElementById("welcomeStartSection").style.display = "none";
-  // 展現登入註冊的核心輸入區
-  document.getElementById("authCoreSection").style.display = "block";
-}
-
-// 新增：處理首頁 Login / Register 左右標籤切換（維持上一步的邏輯）
-window.switchAuthTab = function(mode) {
-  const tabLogin = document.getElementById("tabLogin");
-  const tabRegister = document.getElementById("tabRegister");
-  const submitButton = document.getElementById("authSubmitBtn");
-  const registerFields = document.getElementById("registerFields");
-  const registerOnlyFields = document.querySelectorAll(".register-only");
-
-  if (mode === "login") {
-    tabLogin.classList.add("active");
-    tabRegister.classList.remove("active");
-    submitButton.dataset.mode = "login";
-    submitButton.textContent = "Login";
-    registerFields.style.display = "none";
-    registerOnlyFields.forEach((field) => {
-      field.style.display = "none";
-      field.required = false;
-    });
-  } else {
-    tabRegister.classList.add("active");
-    tabLogin.classList.remove("active");
-    submitButton.dataset.mode = "register";
-    submitButton.textContent = "Create Account";
-    registerFields.style.display = "grid";
-    registerOnlyFields.forEach((field) => {
-      field.style.display = "block";
-      field.required = true;
-    });
-    updateAvatarPreview();
-  }
-}
-
-// 按下 Start 按鈕後切換區塊
-window.showAuthFields = function() {
-  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
-  document.getElementById("welcomeStartSection").style.display = "none";
-  // 2. 把第二階段的白色登入卡片方塊顯示出來
-  document.getElementById("authCoreSection").style.display = "block";
-}
+};
