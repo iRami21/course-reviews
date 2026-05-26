@@ -116,6 +116,11 @@ body {
   box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
 }
 
+.user-menu {
+  position: relative;
+  align-items: center;
+}
+
 .user-avatar {
   display: flex;
   align-items: center;
@@ -131,6 +136,47 @@ body {
 
 .user-avatar:hover {
   transform: scale(1.1);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 180px;
+  padding: 0.45rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 8px;
+  background-color: #fefaf0;
+  box-shadow: 0 14px 30px rgba(43, 47, 68, 0.18);
+}
+
+.user-dropdown[hidden] {
+  display: none;
+}
+
+.user-dropdown button {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 0;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #2b2f44;
+  cursor: pointer;
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.user-dropdown button:hover {
+  background-color: #edf2ff;
+  color: #4f67b1;
+}
+
+.user-dropdown button:last-child:hover {
+  background-color: #fff1f4;
+  color: #d92d50;
 }
 
 .user-avatar img {
@@ -150,12 +196,17 @@ body {
 }
 
 .btn-login {
-  background-color: #007bff;
-  color: white;
+  border: 1px solid #a7d7a4;
+  background-color: #f0fff0;
+  color: #1f7a35;
 }
 
 .btn-login:hover {
-  background-color: #0056b3;
+  border-color: #1f7a35;
+  background-color: #c9f7c7;
+  color: #145c28;
+  box-shadow: 0 8px 18px rgba(31, 122, 53, 0.26);
+  transform: translateY(-2px);
 }
 
 .btn-logout {
@@ -165,66 +216,6 @@ body {
 
 .btn-logout:hover {
   background-color: #c82333;
-}
-
-/* === 全螢幕歡迎與登入蓋台 === */
-.login-page-overlay {
-  background-color: #4f67b1 !important; /* 全螢幕粉藍色背景 */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 99999;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 第一階段：純文字與Start按鈕外殼（完全透明） */
-.welcome-pure-text {
-  background: transparent !important;
-  box-shadow: none !important;
-  text-align: center;
-  width: min(92vw, 500px);
-}
-
-.welcome-header h1 {
-  color: #fefaf0;
-  font-size: 2.5rem;
-  margin-bottom: 0.2rem;
-}
-
-.welcome-subtitle {
-  color: #ffd8b9;
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
-  font-weight: 700;
-}
-
-#startExploreBtn {
-  font-size: 1.2rem;
-  padding: 0.9rem 2.5rem;
-  width: auto;
-  display: inline-block;
-  background-color: #c74d30;
-}
-
-/* 第二階段：點了 Start 才出現的白色方塊卡片 */
-.welcome-white-box {
-  background: #ffffff !important; /* 维持底下白色底 */
-  padding: 2.5rem 2rem;
-  border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.15);
-  width: min(92vw, 400px);
-  text-align: center;
-  animation: fadeIn 0.3s ease-in-out; /* 加上一個順滑的淡入效果 */
-}
-
-/* 簡單的淡入動畫 */
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
 }
 
 /* 左右並排分頁標籤 */
@@ -318,8 +309,9 @@ body {
   gap: 12px; /* 兩個數據中間的可愛小空隙 */
 }
 
-/* 讓 🔖 💬 圖標和數字垂直置中對齊 */
-.stat-save-display, .stat-comment {
+/* 讓 Browse 統計 icon 和數字垂直置中對齊 */
+.stat-save-display,
+.stat-comment {
   display: flex;
   align-items: center;
   gap: 4px; /* 圖標跟數字之間的距離 */
@@ -328,6 +320,25 @@ body {
   font-style: normal;
   color: #4c566a;
   font-size: 18px;
+}
+
+.stat-save-display .heart-icon,
+.stat-comment .comment-icon {
+  width: 1.1em;
+  height: 1.1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stat-save-display .heart-icon {
+  color: #d92d50;
+}
+
+.stat-comment .comment-icon {
+  color: #4f67b1;
 }
 
 /* Course Card */
@@ -455,7 +466,7 @@ body {
 
 .btn-reviews-card {
   padding: 0.5rem 1rem;
-  background-color: #c74d30 !important;
+  background-color: #4f67b1 !important;
   color: white;
   border: none;
   border-radius: 4px;
@@ -466,7 +477,7 @@ body {
 }
 
 .btn-reviews-card:hover {
-  background-color: #0056b3;
+  background-color: #465da2;
 }
 
 /* Modal */
@@ -730,13 +741,13 @@ body {
   width: 20px;
   height: 20px;
   font-size: 15px;
-  background-color: #ffffff; /* 白色底座，重疊時才不會透過去 */
-  border: 1px solid #ffffff; /* 漂亮的白色小外框線，製造層次感 */
-  border-radius: 50%;
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
   
   /* 🌟 核心魔法：負邊距！讓後面的表情跟前面的貼貼在一起 */
   margin-left: -6px; 
-  box-shadow: -2px 0 4px rgba(0,0,0,0.05); /* 淡淡的左側陰影，立體感爆棚 */
+  box-shadow: none;
 }
 
 /* 讓最新被點出來的那個表情，進場時有個軟萌的放大動畫 */
@@ -1039,10 +1050,26 @@ body {
   margin-bottom: 1.7rem;
 }
 
+.student-reviews-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .student-reviews-header h2 {
   color: #050507;
   font-size: 2.25rem;
   line-height: 1.2;
+}
+
+.student-review-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.student-review-stat {
+  padding: 0.25rem 0;
 }
 
 /* Reviews Section */
@@ -1181,6 +1208,16 @@ body {
   fill: currentColor;
 }
 
+.review-action-btn .comment-icon {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .reply-form {
   align-items: center;
   gap: 0.75rem;
@@ -1237,9 +1274,74 @@ body {
   background-color: #f8fafc;
 }
 
+.reply-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.reply-thread .reply-thread {
+  margin-left: min(2rem, 6vw);
+}
+
+.reply-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-left: 0.8rem;
+  border-left: 2px dotted rgba(79, 103, 177, 0.28);
+}
+
+.reply-toggle-btn {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 999px;
+  background-color: #fff8e7;
+  color: #4f67b1;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.reply-toggle-btn:hover {
+  border-color: #4f67b1;
+  background-color: #edf2ff;
+  color: #2b2f44;
+}
+
+.read-more-btn {
+  display: inline;
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4f67b1;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.read-more-btn:hover {
+  color: #2b2f44;
+  text-decoration: underline;
+}
+
 .reply-content {
   min-width: 0;
   flex: 1;
+}
+
+.reply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.nested-reply-form {
+  margin-top: 0.75rem;
 }
 
 .reply-meta {
@@ -1501,6 +1603,33 @@ button {
   background-color: var(--surface-soft);
 }
 
+.nav-menu .btn-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  border: 1px solid #a7d7a4;
+  border-radius: var(--radius-sm);
+  background-color: #f0fff0;
+  color: #1f7a35;
+  box-shadow: 0 3px 8px rgba(31, 122, 53, 0.12);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav-menu .btn-login:hover {
+  border-color: #1f7a35;
+  background-color: #c9f7c7;
+  color: #145c28;
+  box-shadow: 0 10px 22px rgba(31, 122, 53, 0.3);
+  transform: translateY(-2px);
+}
+
 .main-content {
   max-width: var(--container);
   margin: 2rem auto 3.5rem;
@@ -1658,12 +1787,13 @@ button {
 }
 
 .course-follow-btn.followed {
-  border-color: var(--primary);
-  background-color: var(--primary);
+  border-color: #d92d50;
+  background-color: #d92d50;
   color: #fff;
 }
 
-.course-follow-btn.followed .bookmark-icon {
+.course-follow-btn.followed .bookmark-icon,
+.course-follow-btn.followed .heart-icon {
   fill: currentColor;
 }
 
@@ -1975,18 +2105,21 @@ button {
 
 .user-avatar.avatar-male,
 .avatar-preview.avatar-male,
+.profile-avatar.avatar-male,
 .reply-avatar.avatar-male {
   background-color: #dbeafe;
 }
 
 .user-avatar.avatar-female,
 .avatar-preview.avatar-female,
+.profile-avatar.avatar-female,
 .reply-avatar.avatar-female {
   background-color: #fce7f3;
 }
 
 .user-avatar.avatar-undisclosed,
 .avatar-preview.avatar-undisclosed,
+.profile-avatar.avatar-undisclosed,
 .reply-avatar.avatar-undisclosed {
   background-color: #ede9fe;
 }
@@ -2008,6 +2141,199 @@ button {
   background-color: var(--surface-soft);
 }
 
+/* Colorful Auth Modal */
+#loginModal,
+#profileModal {
+  background-color: rgba(79, 103, 177, 0.32);
+  backdrop-filter: blur(4px);
+}
+
+#loginModal .modal-content,
+#profileModal .modal-content {
+  overflow: hidden;
+  border: 1px solid rgba(137, 29, 26, 0.14);
+  border-radius: 16px;
+  background-color: #fefaf0;
+  box-shadow: 0 18px 38px rgba(79, 103, 177, 0.22);
+}
+
+#loginModal .modal-content h2,
+#profileModal .modal-content h2 {
+  color: #2b2f44;
+  font-size: clamp(1.7rem, 4vw, 2.25rem);
+  line-height: 1.1;
+}
+
+#loginModal #authForm,
+#profileModal #profileForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+#loginModal #authForm input,
+#loginModal .form-group select,
+#profileModal #profileForm input,
+#profileModal .form-group select {
+  min-height: 46px;
+  border: 1px solid rgba(79, 103, 177, 0.16);
+  border-radius: 999px;
+  background-color: #fff8e7;
+  color: #2b2f44;
+  font-family: "Sniglet", system-ui;
+  font-weight: 400;
+}
+
+#loginModal #authForm input,
+#profileModal #profileForm input {
+  padding: 0.72rem 1rem;
+}
+
+#loginModal .form-group select,
+#profileModal .form-group select {
+  padding: 0.72rem 0.95rem;
+}
+
+#loginModal #authForm input::placeholder,
+#profileModal #profileForm input::placeholder {
+  color: rgba(76, 86, 106, 0.76);
+}
+
+#loginModal #authForm input:focus,
+#loginModal .form-group select:focus,
+#profileModal #profileForm input:focus,
+#profileModal .form-group select:focus {
+  border-color: #4f67b1;
+  box-shadow: 0 0 0 3px rgba(79, 103, 177, 0.16);
+}
+
+#profileModal #profileEmail {
+  opacity: 0.76;
+  cursor: not-allowed;
+}
+
+#loginModal .form-group label,
+#profileModal .form-group label {
+  color: #4f67b1;
+  font-weight: 800;
+}
+
+#loginModal .register-fields,
+#profileModal .profile-fields {
+  padding: 1rem;
+  border: 1px solid rgba(79, 103, 177, 0.12);
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 216, 185, 0.34);
+}
+
+#loginModal .avatar-preview,
+#profileModal .avatar-preview {
+  width: 5rem;
+  height: 5rem;
+  border-color: rgba(79, 103, 177, 0.14);
+  box-shadow: 0 8px 18px rgba(79, 103, 177, 0.14);
+}
+
+#loginModal .btn-submit,
+#profileModal .btn-submit {
+  min-height: 46px;
+  border-radius: 999px;
+  background-color: #4f67b1;
+  color: #fefaf0;
+  font-weight: 850;
+}
+
+#loginModal .btn-submit:hover,
+#profileModal .btn-submit:hover {
+  background-color: #465da2;
+}
+
+#loginModal .toggle-register {
+  color: #4c566a;
+  font-weight: 700;
+}
+
+#loginModal .toggle-register a {
+  color: #c74d30;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+#loginModal .toggle-register a:hover {
+  color: #a93d25;
+  text-decoration: underline;
+}
+
+#loginModal .close,
+#profileModal .close {
+  background-color: #ffcf76;
+  color: #891d1a;
+}
+
+#loginModal .close:hover,
+#profileModal .close:hover {
+  background-color: #ffdca0;
+}
+
+.profile-modal-content {
+  max-width: 420px;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.3rem;
+}
+
+.profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card-header h2 {
+  margin: 0;
+  color: #2b2f44;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.profile-detail-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-detail-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background-color: #fff8e7;
+}
+
+.profile-detail-list span {
+  color: #4f67b1;
+  font-weight: 800;
+}
+
+.profile-detail-list strong {
+  color: #2b2f44;
+  font-weight: 850;
+}
+
 .star {
   border-radius: var(--radius-sm);
 }
@@ -2023,6 +2349,303 @@ button {
 .btn-follow-tag:focus-visible {
   outline: 3px solid rgba(16, 24, 40, 0.18);
   outline-offset: 2px;
+}
+
+/* Colorful Course Detail Theme */
+.detail-open .main-content {
+  background-color: #bdd5e6;
+}
+
+.course-detail-page {
+  color: #2b2f44;
+}
+
+.back-button {
+  border-bottom: 1px solid rgba(79, 103, 177, 0.28);
+  background-color: #4f67b1;
+  color: #fefaf0;
+}
+
+.back-button:hover {
+  background-color: #465da2;
+}
+
+.course-overview-card,
+.rating-summary-card,
+.review-item,
+.inline-review-form,
+.empty-reviews {
+  border-color: rgba(137, 29, 26, 0.14);
+  background-color: #fefaf0 !important;
+  box-shadow: 0 10px 22px rgba(79, 103, 177, 0.12);
+}
+
+.course-overview-card h2,
+.student-reviews-header h2,
+.rating-score,
+.review-author,
+.review-score,
+.rating-breakdown-label,
+.rating-breakdown-count {
+  color: #2b2f44;
+}
+
+.detail-course-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.9rem;
+}
+
+.detail-course-code {
+  background-color: #ffcf76 !important;
+  color: #891d1a !important;
+  margin-bottom: 0;
+}
+
+.detail-follow-btn {
+  flex: 0 0 auto;
+  width: 3.05rem;
+  height: 3.05rem;
+  border-color: transparent;
+  background-color: #f0f0f1;
+  color: #9a9aa0;
+}
+
+.detail-follow-btn .heart-icon {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.detail-follow-btn:not(.followed) .heart-icon {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.detail-follow-btn:hover {
+  border-color: rgba(217, 45, 80, 0.16);
+  background-color: #fff1f4;
+  color: #d92d50;
+}
+
+.detail-follow-btn.followed {
+  border-color: #d92d50;
+  background-color: #d92d50;
+  color: #fff;
+}
+
+.detail-follow-btn.followed:hover {
+  background-color: #b4233f;
+}
+
+.detail-course-term {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background-color: #ffcf76;
+  color: #891d1a;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.detail-course-title-zh,
+.review-date,
+.rating-summary-count {
+  color: #4f67b1;
+}
+
+.detail-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  padding: 1rem;
+  border: 1px solid rgba(79, 103, 177, 0.12);
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 216, 185, 0.34);
+}
+
+.detail-meta-grid div {
+  padding: 0 1rem;
+}
+
+.detail-meta-grid div + div {
+  border-left: 2px dotted rgba(79, 103, 177, 0.36);
+}
+
+.detail-meta-grid div:last-child strong {
+  font-size: 0.98rem;
+}
+
+.detail-description {
+  padding: 1rem;
+  border: 1px solid rgba(79, 103, 177, 0.12);
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 216, 185, 0.34);
+}
+
+.detail-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.25rem;
+}
+
+.detail-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background-color: #f0f0f1;
+  color: #2b2f44;
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.detail-social-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.detail-social-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+}
+
+.detail-social-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #9a9aa0;
+  font-size: 1.35rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.detail-social-stat .heart-icon,
+.detail-social-stat .comment-icon {
+  width: 1.55em;
+  height: 1.55em;
+  stroke-width: 2.5;
+}
+
+.detail-social-stat .heart-icon {
+  color: #ef5350;
+  fill: currentColor;
+}
+
+.detail-social-stat .comment-icon {
+  color: #2f9bd4;
+}
+
+.detail-meta-grid span,
+.detail-description span,
+.inline-review-form .form-group label {
+  color: #4f67b1;
+  font-weight: 800;
+}
+
+.detail-meta-grid strong,
+.detail-description p,
+.review-text,
+.reply-item p {
+  color: #4c566a;
+}
+
+.rating-summary-card {
+  background-color: #fefaf0 !important;
+}
+
+.rating-summary-card h3 {
+  color: #891d1a;
+}
+
+.rating-summary-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0.2rem 0 1.35rem;
+  text-align: center;
+}
+
+.rating-summary-main .rating-score {
+  flex: 0 0 auto;
+}
+
+.rating-summary-main .rating-summary-stars {
+  margin: 0;
+  align-self: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.rating-track {
+  background-color: rgba(79, 103, 177, 0.2);
+}
+
+.rating-bar {
+  background-color: #4f67b1;
+}
+
+.btn-add-review,
+.inline-review-actions .btn-submit,
+.reply-form button {
+  background-color: #4f67b1;
+  color: #fff;
+}
+
+.btn-add-review:hover,
+.inline-review-actions .btn-submit:hover,
+.reply-form button:hover {
+  background-color: #465da2;
+}
+
+.review-action-btn {
+  min-height: 36px;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 999px;
+  background-color: #fff8e7;
+  color: #4f67b1;
+}
+
+.review-action-btn:hover {
+  border-color: #4f67b1;
+  background-color: #edf2ff;
+  color: #2b2f44;
+}
+
+.review-action-btn.liked {
+  border-color: #f4b4c2;
+  background-color: #fff1f4;
+  color: #d92d50;
+}
+
+.review-replies {
+  border-color: rgba(199, 77, 48, 0.24);
+}
+
+.reply-item {
+  background-color: rgba(202, 221, 138, 0.34);
+}
+
+.reply-children {
+  border-color: rgba(199, 77, 48, 0.24);
+}
+
+.reply-form input,
+.inline-review-form textarea {
+  background-color: #fff8e7;
 }
 
 @media (max-width: 1024px) {
@@ -2147,6 +2770,11 @@ button {
     font-size: 1.8rem;
   }
 
+  .detail-follow-btn {
+    width: 2.7rem;
+    height: 2.7rem;
+  }
+
   .detail-course-title-zh {
     margin-bottom: 1.8rem;
     font-size: 1.2rem;
@@ -2155,6 +2783,29 @@ button {
   .detail-meta-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
+  }
+
+  .detail-meta-grid div {
+    padding: 0;
+  }
+
+  .detail-meta-grid div + div {
+    padding-top: 1rem;
+    border-top: 2px dotted rgba(79, 103, 177, 0.36);
+    border-left: 0;
+  }
+
+  .detail-social-row {
+    align-items: center;
+  }
+
+  .detail-social-stat {
+    font-size: 1.15rem;
+  }
+
+  .rating-summary-main {
+    flex-direction: column;
+    gap: 0.6rem;
   }
 
   .rating-summary-stars {
@@ -2173,6 +2824,10 @@ button {
 
   .inline-review-actions {
     flex-direction: column;
+  }
+
+  #loginModal .register-fields {
+    grid-template-columns: 1fr;
   }
 
   .review-action-btn {

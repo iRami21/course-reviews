@@ -11,7 +11,7 @@
   </head>
   <body>
     <!-- Navigation Bar -->
-    <nav class="navbar" id="navBlock" style="display: none">
+    <nav class="navbar" id="navBlock">
       <div class="nav-container">
         <div class="nav-logo">
           <h1>Course Review Platform</h1>
@@ -26,27 +26,27 @@
               id="searchBox"
             />
           </div>
-          <button class="user-avatar" id="userAvatar" type="button" aria-label="Login"></button>
+          <div class="user-menu" id="userMenu" style="display: none">
+            <button class="user-avatar" id="userAvatar" type="button" aria-label="Account menu"></button>
+            <div class="user-dropdown" id="userDropdown" hidden>
+              <button type="button" id="profileMenuBtn">Profile</button>
+              <button type="button" id="favoritesMenuBtn">Favorite</button>
+              <button type="button" id="signOutMenuBtn">Sign out</button>
+            </div>
+          </div>
           <button class="btn-logout" id="logoutBtn" style="display: none">
             Logout
           </button>
-          <button class="btn-login" id="loginBtn" style="display: none">Login</button>
+          <button class="btn-login" id="loginBtn" type="button">Login / Sign in</button>
         </div>
       </div>
     </nav>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="modal login-page-overlay" style="display: block">
-      
-      <div id="welcomeStartSection" class="welcome-pure-text">
-        <div class="welcome-header">
-          <h1>Course Review Platform</h1>
-          <p class="welcome-subtitle">A platform that allows students to leave course reviews.</p>
-        </div>
-        <button type="button" class="btn-submit" id="startExploreBtn" onclick="showAuthFields()">Start</button>
-      </div>
-
-      <div id="authCoreSection" class="welcome-white-box" style="display: none;">
+    <div id="loginModal" class="modal" style="display: none">
+      <div class="modal-content auth-modal-content">
+        <button class="close" type="button" onclick="closeLoginModal()" aria-label="Close">&times;</button>
+        <h2>Login / Register</h2>
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
           <button type="button" id="tabRegister" class="tab-btn" onclick="switchAuthTab('register')">Register</button>
@@ -103,11 +103,46 @@
           <button type="submit" class="btn-submit" id="authSubmitBtn">Login</button>
         </form>
       </div>
-      
+    </div>
+
+    <div id="profileModal" class="modal" style="display: none">
+      <div class="modal-content profile-modal-content">
+        <button class="close" type="button" onclick="closeProfileModal()" aria-label="Close">&times;</button>
+        <h2>Profile</h2>
+        <form id="profileForm">
+          <div class="register-fields profile-fields">
+            <div class="avatar-preview" id="profileAvatarPreview" aria-hidden="true"></div>
+            <div class="form-group">
+              <label for="profileAvatarAnimal">Avatar</label>
+              <select id="profileAvatarAnimal">
+                <option value="question">Default</option>
+                <option value="cat">Cat</option>
+                <option value="dog">Dog</option>
+                <option value="bear">Bear</option>
+                <option value="monkey">Monkey</option>
+                <option value="elephant">Elephant</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="profileGender">Gender</label>
+              <select id="profileGender">
+                <option value="undisclosed">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-groups">
+            <input type="text" placeholder="Username" id="profileUsername" required />
+            <input type="email" placeholder="Email" id="profileEmail" disabled />
+          </div>
+          <button type="submit" class="btn-submit">Save Profile</button>
+        </form>
+      </div>
     </div>
 
     <!-- Main Content -->
-    <main class="main-content" id="mainContentBlock" style="display: none">
+    <main class="main-content" id="mainContentBlock">
       <section class="page-heading" id="pageHeading">
         <div>
 
@@ -215,7 +250,10 @@
 
         <div class="course-detail-layout">
           <article class="detail-card course-overview-card">
-            <span class="detail-course-code" id="detailCourseCode"></span>
+            <div class="detail-course-tags">
+              <span class="detail-course-code" id="detailCourseCode"></span>
+              <span class="detail-course-term" id="detailCourseTerm"></span>
+            </div>
             <h2 id="detailCourseTitle"></h2>
             <p class="detail-course-title-zh" id="detailCourseTitleZh"></p>
 
@@ -238,12 +276,25 @@
               <span>Description</span>
               <p id="detailCourseDescription"></p>
             </div>
+            <div class="detail-tag-list" id="detailTagList"></div>
+            <div class="detail-social-row">
+              <div class="detail-social-stats" id="detailCourseSocialStats"></div>
+              <button
+                class="course-follow-btn detail-follow-btn"
+                id="detailFollowBtn"
+                type="button"
+                aria-label="Save course"
+                title="Save course"
+              ></button>
+            </div>
           </article>
 
           <aside class="detail-card rating-summary-card">
             <h3>Course Rating</h3>
-            <div class="rating-score" id="detailRatingValue"></div>
-            <div class="stars rating-summary-stars" id="detailStars"></div>
+            <div class="rating-summary-main">
+              <div class="rating-score" id="detailRatingValue"></div>
+              <div class="stars rating-summary-stars" id="detailStars"></div>
+            </div>
             <p class="rating-summary-count" id="detailReviewCount"></p>
             <div class="rating-breakdown" id="ratingBreakdown"></div>
           </aside>
