@@ -1602,26 +1602,12 @@ function submitReview(event) {
   }
 }
 
-// Close modals when clicking outside
-window.onclick = function (event) {
-  const loginModal = document.getElementById("loginModal");
-  const profileModal = document.getElementById("profileModal");
-
-  if (event.target === loginModal) {
-    loginModal.style.display = "none";
-  }
-  if (event.target === profileModal) {
-    profileModal.style.display = "none";
-  }
-};
-
-window.switchAuthTab = function (mode) {
+window.switchAuthTab = function(mode) {
   const tabLogin = document.getElementById("tabLogin");
   const tabRegister = document.getElementById("tabRegister");
   const submitButton = document.getElementById("authSubmitBtn");
   const registerFields = document.getElementById("registerFields");
   const registerOnlyFields = document.querySelectorAll(".register-only");
-  const usernameInput = document.getElementById("username");
 
   if (!submitButton) return;
 
@@ -1635,9 +1621,6 @@ window.switchAuthTab = function (mode) {
       field.style.display = "none";
       field.required = false;
     });
-    if (usernameInput) {
-      usernameInput.placeholder = "Email or Username";
-    }
   } else {
     tabRegister.classList.add("active");
     tabLogin.classList.remove("active");
@@ -1648,9 +1631,54 @@ window.switchAuthTab = function (mode) {
       field.style.display = "block";
       field.required = true;
     });
-    if (usernameInput) {
-      usernameInput.placeholder = "Username";
-    }
     updateAvatarPreview();
   }
-};
+}
+
+// 新增：按下 Start 按鈕後，展現 Login / Register 區塊
+window.showAuthFields = function() {
+  // 隱藏原本的 Start 按鈕區塊
+  document.getElementById("welcomeStartSection").style.display = "none";
+  // 展現登入註冊的核心輸入區
+  document.getElementById("authCoreSection").style.display = "block";
+}
+
+// 新增：處理首頁 Login / Register 左右標籤切換（維持上一步的邏輯）
+window.switchAuthTab = function(mode) {
+  const tabLogin = document.getElementById("tabLogin");
+  const tabRegister = document.getElementById("tabRegister");
+  const submitButton = document.getElementById("authSubmitBtn");
+  const registerFields = document.getElementById("registerFields");
+  const registerOnlyFields = document.querySelectorAll(".register-only");
+
+  if (mode === "login") {
+    tabLogin.classList.add("active");
+    tabRegister.classList.remove("active");
+    submitButton.dataset.mode = "login";
+    submitButton.textContent = "Login";
+    registerFields.style.display = "none";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "none";
+      field.required = false;
+    });
+  } else {
+    tabRegister.classList.add("active");
+    tabLogin.classList.remove("active");
+    submitButton.dataset.mode = "register";
+    submitButton.textContent = "Create Account";
+    registerFields.style.display = "grid";
+    registerOnlyFields.forEach((field) => {
+      field.style.display = "block";
+      field.required = true;
+    });
+    updateAvatarPreview();
+  }
+}
+
+// 按下 Start 按鈕後切換區塊
+window.showAuthFields = function() {
+  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
+  document.getElementById("welcomeStartSection").style.display = "none";
+  // 2. 把第二階段的白色登入卡片方塊顯示出來
+  document.getElementById("authCoreSection").style.display = "block";
+}
