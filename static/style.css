@@ -1936,6 +1936,18 @@ button {
   margin: 0.35rem 0 0;
 }
 
+.course-professor-name {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 0.45rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgba(91, 100, 114, 0.28);
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .course-rating-inline {
   align-self: stretch;
   justify-content: center;
@@ -2552,10 +2564,15 @@ button {
 /* Ensure the label text doesn't shrink or get overlapped */
 .filter-label {
   flex: 0 0 auto !important;   /* Prevents the text "Department |" from getting crushed */
+  position: sticky;
+  left: 0;
+  z-index: 2;
   font-weight: 1000;
   color: #000409;
   font-size: 1.3rem;
   margin-right: 0.5rem;        /* Forces a clear boundary before the first button */
+  padding: 0.3rem 0.75rem 0.3rem 0;
+  background: #fefaf0;
   white-space: nowrap;
 }
 
@@ -2593,6 +2610,29 @@ button {
   color: #ffffff !important;           /* Clear white text */
   font-weight: 700;
   box-shadow: 0 4px 10px rgba(79, 103, 177, 0.25); /* Cute glow effect */
+}
+
+.department-subfilter-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+  max-width: min(260px, 70vw);
+  margin-left: 0.15rem;
+  padding: 0.55rem 2.25rem 0.55rem 1rem;
+  border: 2px solid rgba(79, 103, 177, 0.2);
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #111827;
+  font-family: "Comic Relief", system-ui;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.department-subfilter-select:focus {
+  outline: none;
+  border-color: #4f67b1;
+  box-shadow: 0 0 0 4px rgba(79, 103, 177, 0.14);
 }
 
 /* Hide scrollbar for a cleaner mobile app feel */

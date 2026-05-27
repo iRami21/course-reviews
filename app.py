@@ -11,10 +11,47 @@ from flask_login import (
 	login_user,
 	logout_user,
 )
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Review, User, db
+from models import Course, Favorite, Review, User, db
+
+
+DEPARTMENT_CATEGORY_ORDER = [
+	"通識",
+	"大學部",
+	"碩士班",
+	"碩專班",
+	"博士班",
+	"校際",
+	"其他",
+]
+
+DEPARTMENT_GROUP_FILTERS = {
+	"跨院選修": lambda dept: dept.startswith("跨院選修"),
+	"博雅": lambda dept: dept.startswith("博雅"),
+	"跨院EAP/ESP": lambda dept: dept in {"跨院EAP", "跨院ESP"},
+	"運動健康": lambda dept: dept.startswith("運動健康") or dept.startswith("運動進階"),
+	"英文": lambda dept: dept.startswith("英文"),
+}
+
+OTHER_DEPARTMENT_ORDER = [
+	"AI聯盟(學)",
+	"AI聯盟(碩)",
+	"中學學程",
+	"普通物理小組",
+	"外籍華語",
+	"應用性課程",
+	"西灣學院",
+]
+
+HIDDEN_PROFESSOR_NAMES = {
+	"待聘",
+	"AI聯盟教師",
+	"IGER跨校通識聯盟教師",
+	"華語中心兼任教師",
+	"校際選課",
+}
 
 
 def parse_term_from_filename(path):
@@ -25,7 +62,7 @@ def parse_term_from_filename(path):
 	term = match.group(1)
 	roc_year = int(term[:3])
 	semester = int(term[3])
-	return roc_year + 1911, semester
+	return roc_year, semester
 
 
 def split_course_name(raw):
@@ -54,6 +91,122 @@ def parse_credits(value):
 		return None
 
 
+def is_valid_email(email):
+	return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or "") is not None
+
+
+def parse_sport_activity(title_zh):
+	if not title_zh:
+		return ""
+
+	parts = re.split(r"[：:]", str(title_zh), maxsplit=1)
+	return parts[1].strip() if len(parts) > 1 else str(title_zh).strip()
+
+
+def normalize_grade(value):
+	grade = str(value or "").strip()
+	return grade if grade and grade != "0" else None
+
+
+def parse_requirement(value):
+	if value is None:
+		return None
+
+	try:
+		return "必修" if bool(int(value)) else "選修"
+	except (TypeError, ValueError):
+		return None
+
+
+def parse_bool(value):
+	if value is None:
+		return False
+
+	try:
+		return bool(int(value))
+	except (TypeError, ValueError):
+		return str(value).strip().lower() in {"true", "yes", "y", "1"}
+
+
+def format_grade_tag(grade):
+	if not grade:
+		return None
+
+	return f"{grade}年級" if str(grade).isdigit() else str(grade)
+
+
+def clean_professor_name(professor):
+	names = [
+		name.strip()
+		for name in re.split(r"[,，、]", professor or "")
+		if name.strip()
+	]
+	visible_names = [
+		name for name in names if name not in HIDDEN_PROFESSOR_NAMES
+	]
+	return ",".join(visible_names)
+
+
+def classify_department(department):
+	dept = department or ""
+	if dept.startswith("校際"):
+		return "校際"
+
+	if "AI聯盟" in dept or dept == "中學學程":
+		return "其他"
+
+	if dept in {"普通物理小組", "外籍華語", "應用性課程", "西灣學院"}:
+		return "其他"
+
+	if dept == "國際經營學程":
+		return "大學部"
+
+	if dept == "前瞻應材":
+		return "碩士班"
+
+	general_terms = [
+		"博雅",
+		"中文思辨",
+		"英文初級",
+		"英文中級",
+		"英文中高級",
+		"英文高級",
+		"服務學習",
+		"運動健康",
+		"運動進階",
+		"跨院選修",
+		"跨院EAP",
+		"跨院ESP",
+	]
+	if any(term in dept for term in general_terms):
+		return "通識"
+
+	if "碩專" in dept or "EMBA" in dept or "EMPP" in dept:
+		return "碩專班"
+
+	if "博" in dept or "博士" in dept:
+		return "博士班"
+
+	master_terms = ["碩", "所", "研究所", "產碩", "碩程", "(碩)", "（碩）"]
+	if any(term in dept for term in master_terms):
+		return "碩士班"
+
+	undergrad_terms = [
+		"系",
+		"學士",
+		"學士學程",
+		"人科學程",
+		"(學)",
+		"（學）",
+		"全英班",
+		"院",
+	]
+	if any(term in dept for term in undergrad_terms):
+		return "大學部"
+
+	return "其他"
+
+
 def create_app():
 	app = Flask(__name__, static_folder="static", template_folder="templates")
 	app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
@@ -74,6 +227,27 @@ def create_app():
 			return jsonify({"error": "Authentication required."}), 401
 		return redirect(url_for("login", next=request.path))
 
+	def ensure_course_schema():
+		columns = {
+			row[1]
+			for row in db.session.execute(text("PRAGMA table_info(courses)")).all()
+		}
+		if "grade" not in columns:
+			db.session.execute(text("ALTER TABLE courses ADD COLUMN grade VARCHAR(16)"))
+		if "requirement" not in columns:
+			db.session.execute(
+				text("ALTER TABLE courses ADD COLUMN requirement VARCHAR(16)")
+			)
+		if "english_taught" not in columns:
+			db.session.execute(
+				text("ALTER TABLE courses ADD COLUMN english_taught BOOLEAN DEFAULT 0")
+			)
+		db.session.commit()
+
+	with app.app_context():
+		db.create_all()
+		ensure_course_schema()
+
 	@login_manager.user_loader
 	def load_user(user_id):
 		try:
@@ -89,10 +263,83 @@ def create_app():
 			courses_json=payload["courses"],
 			reviews_json=payload["reviews"],
 			course_pagination_json=payload["pagination"],
+			department_groups=get_department_groups(),
+			sport_activity_options=get_sport_activity_options(),
 			current_user_json=(
 				serialize_user(current_user)
 				if current_user.is_authenticated
 				else None
+			),
+		)
+
+	def get_department_groups():
+		rows = (
+			db.session.query(Course.department, func.count(Course.id).label("total"))
+			.filter(Course.department.isnot(None), Course.department != "")
+			.group_by(Course.department)
+			.order_by(func.count(Course.id).desc(), Course.department.asc())
+			.all()
+		)
+		groups = {category: [] for category in DEPARTMENT_CATEGORY_ORDER}
+		for department, total in rows:
+			groups[classify_department(department)].append({
+				"name": department,
+				"count": total,
+			})
+		groups["其他"].sort(
+			key=lambda item: (
+				OTHER_DEPARTMENT_ORDER.index(item["name"])
+				if item["name"] in OTHER_DEPARTMENT_ORDER
+				else len(OTHER_DEPARTMENT_ORDER),
+				item["name"],
+			)
+		)
+		return groups
+
+	def get_departments_by_category(category):
+		if category not in DEPARTMENT_CATEGORY_ORDER:
+			return []
+
+		return [
+			item["name"]
+			for item in get_department_groups().get(category, [])
+		]
+
+	def get_departments_by_group(department_group):
+		matcher = DEPARTMENT_GROUP_FILTERS.get(department_group)
+		if not matcher:
+			return []
+
+		return [
+			item["name"]
+			for items in get_department_groups().values()
+			for item in items
+			if matcher(item["name"])
+		]
+
+	def get_sport_activity_options():
+		rows = (
+			db.session.query(Course.title_zh, func.count(Course.id).label("total"))
+			.filter(Course.department.in_(["運動健康(必)", "運動進階(選)"]))
+			.group_by(Course.title_zh)
+			.order_by(func.count(Course.id).desc(), Course.title_zh.asc())
+			.all()
+		)
+		activities = {}
+		for title_zh, total in rows:
+			activity = parse_sport_activity(title_zh)
+			if activity:
+				activities[activity] = activities.get(activity, 0) + total
+
+		preferred = ["特別班", "體適能", "初級游泳"]
+		return sorted(
+			activities,
+			key=lambda activity: (
+				preferred.index(activity)
+				if activity in preferred
+				else len(preferred),
+				-activities[activity],
+				activity,
 			),
 		)
 
@@ -105,25 +352,30 @@ def create_app():
 			"gender": user.gender,
 		}
 
-	def serialize_course(course):
+	def serialize_course(course, favorite_counts=None, favorite_ids=None):
 		reviews = course.reviews or []
 		average_rating = (
 			sum(review.rating for review in reviews) / len(reviews)
 			if reviews
 			else 0
 		)
+		grade_tag = format_grade_tag(course.grade)
+		professor_name = clean_professor_name(course.professor)
 		return {
 			"id": course.id,
 			"code": course.code,
 			"title": course.title,
 			"titleZh": course.title_zh or "",
-			"professor": course.professor or "TBD",
+			"professor": professor_name,
 			"department": course.department or "General",
 			"credits": course.credits or 0,
+			"grade": course.grade or "",
+			"requirement": course.requirement or "",
+			"englishTaught": bool(course.english_taught),
 			"rating": round(average_rating, 1),
 			"reviewCount": len(reviews),
-			"followed": False,
-			"saveCount": 0,
+			"followed": course.id in (favorite_ids or set()),
+			"saveCount": (favorite_counts or {}).get(course.id, 0),
 			"year": course.year or 0,
 			"semester": course.semester or 0,
 			"tags": [
@@ -133,6 +385,9 @@ def create_app():
 					f"{course.year} S{course.semester}"
 					if course.year and course.semester
 					else None,
+					grade_tag,
+					course.requirement,
+					"全英授課" if course.english_taught else None,
 				]
 				if tag
 			],
@@ -163,7 +418,10 @@ def create_app():
 		per_page = min(100, max(1, int(per_page or request.args.get("per_page", 100))))
 		query_text = str(request.args.get("q", "")).strip()
 		year = str(request.args.get("year", "")).strip()
+		department_category = str(request.args.get("department_category", "")).strip()
+		department_group = str(request.args.get("department_group", "")).strip()
 		department = str(request.args.get("department", "")).strip()
+		sport_activity = str(request.args.get("sport_activity", "")).strip()
 		semester = str(request.args.get("semester", "")).strip()
 		min_rating_raw = str(request.args.get("min_rating", "")).strip()
 		sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
@@ -186,8 +444,27 @@ def create_app():
 			)
 		if year:
 			filters.append(Course.year == int(year))
+		if department_category:
+			category_departments = get_departments_by_category(department_category)
+			if category_departments:
+				filters.append(Course.department.in_(category_departments))
+			else:
+				filters.append(Course.department == "__NO_SUCH_DEPARTMENT__")
+		if department_group:
+			group_departments = get_departments_by_group(department_group)
+			if group_departments:
+				filters.append(Course.department.in_(group_departments))
+			else:
+				filters.append(Course.department == "__NO_SUCH_DEPARTMENT__")
 		if department:
 			filters.append(Course.department == department)
+		if sport_activity:
+			filters.append(
+				or_(
+					Course.title_zh.ilike(f"%：{sport_activity}"),
+					Course.title_zh.ilike(f"%:{sport_activity}"),
+				)
+			)
 		if semester:
 			filters.append(Course.semester == int(semester))
 		if filters:
@@ -213,6 +490,8 @@ def create_app():
 
 		reviews_by_course = {}
 		course_ids = [course.id for course in courses_list]
+		favorite_counts = {}
+		favorite_ids = set()
 		if course_ids:
 			for review in (
 				Review.query.filter(Review.course_id.in_(course_ids))
@@ -222,9 +501,33 @@ def create_app():
 				reviews_by_course.setdefault(str(review.course_id), []).append(
 					serialize_review(review)
 				)
+			favorite_counts = {
+				course_id: total
+				for course_id, total in (
+					db.session.query(Favorite.course_id, func.count(Favorite.id))
+					.filter(Favorite.course_id.in_(course_ids))
+					.group_by(Favorite.course_id)
+					.all()
+				)
+			}
+			if current_user.is_authenticated:
+				favorite_ids = {
+					course_id
+					for (course_id,) in (
+						db.session.query(Favorite.course_id)
+						.filter(
+							Favorite.user_id == current_user.id,
+							Favorite.course_id.in_(course_ids),
+						)
+						.all()
+					)
+				}
 
 		return {
-			"courses": [serialize_course(course) for course in courses_list],
+			"courses": [
+				serialize_course(course, favorite_counts, favorite_ids)
+				for course in courses_list
+			],
 			"reviews": reviews_by_course,
 			"pagination": {
 				"page": page,
@@ -238,6 +541,34 @@ def create_app():
 	def api_courses():
 		return jsonify(get_courses_payload())
 
+	@app.route("/api/courses/<int:course_id>/favorite", methods=["POST"])
+	@login_required
+	def api_toggle_favorite(course_id):
+		course = Course.query.get_or_404(course_id)
+		favorite = Favorite.query.filter_by(
+			user_id=current_user.id,
+			course_id=course.id,
+		).first()
+
+		if favorite:
+			db.session.delete(favorite)
+			followed = False
+		else:
+			db.session.add(Favorite(user_id=current_user.id, course_id=course.id))
+			followed = True
+
+		db.session.commit()
+		save_count = Favorite.query.filter_by(course_id=course.id).count()
+		return jsonify({
+			"followed": followed,
+			"saveCount": save_count,
+			"course": serialize_course(
+				course,
+				{course.id: save_count},
+				{course.id} if followed else set(),
+			),
+		})
+
 	@app.route("/courses")
 	def courses():
 		query = request.args.get("q", "").strip()
@@ -249,7 +580,7 @@ def create_app():
 
 			for token in tokens:
 				lower = token.lower()
-				if lower.isdigit() and len(lower) == 4:
+				if lower.isdigit():
 					filters.append(Course.year == int(lower))
 					continue
 
@@ -366,9 +697,18 @@ def create_app():
 			username = request.form.get("username", "").strip()
 			email = request.form.get("email", "").strip().lower()
 			password = request.form.get("password", "")
+			confirm_password = request.form.get("confirm_password", "")
 
-			if not username or not email or not password:
+			if not username or not email or not password or not confirm_password:
 				flash("All fields are required.")
+				return render_template("register.html"), 400
+
+			if not is_valid_email(email):
+				flash("Please enter a valid email address.")
+				return render_template("register.html"), 400
+
+			if password != confirm_password:
+				flash("Confirm password does not match the password.")
 				return render_template("register.html"), 400
 
 			if User.query.filter_by(username=username).first():
@@ -402,6 +742,9 @@ def create_app():
 
 		if not username or not email or not password:
 			return jsonify({"error": "All fields are required."}), 400
+
+		if not is_valid_email(email):
+			return jsonify({"error": "Please enter a valid email address."}), 400
 
 		if User.query.filter_by(username=username).first():
 			return jsonify({"error": "Username already exists."}), 400
@@ -535,7 +878,7 @@ def create_app():
 				conn.row_factory = sqlite3.Row
 				cur = conn.cursor()
 				cur.execute(
-					"SELECT id, name, department, teacher, credit, description FROM course_list"
+					"SELECT id, name, department, teacher, credit, grade, compulsory, english, description FROM course_list"
 				)
 				for row in cur.fetchall():
 					code = str(row["id"] or "").strip()
@@ -554,6 +897,9 @@ def create_app():
 						credits=parse_credits(row["credit"]),
 						year=year,
 						semester=semester,
+						grade=normalize_grade(row["grade"]),
+						requirement=parse_requirement(row["compulsory"]),
+						english_taught=parse_bool(row["english"]),
 						description=str(row["description"] or "").strip() or None,
 					)
 					db.session.add(course)

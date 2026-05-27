@@ -14,6 +14,24 @@ let coursePagination = {
   totalPages: 1,
 };
 let isLoadingCourses = false;
+let departmentGroups = {};
+let sportActivityOptions = [];
+const DEPARTMENT_SUBFILTER_GROUPS = {
+  "跨院選修": (department) => department.startsWith("跨院選修"),
+  "博雅": (department) => department.startsWith("博雅"),
+  "跨院EAP/ESP": (department) => ["跨院EAP", "跨院ESP"].includes(department),
+  "運動健康": (department) => department.startsWith("運動健康") || department.startsWith("運動進階"),
+  "英文": (department) => department.startsWith("英文"),
+};
+const LIBERAL_ARTS_ORDER = [
+  "博雅向度一",
+  "博雅向度二",
+  "博雅向度三",
+  "博雅向度四",
+  "博雅向度五",
+  "博雅向度六",
+];
+const ENGLISH_LEVEL_ORDER = ["英文初級", "英文中級", "英文中高級", "英文高級"];
 
 // Sample course data (will be replaced with API calls)
 const sampleCourses = [
@@ -29,7 +47,7 @@ const sampleCourses = [
     reviewCount: 2,
     followed: false,
     saveCount: 0,
-    year: 2024,
+    year: 113,
     semester: 1,
     tags: ["Computer Science", "Programming", "Foundation"],
     description: "Fundamental concepts of computer science and programming",
@@ -46,7 +64,7 @@ const sampleCourses = [
     reviewCount: 1,
     followed: false,
     saveCount: 0,
-    year: 2024,
+    year: 113,
     semester: 1,
     tags: ["Mathematics", "Calculus", "Workload"],
     description:
@@ -64,7 +82,7 @@ const sampleCourses = [
     reviewCount: 1,
     followed: false,
     saveCount: 0,
-    year: 2024,
+    year: 113,
     semester: 2,
     tags: ["Writing", "Research", "Feedback"],
     description:
@@ -82,7 +100,7 @@ const sampleCourses = [
     reviewCount: 3,
     followed: false,
     saveCount: 0,
-    year: 2023,
+    year: 112,
     semester: 2,
     tags: ["Physics", "Lab", "Mechanics"],
     description:
@@ -420,10 +438,178 @@ document.addEventListener("DOMContentLoaded", function () {
     ...(window.__COURSE_PAGINATION__ || {}),
   };
   currentUser = window.__CURRENT_USER__ || null;
+  departmentGroups = window.__DEPARTMENT_GROUPS__ || {};
+  sportActivityOptions = window.__SPORT_ACTIVITY_OPTIONS__ || [];
+  renderDepartmentFilter("");
   displayCourses(allCourses);
   setupEventListeners();
   checkUserLogin();
 });
+
+function getDepartmentsForCategory(category) {
+  if (!category) {
+    return [];
+  }
+
+  return (departmentGroups[category] || []).map((item) => item.name || item);
+}
+
+function getDepartmentsForGroup(groupName) {
+  const matcher = DEPARTMENT_SUBFILTER_GROUPS[groupName];
+  if (!matcher) return [];
+
+  const departments = Object.values(departmentGroups)
+    .flat()
+    .map((item) => item.name || item)
+    .filter((department) => matcher(department));
+
+  if (groupName === "博雅") {
+    return [...departments].sort((a, b) => {
+      const indexA = LIBERAL_ARTS_ORDER.indexOf(a);
+      const indexB = LIBERAL_ARTS_ORDER.indexOf(b);
+      return (
+        (indexA === -1 ? LIBERAL_ARTS_ORDER.length : indexA) -
+        (indexB === -1 ? LIBERAL_ARTS_ORDER.length : indexB)
+      ) || a.localeCompare(b, "zh-Hant");
+    });
+  }
+
+  if (groupName === "英文") {
+    return [...departments].sort((a, b) => {
+      const indexA = ENGLISH_LEVEL_ORDER.indexOf(a);
+      const indexB = ENGLISH_LEVEL_ORDER.indexOf(b);
+      return (
+        (indexA === -1 ? ENGLISH_LEVEL_ORDER.length : indexA) -
+        (indexB === -1 ? ENGLISH_LEVEL_ORDER.length : indexB)
+      ) || a.localeCompare(b, "zh-Hant");
+    });
+  }
+
+  return departments;
+}
+
+function getDepartmentCategory(department) {
+  return Object.entries(departmentGroups).find(([, departments]) =>
+    departments.some((item) => (item.name || item) === department)
+  )?.[0] || "";
+}
+
+function renderDepartmentFilter(category) {
+  const row = document.getElementById("deptFilterRow");
+  if (!row) return;
+
+  const departments = getDepartmentFilterOptions(category);
+  const options = departments
+    .map((option) => (
+      `<button type="button" class="filter-tag-btn" data-value="${escapeHtml(option.value || "")}" data-group="${escapeHtml(option.group || "")}" data-label="${escapeHtml(option.label)}">${escapeHtml(option.label)}</button>`
+    ))
+    .join("");
+
+  row.innerHTML = `
+    <span class="filter-label">Department │</span>
+    <button type="button" class="filter-tag-btn active" data-value="">All</button>
+    ${options}
+  `;
+
+  attachDepartmentButtonEvents(row);
+}
+
+function attachDepartmentButtonEvents(row) {
+  row.querySelectorAll(".filter-tag-btn").forEach((button) => {
+    bindDepartmentButton(button);
+  });
+}
+
+function bindDepartmentButton(button) {
+  if (!button || button.dataset.bound === "true") return;
+
+  button.dataset.bound = "true";
+  button.addEventListener("click", function () {
+    const row = this.closest("#deptFilterRow");
+    restoreDepartmentDropdown();
+    row.querySelectorAll(".filter-tag-btn").forEach((item) => item.classList.remove("active"));
+    this.classList.add("active");
+    if (this.dataset.group) {
+      renderDepartmentSubFilter(this.dataset.group, this);
+    }
+    filterCourses();
+  });
+}
+
+function getDepartmentFilterOptions(category) {
+  const departments = getDepartmentsForCategory(category);
+  if (!category) return [];
+
+  if (category === "通識") {
+    const groupNames = ["跨院選修", "博雅", "跨院EAP/ESP", "運動健康", "英文"];
+    const grouped = new Set(
+      groupNames.flatMap((groupName) => getDepartmentsForGroup(groupName))
+    );
+    const directDepartments = departments
+      .filter((department) => !grouped.has(department))
+      .map((department) => ({
+        label: department,
+        value: department,
+      }));
+
+    return [
+      ...groupNames.map((groupName) => ({
+        label: groupName,
+        group: groupName,
+      })),
+      ...directDepartments,
+    ];
+  }
+
+  if (category === "校際") {
+    return [
+      { label: "大學部", value: "校際(學士班)" },
+      { label: "研究所", value: "校際(研究所)" },
+    ];
+  }
+
+  return departments.map((department) => ({
+    label: department,
+    value: department,
+  }));
+}
+
+function renderDepartmentSubFilter(groupName, targetButton) {
+  if (!groupName || !targetButton) return;
+  const subfilterOptions = groupName === "運動健康"
+    ? sportActivityOptions
+    : getDepartmentsForGroup(groupName);
+
+  const options = subfilterOptions
+    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
+    .join("");
+
+  const select = document.createElement("select");
+  select.className = "department-subfilter-select";
+  select.id = "deptSubFilterSelect";
+  select.dataset.group = groupName;
+  select.dataset.label = targetButton.dataset.label || groupName;
+  select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${options}`;
+  select.value = "";
+  select.addEventListener("change", filterCourses);
+  targetButton.replaceWith(select);
+  select.focus();
+}
+
+function restoreDepartmentDropdown() {
+  const select = document.getElementById("deptSubFilterSelect");
+  if (!select) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filter-tag-btn";
+  button.dataset.value = "";
+  button.dataset.group = select.dataset.group || "";
+  button.dataset.label = select.dataset.label || select.dataset.group || "";
+  button.textContent = button.dataset.label;
+  select.replaceWith(button);
+  bindDepartmentButton(button);
+}
 
 
 
@@ -483,7 +669,7 @@ function setupEventListeners() {
   safeAddListener("searchBox", "input", filterCourses);
 
   // 3. 橫向篩選按鈕列事件 (維持不變)
-  const filterRows = ['yearFilterRow', 'deptFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
+  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
@@ -492,6 +678,9 @@ function setupEventListeners() {
       btn.addEventListener('click', function () {
         buttons.forEach(b => b.classList.remove('active'));
         this.classList.add('active');
+        if (rowId === "deptCategoryFilterRow") {
+          renderDepartmentFilter(this.dataset.value || "");
+        }
         filterCourses();
       });
     });
@@ -559,15 +748,25 @@ function displayCourses(courses) {
 function getActiveCourseFilters() {
   const searchTerm = document.getElementById("searchBox")?.value.trim() || "";
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
   const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+  const selectedDepartmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
+  const selectedSubDepartment = deptSubFilterSelect?.value || "";
+  const selectedSportActivity = selectedDepartmentGroup === "運動健康" ? selectedSubDepartment : "";
 
   return {
     q: searchTerm,
     year: yearActiveBtn?.dataset.value || "",
-    department: deptActiveBtn?.dataset.value || "",
+    department_category: deptCategoryActiveBtn?.dataset.value || "",
+    department_group: selectedDepartmentGroup,
+    department: selectedDepartmentGroup && selectedDepartmentGroup !== "運動健康"
+      ? selectedSubDepartment
+      : deptActiveBtn?.dataset.value || "",
+    sport_activity: selectedSportActivity,
     min_rating: ratingActiveBtn?.dataset.value || "",
     semester: semActiveBtn?.dataset.value || "",
     sort: sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular",
@@ -702,6 +901,10 @@ function renderCourseCards(container, courses, emptyText) {
     courseCard.onclick = () => openCourseDetail(course.id);
 
     const semesterText = `${course.year} S${course.semester}`;
+    const showProfessor = Boolean(course.professor);
+    const professorLine = showProfessor
+      ? `<div class="course-professor-name">${escapeHtml(course.professor)}</div>`
+      : "";
 
     courseCard.innerHTML = `
             <div class="course-card-header">
@@ -721,8 +924,9 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-title-section">
                 <div class="course-title-copy">
-                  <div class="course-title">${course.title}</div>
-                  <div class="course-title-zh">${course.titleZh}</div>
+                  <div class="course-title">${escapeHtml(course.title)}</div>
+                  <div class="course-title-zh">${escapeHtml(course.titleZh)}</div>
+                  ${professorLine}
                 </div>
                 <div class="course-rating-inline">${starIcon()}${course.rating.toFixed(1)}</div>
             </div>
@@ -757,8 +961,16 @@ function filterCourses() {
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
   const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
 
+  const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
+  const departmentCategory = deptCategoryActiveBtn ? deptCategoryActiveBtn.dataset.value : "";
+
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
+  const departmentGroup = deptSubFilterSelect?.dataset.group || (deptActiveBtn ? (deptActiveBtn.dataset.group || "") : "");
+  const sportActivity = departmentGroup === "運動健康" ? (deptSubFilterSelect?.value || "") : "";
+  const department = departmentGroup && departmentGroup !== "運動健康"
+    ? (deptSubFilterSelect?.value || "")
+    : (deptActiveBtn ? deptActiveBtn.dataset.value : "");
 
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const minRating = ratingActiveBtn && ratingActiveBtn.dataset.value
@@ -778,18 +990,21 @@ function filterCourses() {
     const matchSearch = course.code.toLowerCase().includes(searchTerm) ||
                         course.title.toLowerCase().includes(searchTerm) ||
                         course.titleZh.includes(searchTerm) ||
-                        course.professor.toLowerCase().includes(searchTerm);
+                        (course.professor || "").toLowerCase().includes(searchTerm);
                         
     // 因為按鈕抓出來的是字串，資料裡的 course.year 是數字，要 toString() 轉換
     const matchYear = !year || course.year.toString() === year;
+    const matchCategory = !departmentCategory || getDepartmentCategory(course.department) === departmentCategory;
+    const matchDepartmentGroup = !departmentGroup || getDepartmentsForGroup(departmentGroup).includes(course.department);
     const matchDept = !department || course.department === department;
+    const matchSportActivity = !sportActivity || course.titleZh.endsWith(`：${sportActivity}`) || course.titleZh.endsWith(`:${sportActivity}`);
     const matchRating = course.rating >= minRating;
 
     // ✅ 補上這一行：如果沒有選學期就全過，有選的話就比對數字是否一樣
     const matchSemester = !semester || course.semester.toString() === semester;
 
     // ✅ 最後 return 的地方，也要把 matchSemester 加上去（用 && 連接）
-    return matchSearch && matchYear && matchDept && matchRating && matchSemester;
+    return matchSearch && matchYear && matchCategory && matchDepartmentGroup && matchDept && matchSportActivity && matchRating && matchSemester;
   
   });
 
@@ -836,7 +1051,7 @@ function sortCourses(courses, sortBy) {
 }
 
 // Toggle follow
-function toggleFollow(courseId) {
+async function toggleFollow(courseId) {
   if (!currentUser) {
     alert("Please login to save courses.");
     openLoginModal();
@@ -844,25 +1059,33 @@ function toggleFollow(courseId) {
   }
 
   const course = allCourses.find((c) => c.id === courseId);
-  if (course) {
-    course.followed = !course.followed;
-    course.saveCount = Math.max(
-      0,
-      (course.saveCount || 0) + (course.followed ? 1 : -1),
-    );
-    if (document.getElementById("favoritesPage").style.display === "block") {
-      renderFavorites();
-    } else {
-      filterCourses();
+  if (!course) return;
+
+  try {
+    const data = await apiRequest(`/api/courses/${courseId}/favorite`, {
+      method: "POST",
+    });
+    course.followed = Boolean(data.followed);
+    course.saveCount = data.saveCount || 0;
+  } catch (error) {
+    alert(error.message);
+    if (error.message.toLowerCase().includes("authentication")) {
+      openLoginModal();
     }
+    return;
   }
 
   const countSpan = document.getElementById(`save-count-${courseId}`);
-  if (countSpan && course) {
+  if (countSpan) {
     countSpan.textContent = course.saveCount || 0;
   }
   syncDetailFollowButton(courseId);
   updateDetailSocialStats(courseId);
+  if (document.getElementById("favoritesPage").style.display === "block") {
+    renderFavorites();
+  } else {
+    displayCourses(allCourses);
+  }
 }
 
 function syncDetailFollowButton(courseId) {
@@ -1175,6 +1398,10 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 async function login(event) {
   event.preventDefault();
   
@@ -1188,11 +1415,18 @@ async function login(event) {
   const isRegistering = submitButton.dataset.mode === "register";
 
   if (isRegistering && password !== confirmPassword) {
-    alert("Passwords do not match.");
+    alert("Confirm password does not match the password.");
+    document.getElementById("confirmPassword").focus();
     return;
   }
 
   if (!username || !password || (isRegistering && !email)) return;
+
+  if (isRegistering && !isValidEmail(email)) {
+    alert("Please enter a valid email address.");
+    document.getElementById("email").focus();
+    return;
+  }
 
   try {
     const endpoint = isRegistering ? "/api/register" : "/api/login";
@@ -1303,7 +1537,7 @@ function openCourseDetail(courseId) {
   document.getElementById("detailCourseTitle").textContent = course.title;
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
-  document.getElementById("detailCourseProfessor").textContent = course.professor;
+  document.getElementById("detailCourseProfessor").textContent = course.professor || "-";
   document.getElementById("detailCourseDepartment").textContent = course.department;
   document.getElementById("detailCourseCredits").textContent = course.credits;
   document.getElementById("detailCourseDescription").textContent = course.description;
@@ -1973,7 +2207,9 @@ window.toggleFilterPanel = function() {
 
 // === 專屬的標籤重置小幫手 ===
 window.resetAllFilters = function() {
-  const filterRows = ['yearFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow', 'semesterFilterRow'];
+  renderDepartmentFilter("");
+  renderDepartmentSubFilter("");
+  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
   
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);

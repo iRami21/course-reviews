@@ -23,6 +23,11 @@ class User(UserMixin, db.Model):
         back_populates="author",
         cascade="all, delete-orphan",
     )
+    favorites = db.relationship(
+        "Favorite",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Course(db.Model):
@@ -41,6 +46,9 @@ class Course(db.Model):
     credits = db.Column(db.Integer)
     year = db.Column(db.Integer, index=True)
     semester = db.Column(db.Integer)
+    grade = db.Column(db.String(16))
+    requirement = db.Column(db.String(16))
+    english_taught = db.Column(db.Boolean, default=False)
     description = db.Column(db.Text)
 
     reviews = db.relationship(
@@ -48,6 +56,37 @@ class Course(db.Model):
         back_populates="course",
         cascade="all, delete-orphan",
     )
+    favorites = db.relationship(
+        "Favorite",
+        back_populates="course",
+        cascade="all, delete-orphan",
+    )
+
+
+class Favorite(db.Model):
+    __tablename__ = "favorites"
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "course_id", name="uq_favorite_user_course"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    course_id = db.Column(
+        db.Integer,
+        db.ForeignKey("courses.id"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", back_populates="favorites")
+    course = db.relationship("Course", back_populates="favorites")
 
 
 class Review(db.Model):

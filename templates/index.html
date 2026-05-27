@@ -230,26 +230,25 @@
 
       <div class="filter-panel" id="filterPanel" style="display: none;">
         
+        <div class="filter-row" id="deptCategoryFilterRow">
+          <span class="filter-label">Category │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          {% for category in department_groups.keys() | default([]) %}
+          <button type="button" class="filter-tag-btn" data-value="{{ category }}">{{ category }}</button>
+          {% endfor %}
+        </div>
+
         <div class="filter-row" id="deptFilterRow">
           <span class="filter-label">Department │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="Computer Science">Computer Science</button>
-          <button type="button" class="filter-tag-btn" data-value="Information Management">Information Management</button>
-          <button type="button" class="filter-tag-btn" data-value="Business Administration">Business Administration</button>
-          <button type="button" class="filter-tag-btn" data-value="Finance">Finance</button>
-          <button type="button" class="filter-tag-btn" data-value="Mathematics">Mathematics</button>
-          <button type="button" class="filter-tag-btn" data-value="English">English</button>
-          <button type="button" class="filter-tag-btn" data-value="Physics">Physics</button>
-          <button type="button" class="filter-tag-btn" data-value="Electrical Engineering">Electrical Engineering</button>
-          <button type="button" class="filter-tag-btn" data-value="Mechanical Engineering">Mechanical Engineering</button>
         </div>
 
         <div class="filter-row" id="yearFilterRow">
           <span class="filter-label">Year │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="2024">2024</button>
-          <button type="button" class="filter-tag-btn" data-value="2023">2023</button>
-          <button type="button" class="filter-tag-btn" data-value="2022">2022</button>
+          <button type="button" class="filter-tag-btn" data-value="114">114</button>
+          <button type="button" class="filter-tag-btn" data-value="113">113</button>
+          <button type="button" class="filter-tag-btn" data-value="112">112</button>
         </div>
 
         <div class="filter-row" id="semesterFilterRow">
@@ -453,6 +452,8 @@
       window.__INITIAL_COURSES__ = {{ courses_json | default([]) | tojson }};
       window.__INITIAL_REVIEWS__ = {{ reviews_json | default({}) | tojson }};
       window.__COURSE_PAGINATION__ = {{ course_pagination_json | default({}) | tojson }};
+      window.__DEPARTMENT_GROUPS__ = {{ department_groups | default({}) | tojson }};
+      window.__SPORT_ACTIVITY_OPTIONS__ = {{ sport_activity_options | default([]) | tojson }};
       window.__CURRENT_USER__ = {{ current_user_json | default(none) | tojson }};
     </script>
     <script src="../static/script.js"></script>
