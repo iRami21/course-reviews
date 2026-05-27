@@ -82,7 +82,7 @@ const sampleCourses = [
   },
 ];
 
-const courseReviews = {
+const sampleReviews = {
   1: [
     {
       id: "cs101-r1",
@@ -182,6 +182,11 @@ const courseReviews = {
     },
   ],
 };
+
+const courseReviews =
+  window.__INITIAL_REVIEWS__ && Object.keys(window.__INITIAL_REVIEWS__).length
+    ? window.__INITIAL_REVIEWS__
+    : sampleReviews;
 
 // Utility functions to generate SVG icons
 function starIcon(fillPercent = 100) {
@@ -347,6 +352,22 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+async function apiRequest(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Request failed.");
+  }
+  return data;
+}
+
 function renderExpandableText(text, key, className) {
   const value = String(text || "");
   const firstSentence = getFirstSentence(value);
@@ -382,7 +403,11 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
-  allCourses = JSON.parse(JSON.stringify(sampleCourses));
+  allCourses =
+    window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
+      ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
+      : JSON.parse(JSON.stringify(sampleCourses));
+  currentUser = window.__CURRENT_USER__ || null;
   displayCourses(allCourses);
   setupEventListeners();
   checkUserLogin();
@@ -840,7 +865,7 @@ function closeProfileModal() {
   if (modal) modal.style.display = "none";
 }
 
-function saveProfile(event) {
+async function saveProfile(event) {
   event.preventDefault();
   if (!currentUser) {
     openLoginModal();
@@ -854,17 +879,24 @@ function saveProfile(event) {
     return;
   }
 
-  currentUser = {
-    ...currentUser,
-    username: username,
-    avatarAnimal: document.getElementById("profileAvatarAnimal").value,
-    gender: document.getElementById("profileGender").value,
-  };
-  syncUserContentProfile(previousUsername);
-  localStorage.setItem("currentUser", JSON.stringify(currentUser));
-  updateAuthUI();
-  if (currentCourseId) loadReviews(currentCourseId);
-  closeProfileModal();
+  try {
+    const result = await apiRequest("/api/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        username: username,
+        avatarAnimal: document.getElementById("profileAvatarAnimal").value,
+        gender: document.getElementById("profileGender").value,
+      }),
+    });
+
+    currentUser = result.user;
+    syncUserContentProfile(previousUsername);
+    updateAuthUI();
+    if (currentCourseId) loadReviews(currentCourseId);
+    closeProfileModal();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function syncUserContentProfile(previousUsername) {
@@ -990,7 +1022,7 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
-function login(event) {
+async function login(event) {
   event.preventDefault();
   
   const username = document.getElementById("username").value;
@@ -1007,67 +1039,67 @@ function login(event) {
     return;
   }
 
-  // 確認必填欄位都有填寫
-  if (username && password && (!isRegistering || email)) {
-    // 建立使用者資料
-    currentUser = isRegistering
+  if (!username || !password || (isRegistering && !email)) return;
+
+  try {
+    const endpoint = isRegistering ? "/api/register" : "/api/login";
+    const payload = isRegistering
       ? {
           username: username,
           email: email,
+          password: password,
           avatarAnimal: document.getElementById("avatarAnimal").value,
           gender: document.getElementById("gender").value,
         }
-      : getDefaultProfile(username);
-      
-    // 儲存到瀏覽器
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    
-    // 【關鍵修正】直接呼叫 checkUserLogin()！
-    // 它裡面已經寫好了打開 navBlock、打開 mainContentBlock、隱藏 modal 並更新頭像的完美邏輯
-    checkUserLogin(); 
-    
-    // 清空輸入框
+      : {
+          identifier: username,
+          password: password,
+        };
+    const result = await apiRequest(endpoint, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    currentUser = result.user;
+    checkUserLogin();
     document.getElementById("authForm").reset();
-    
-    // 確保下次打開是登入狀態
-    switchAuthTab("login"); 
+    switchAuthTab("login");
+  } catch (error) {
+    alert(error.message);
   }
 }
 
-function logout() {
+async function logout() {
+  try {
+    await apiRequest("/api/logout", { method: "POST" });
+  } catch (error) {
+    // The UI should still return to the logged-out state if the session expired.
+  }
   currentUser = null;
-  localStorage.removeItem("currentUser");
   updateAuthUI();
 
-  // 登出後，徹底隱藏後台
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  
-  // 讓登入彈窗以滿版蓋台方式出現
   document.getElementById("loginModal").style.display = "block";
   document.getElementById("loginModal").classList.add("login-page-overlay");
-  
-  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
   document.getElementById("welcomeStartSection").style.display = "block";
   document.getElementById("authCoreSection").style.display = "none";
 }
 
-function checkUserLogin() {
-  const savedUser = localStorage.getItem("currentUser");
-  if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-    } catch (error) {
-      currentUser = getDefaultProfile(savedUser);
-    }
-    
-    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
+async function checkUserLogin() {
+  try {
+    const session = await apiRequest("/api/session");
+    currentUser = session.authenticated ? session.user : currentUser;
+  } catch (error) {
+    currentUser = window.__CURRENT_USER__ || currentUser;
+  }
+
+  if (currentUser) {
     document.getElementById("navBlock").style.display = "block";
     document.getElementById("mainContentBlock").style.display = "block";
     document.getElementById("loginModal").style.display = "none";
     document.getElementById("loginModal").classList.remove("login-page-overlay");
   } else {
-    // 如果沒有登入，確保登入蓋台和樣式都有啟動
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
     document.getElementById("loginModal").style.display = "block";
@@ -1590,7 +1622,7 @@ function updateStarDisplay(displayRating = selectedRating) {
 }
 
 // Submit review
-function submitReview(event) {
+async function submitReview(event) {
   event.preventDefault();
 
   if (!currentUser) {
@@ -1605,52 +1637,34 @@ function submitReview(event) {
 
   const reviewText = document.getElementById("reviewText").value;
   const course = allCourses.find((c) => c.id === currentCourseId);
-  const today = new Date().toISOString().slice(0, 10);
-  const newReview = {
-    id: `review-${Date.now()}`,
-    author: getDisplayName(currentUser),
-    avatar: {
-      avatarAnimal: currentUser.avatarAnimal,
-      gender: currentUser.gender,
-    },
-    rating: selectedRating,
-    date: today,
-    language: "English",
-    text: reviewText,
-    likes: 0,
-    liked: false,
-    reaction: "",
-    replies: [],
-  };
 
-  // Mock API call
-  console.log({
-    courseId: currentCourseId,
-    author: getDisplayName(currentUser),
-    rating: selectedRating,
-    text: reviewText,
-    language: "English",
-  });
+  try {
+    const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
+      method: "POST",
+      body: JSON.stringify({
+        rating: selectedRating,
+        text: reviewText,
+        language: "English",
+      }),
+    });
 
-  if (!courseReviews[currentCourseId]) {
-    courseReviews[currentCourseId] = [];
-  }
+    if (!courseReviews[currentCourseId]) {
+      courseReviews[currentCourseId] = [];
+    }
+    courseReviews[currentCourseId].unshift(result.review);
 
-  courseReviews[currentCourseId].unshift(newReview);
+    if (course && result.course) {
+      Object.assign(course, result.course);
+    }
 
-  if (course) {
-    course.reviewCount = courseReviews[currentCourseId].length;
-    course.rating = getAverageRating(
-      courseReviews[currentCourseId],
-      course.rating,
-    );
-  }
+    alert("Review submitted successfully!");
+    closeReviewModal();
 
-  alert("Review submitted successfully!");
-  closeReviewModal();
-
-  if (currentCourseId) {
-    openCourseDetail(currentCourseId);
+    if (currentCourseId) {
+      openCourseDetail(currentCourseId);
+    }
+  } catch (error) {
+    alert(error.message);
   }
 }
 

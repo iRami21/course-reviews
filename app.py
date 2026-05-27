@@ -83,7 +83,22 @@ def create_app():
 
 	@app.route("/")
 	def index():
-		return render_template("index.html")
+		courses_list = Course.query.order_by(Course.code).all()
+		reviews_by_course = {}
+		for review in Review.query.order_by(Review.created_at.desc()).all():
+			reviews_by_course.setdefault(str(review.course_id), []).append(
+				serialize_review(review)
+			)
+		return render_template(
+			"index.html",
+			courses_json=[serialize_course(course) for course in courses_list],
+			reviews_json=reviews_by_course,
+			current_user_json=(
+				serialize_user(current_user)
+				if current_user.is_authenticated
+				else None
+			),
+		)
 
 	def serialize_user(user):
 		return {
@@ -92,6 +107,59 @@ def create_app():
 			"email": user.email,
 			"avatarAnimal": user.avatar_animal,
 			"gender": user.gender,
+		}
+
+	def serialize_course(course):
+		reviews = course.reviews or []
+		average_rating = (
+			sum(review.rating for review in reviews) / len(reviews)
+			if reviews
+			else 0
+		)
+		return {
+			"id": course.id,
+			"code": course.code,
+			"title": course.title,
+			"titleZh": course.title_zh or "",
+			"professor": course.professor or "TBD",
+			"department": course.department or "General",
+			"credits": course.credits or 0,
+			"rating": round(average_rating, 1),
+			"reviewCount": len(reviews),
+			"followed": False,
+			"saveCount": 0,
+			"year": course.year or 0,
+			"semester": course.semester or 0,
+			"tags": [
+				tag
+				for tag in [
+					course.department,
+					f"{course.year} S{course.semester}"
+					if course.year and course.semester
+					else None,
+				]
+				if tag
+			],
+			"description": course.description or "No description available.",
+		}
+
+	def serialize_review(review):
+		author = review.author
+		return {
+			"id": str(review.id),
+			"author": author.username if author else "Anonymous",
+			"avatar": {
+				"avatarAnimal": author.avatar_animal if author else "question",
+				"gender": author.gender if author else "undisclosed",
+			},
+			"rating": review.rating,
+			"date": review.created_at.strftime("%Y-%m-%d"),
+			"language": review.language or "English",
+			"text": review.text,
+			"likes": 0,
+			"liked": False,
+			"reaction": "",
+			"replies": [],
 		}
 
 	@app.route("/courses")
@@ -183,6 +251,39 @@ def create_app():
 		flash("Review submitted.")
 		return redirect(url_for("course_detail", course_id=course.id))
 
+	@app.route("/api/courses/<int:course_id>/review", methods=["POST"])
+	@login_required
+	def api_submit_review(course_id):
+		course = Course.query.get_or_404(course_id)
+		data = request.get_json(silent=True) or request.form
+		comment = str(data.get("comment", data.get("text", ""))).strip()
+		language = str(data.get("language", "English")).strip() or "English"
+
+		try:
+			rating = int(data.get("rating", ""))
+		except (TypeError, ValueError):
+			return jsonify({"error": "Rating must be a number between 1 and 5."}), 400
+
+		if rating < 1 or rating > 5:
+			return jsonify({"error": "Rating must be between 1 and 5."}), 400
+
+		if not comment:
+			return jsonify({"error": "Review text is required."}), 400
+
+		review = Review(
+			course_id=course.id,
+			user_id=current_user.id,
+			rating=rating,
+			language=language,
+			text=comment,
+		)
+		db.session.add(review)
+		db.session.commit()
+		return jsonify({
+			"review": serialize_review(review),
+			"course": serialize_course(course),
+		}), 201
+
 	@app.route("/register", methods=["GET", "POST"])
 	def register():
 		if request.method == "POST":
@@ -205,7 +306,7 @@ def create_app():
 			user = User(
 				username=username,
 				email=email,
-				password_hash=generate_password_hash(password),
+				password_hash=generate_password_hash(password, method="pbkdf2:sha256"),
 			)
 			db.session.add(user)
 			db.session.commit()
@@ -235,12 +336,13 @@ def create_app():
 		user = User(
 			username=username,
 			email=email,
-			password_hash=generate_password_hash(password),
+			password_hash=generate_password_hash(password, method="pbkdf2:sha256"),
 			avatar_animal=avatar_animal or "question",
 			gender=gender or "undisclosed",
 		)
 		db.session.add(user)
 		db.session.commit()
+		login_user(user)
 		return jsonify({"user": serialize_user(user)}), 201
 
 	@app.route("/login", methods=["GET", "POST"])

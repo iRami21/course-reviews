@@ -431,6 +431,11 @@
       </section>
     </main>
 
+    <script>
+      window.__INITIAL_COURSES__ = {{ courses_json | default([]) | tojson }};
+      window.__INITIAL_REVIEWS__ = {{ reviews_json | default({}) | tojson }};
+      window.__CURRENT_USER__ = {{ current_user_json | default(none) | tojson }};
+    </script>
     <script src="../static/script.js"></script>
   </body>
 </html>
