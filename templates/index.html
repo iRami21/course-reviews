@@ -431,6 +431,19 @@
       </section>
     </main>
 
+    <button
+      class="back-to-top-btn"
+      id="backToTopBtn"
+      type="button"
+      aria-label="Back to top"
+      title="Back to top"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 19V5"></path>
+        <path d="m5 12 7-7 7 7"></path>
+      </svg>
+    </button>
+
     <script>
       window.__INITIAL_COURSES__ = {{ courses_json | default([]) | tojson }};
       window.__INITIAL_REVIEWS__ = {{ reviews_json | default({}) | tojson }};

@@ -1994,3 +1994,23 @@ document.addEventListener("DOMContentLoaded", function() {
   // 等假資料都載入後，呼叫生成函數
   setTimeout(generateDynamicTrending, 100); 
 });
+
+function updateBackToTopButton() {
+  const button = document.getElementById("backToTopBtn");
+  if (!button) return;
+
+  button.classList.add("visible");
+}
+
+function scrollToPageTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const button = document.getElementById("backToTopBtn");
+  if (!button) return;
+
+  button.addEventListener("click", scrollToPageTop);
+  updateBackToTopButton();
+  window.addEventListener("scroll", updateBackToTopButton, { passive: true });
+});

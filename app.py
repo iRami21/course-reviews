@@ -83,9 +83,13 @@ def create_app():
 
 	@app.route("/")
 	def index():
-		courses_list = Course.query.order_by(Course.code).all()
+		courses_list = Course.query.order_by(Course.code).limit(600).all()
 		reviews_by_course = {}
-		for review in Review.query.order_by(Review.created_at.desc()).all():
+		course_ids = [course.id for course in courses_list]
+		reviews_query = Review.query
+		if course_ids:
+			reviews_query = reviews_query.filter(Review.course_id.in_(course_ids))
+		for review in reviews_query.order_by(Review.created_at.desc()).all():
 			reviews_by_course.setdefault(str(review.course_id), []).append(
 				serialize_review(review)
 			)
