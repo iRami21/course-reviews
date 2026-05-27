@@ -11,7 +11,7 @@ from flask_login import (
 	login_user,
 	logout_user,
 )
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import Course, Review, User, db
@@ -83,20 +83,12 @@ def create_app():
 
 	@app.route("/")
 	def index():
-		courses_list = Course.query.order_by(Course.code).limit(600).all()
-		reviews_by_course = {}
-		course_ids = [course.id for course in courses_list]
-		reviews_query = Review.query
-		if course_ids:
-			reviews_query = reviews_query.filter(Review.course_id.in_(course_ids))
-		for review in reviews_query.order_by(Review.created_at.desc()).all():
-			reviews_by_course.setdefault(str(review.course_id), []).append(
-				serialize_review(review)
-			)
+		payload = get_courses_payload(page=1, per_page=100)
 		return render_template(
 			"index.html",
-			courses_json=[serialize_course(course) for course in courses_list],
-			reviews_json=reviews_by_course,
+			courses_json=payload["courses"],
+			reviews_json=payload["reviews"],
+			course_pagination_json=payload["pagination"],
 			current_user_json=(
 				serialize_user(current_user)
 				if current_user.is_authenticated
@@ -165,6 +157,86 @@ def create_app():
 			"reaction": "",
 			"replies": [],
 		}
+
+	def get_courses_payload(page=None, per_page=None):
+		page = max(1, int(page or request.args.get("page", 1)))
+		per_page = min(100, max(1, int(per_page or request.args.get("per_page", 100))))
+		query_text = str(request.args.get("q", "")).strip()
+		year = str(request.args.get("year", "")).strip()
+		department = str(request.args.get("department", "")).strip()
+		semester = str(request.args.get("semester", "")).strip()
+		min_rating_raw = str(request.args.get("min_rating", "")).strip()
+		sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
+
+		avg_rating = func.coalesce(func.avg(Review.rating), 0)
+		review_count = func.count(Review.id)
+		courses_query = Course.query.outerjoin(Review).group_by(Course.id)
+
+		filters = []
+		if query_text:
+			pattern = f"%{query_text}%"
+			filters.append(
+				or_(
+					Course.title.ilike(pattern),
+					Course.title_zh.ilike(pattern),
+					Course.code.ilike(pattern),
+					Course.department.ilike(pattern),
+					Course.professor.ilike(pattern),
+				)
+			)
+		if year:
+			filters.append(Course.year == int(year))
+		if department:
+			filters.append(Course.department == department)
+		if semester:
+			filters.append(Course.semester == int(semester))
+		if filters:
+			courses_query = courses_query.filter(and_(*filters))
+		if min_rating_raw:
+			courses_query = courses_query.having(avg_rating >= float(min_rating_raw))
+
+		if sort_by == "latest":
+			courses_query = courses_query.order_by(
+				Course.year.desc(),
+				Course.semester.desc(),
+				Course.code.asc(),
+			)
+		elif sort_by == "rating":
+			courses_query = courses_query.order_by(avg_rating.desc(), Course.code.asc())
+		else:
+			courses_query = courses_query.order_by(review_count.desc(), Course.code.asc())
+
+		total = courses_query.count()
+		total_pages = max(1, (total + per_page - 1) // per_page)
+		page = min(page, total_pages)
+		courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
+
+		reviews_by_course = {}
+		course_ids = [course.id for course in courses_list]
+		if course_ids:
+			for review in (
+				Review.query.filter(Review.course_id.in_(course_ids))
+				.order_by(Review.created_at.desc())
+				.all()
+			):
+				reviews_by_course.setdefault(str(review.course_id), []).append(
+					serialize_review(review)
+				)
+
+		return {
+			"courses": [serialize_course(course) for course in courses_list],
+			"reviews": reviews_by_course,
+			"pagination": {
+				"page": page,
+				"perPage": per_page,
+				"total": total,
+				"totalPages": total_pages,
+			},
+		}
+
+	@app.route("/api/courses")
+	def api_courses():
+		return jsonify(get_courses_payload())
 
 	@app.route("/courses")
 	def courses():

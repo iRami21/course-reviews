@@ -6,6 +6,14 @@ let selectedRating = 0;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
+const COURSES_PER_PAGE = 100;
+let coursePagination = {
+  page: 1,
+  perPage: COURSES_PER_PAGE,
+  total: 0,
+  totalPages: 1,
+};
+let isLoadingCourses = false;
 
 // Sample course data (will be replaced with API calls)
 const sampleCourses = [
@@ -407,6 +415,10 @@ document.addEventListener("DOMContentLoaded", function () {
     window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
       ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
       : JSON.parse(JSON.stringify(sampleCourses));
+  coursePagination = {
+    ...coursePagination,
+    ...(window.__COURSE_PAGINATION__ || {}),
+  };
   currentUser = window.__CURRENT_USER__ || null;
   displayCourses(allCourses);
   setupEventListeners();
@@ -541,6 +553,138 @@ function setupEventListeners() {
 function displayCourses(courses) {
   const container = document.getElementById("coursesContainer");
   renderCourseCards(container, courses, "No courses found.");
+  renderCoursePagination();
+}
+
+function getActiveCourseFilters() {
+  const searchTerm = document.getElementById("searchBox")?.value.trim() || "";
+  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
+  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
+  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+
+  return {
+    q: searchTerm,
+    year: yearActiveBtn?.dataset.value || "",
+    department: deptActiveBtn?.dataset.value || "",
+    min_rating: ratingActiveBtn?.dataset.value || "",
+    semester: semActiveBtn?.dataset.value || "",
+    sort: sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular",
+  };
+}
+
+function buildCoursePageUrl(page = 1) {
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(COURSES_PER_PAGE),
+  });
+
+  Object.entries(getActiveCourseFilters()).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+
+  return `/api/courses?${params.toString()}`;
+}
+
+async function fetchCoursesPage(page = 1) {
+  if (isLoadingCourses) return;
+  isLoadingCourses = true;
+  const container = document.getElementById("coursesContainer");
+  if (container) {
+    container.innerHTML = '<p class="empty-state">Loading courses...</p>';
+  }
+
+  try {
+    const data = await apiRequest(buildCoursePageUrl(page));
+    allCourses = data.courses || [];
+    Object.keys(courseReviews).forEach((courseId) => {
+      if (!allCourses.some((course) => String(course.id) === String(courseId))) {
+        delete courseReviews[courseId];
+      }
+    });
+    Object.assign(courseReviews, data.reviews || {});
+    coursePagination = {
+      ...coursePagination,
+      ...(data.pagination || {}),
+    };
+    displayCourses(allCourses);
+  } catch (error) {
+    if (container) {
+      container.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
+    }
+  } finally {
+    isLoadingCourses = false;
+  }
+}
+
+function getPaginationPages(page, totalPages) {
+  const pages = new Set([1, totalPages]);
+  for (let value = page - 2; value <= page + 2; value += 1) {
+    if (value >= 1 && value <= totalPages) pages.add(value);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
+function renderCoursePagination() {
+  const pagination = document.getElementById("coursesPagination");
+  if (!pagination) return;
+
+  const totalPages = coursePagination.totalPages || 1;
+  const currentPage = coursePagination.page || 1;
+  if (totalPages <= 1) {
+    pagination.innerHTML = "";
+    return;
+  }
+
+  const pages = getPaginationPages(currentPage, totalPages);
+  let previousPage = 0;
+  const pageButtons = pages
+    .map((page) => {
+      const gap = page - previousPage > 1 ? '<span class="pagination-ellipsis">...</span>' : "";
+      previousPage = page;
+      return `
+        ${gap}
+        <button
+          type="button"
+          class="pagination-btn ${page === currentPage ? "active" : ""}"
+          onclick="goToCoursePage(${page})"
+          aria-label="Go to page ${page}"
+          ${page === currentPage ? 'aria-current="page"' : ""}
+        >
+          ${page}
+        </button>
+      `;
+    })
+    .join("");
+
+  pagination.innerHTML = `
+    <button
+      type="button"
+      class="pagination-btn pagination-step"
+      onclick="goToCoursePage(${Math.max(1, currentPage - 1)})"
+      ${currentPage === 1 ? "disabled" : ""}
+    >
+      Prev
+    </button>
+    ${pageButtons}
+    <button
+      type="button"
+      class="pagination-btn pagination-step"
+      onclick="goToCoursePage(${Math.min(totalPages, currentPage + 1)})"
+      ${currentPage === totalPages ? "disabled" : ""}
+    >
+      Next
+    </button>
+    <span class="pagination-summary">
+      Page ${currentPage} of ${totalPages}
+    </span>
+  `;
+}
+
+function goToCoursePage(page) {
+  fetchCoursesPage(page);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function renderCourseCards(container, courses, emptyText) {
@@ -602,6 +746,11 @@ function renderCourseCards(container, courses, emptyText) {
 
 // Filter courses based on search and filters
 function filterCourses() {
+  if (window.__COURSE_PAGINATION__) {
+    fetchCoursesPage(1);
+    return;
+  }
+
   const searchTerm = document.getElementById("searchBox").value.toLowerCase();
   
   // 【關鍵修正】精準抓取新版橫向按鈕身上亮燈（active）的 data-value 屬性
@@ -787,6 +936,8 @@ function showFavorites() {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "none";
+  const pagination = document.getElementById("coursesPagination");
+  if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
   renderFavorites();
@@ -800,6 +951,8 @@ function showBrowseCourses() {
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
 
   document.getElementById("coursesContainer").style.display = "";
+  const pagination = document.getElementById("coursesPagination");
+  if (pagination) pagination.style.display = "";
   filterCourses();
 }
 
@@ -1172,6 +1325,8 @@ function openCourseDetail(courseId) {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
   
   document.getElementById("coursesContainer").style.display = "none";
+  const pagination = document.getElementById("coursesPagination");
+  if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1192,6 +1347,8 @@ function closeCourseDetail() {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "";
+  const pagination = document.getElementById("coursesPagination");
+  if (pagination) pagination.style.display = "";
   currentCourseId = null;
 }
 
