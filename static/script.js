@@ -117,7 +117,7 @@ function getDisplayName(user) {
 
 function translateIcon() {
   return `
-    <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="m5 8 6 6"></path>
       <path d="m4 14 6-6 2-3"></path>
       <path d="M2 5h12"></path>
@@ -1745,35 +1745,35 @@ window.resetAllFilters = function() {
 };
 
 
+async function submitReviewAction(reviewId, method, payload) {
+  if (!currentCourseId) return null;
+
+  const response = await fetch(`/api/courses/${currentCourseId}/reviews/${reviewId}`, {
+    method,
+    headers: method === "DELETE" ? undefined : {
+      "Content-Type": "application/json",
+    },
+    credentials: "same-origin",
+    body: method === "DELETE" ? undefined : JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    alert(data.error || "Action failed.");
+    return null;
+  }
+
+  return data;
+}
+
 // === 刪除評論邏輯 ===
-window.deleteReview = function(reviewId) {
+window.deleteReview = async function(reviewId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-  const reviews = courseReviews[currentCourseId];
-  if (!reviews) return;
+  const data = await submitReviewAction(reviewId, "DELETE");
+  if (!data) return;
 
-  // 找出該則評論在陣列中的位置並刪除
-  const index = reviews.findIndex(r => r.id === reviewId);
-  if (index !== -1) {
-    reviews.splice(index, 1); // 刪除資料
-
-    // 重新計算這堂課的平均星星數與評論總數
-    const course = allCourses.find(c => c.id === currentCourseId);
-    if (course) {
-      course.reviewCount = reviews.length;
-      course.rating = getAverageRating(reviews, course.rating);
-    }
-
-    // 重新渲染畫面
-    loadReviews(currentCourseId);
-    
-    // 如果有打開上方課程詳細卡片，也一併更新右上角的星星數字
-    if (document.getElementById("courseDetailPage").style.display === "block") {
-      document.getElementById("detailRatingValue").textContent = course.rating.toFixed(1);
-      document.getElementById("detailStars").innerHTML = generateStars(course.rating);
-      document.getElementById("detailReviewCount").textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
-    }
-  }
+  await loadReviews(currentCourseId);
 };
 
 // === 開啟編輯模式 ===
@@ -1789,7 +1789,7 @@ window.cancelEdit = function(reviewId) {
 };
 
 // === 儲存修改的內容 ===
-window.saveEdit = function(reviewId) {
+window.saveEdit = async function(reviewId) {
   const newText = document.getElementById(`edit-input-${reviewId}`).value.trim();
   
   if (!newText) {
@@ -1797,29 +1797,20 @@ window.saveEdit = function(reviewId) {
     return;
   }
 
-  const review = findReviewById(reviewId);
-  if (review) {
-    review.text = newText;
-    // 更新完畢後，重新渲染評論列表
-    loadReviews(currentCourseId);
-  }
+  const data = await submitReviewAction(reviewId, "PATCH", { text: newText });
+  if (!data) return;
+
+  await loadReviews(currentCourseId);
 };
 
 // === 刪除子回覆邏輯 ===
-window.deleteReply = function(reviewId, replyId) {
+window.deleteReply = async function(reviewId, replyId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-  const review = findReviewById(reviewId);
-  if (!review || !review.replies) return;
+  const data = await submitReviewAction(replyId, "DELETE");
+  if (!data) return;
 
-  // 找出該則回覆在陣列中的位置並刪除
-  const index = review.replies.findIndex(r => r.id === replyId);
-  if (index !== -1) {
-    review.replies.splice(index, 1);
-    
-    // 重新渲染畫面
-    loadReviews(currentCourseId);
-  }
+  await loadReviews(currentCourseId);
 };
 
 // === 開啟子回覆編輯模式 ===
@@ -1835,7 +1826,7 @@ window.cancelEditReply = function(replyId) {
 };
 
 // === 儲存子回覆修改的內容 ===
-window.saveEditReply = function(reviewId, replyId) {
+window.saveEditReply = async function(reviewId, replyId) {
   const newText = document.getElementById(`edit-input-${replyId}`).value.trim();
   
   if (!newText) {
@@ -1843,12 +1834,10 @@ window.saveEditReply = function(reviewId, replyId) {
     return;
   }
 
-  const reply = findReplyById(reviewId, replyId);
-  if (reply) {
-    reply.text = newText;
-    // 更新完畢後，重新渲染
-    loadReviews(currentCourseId);
-  }
+  const data = await submitReviewAction(replyId, "PATCH", { text: newText });
+  if (!data) return;
+
+  await loadReviews(currentCourseId);
 };
 
 // === 自動生成熱門搜尋標籤 ===
