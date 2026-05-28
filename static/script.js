@@ -136,36 +136,6 @@ function heartIcon() {
   `;
 }
 
-function reactionIcon(reaction) {
-  return reaction || heartIcon();
-}
-
-function renderReactionControl(item, reviewId, replyId = null) {
-  const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
-  const selectedReaction = item.reaction || (item.liked ? "❤️" : "");
-
-  return `
-    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
-      <button
-        class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
-        onclick="handleQuickLike(event, ${targetArgs})"
-        type="button"
-      >
-        <span class="emoji-stack">
-          <span class="emoji-item">${reactionIcon(selectedReaction)}</span>
-        </span>
-        <span class="like-count-num">${item.likes ?? 0}</span>
-      </button>
-      <div class="reaction-palette">
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '❤️')">❤️</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😮')">😮</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '👍')">👍</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🔥')">🔥</button>
-      </div>
-    </div>
-  `;
-}
-
 function replyIcon() {
   return `
     <svg class="reply-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -589,9 +559,6 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
-                    <span class="stat-save-display">
-                        ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
-                    </span>
                     <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
@@ -759,12 +726,12 @@ function renderDetailTags(course) {
     .join("");
 }
 
-function getCourseLikeTotal(courseId) {
-  const course = allCourses.find((c) => c.id === courseId);
-  return course?.saveCount || 0;
-}
-
 function getCourseCommentTotal(courseId) {
+  const course = allCourses.find((entry) => entry.id === courseId);
+  if (course && Number.isFinite(Number(course.reviewCount))) {
+    return Number(course.reviewCount);
+  }
+
   const reviews = getReviewsForCourse(courseId);
   return reviews.reduce(
     (total, review) => total + 1 + (review.replies || []).length,
@@ -777,9 +744,6 @@ function updateDetailSocialStats(courseId) {
   if (!stats) return;
 
   stats.innerHTML = `
-    <span class="detail-social-stat stat-save-display">
-      ${heartIcon()} <span>${getCourseLikeTotal(courseId)}</span>
-    </span>
     <span class="detail-social-stat stat-comment">
       ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
     </span>
@@ -1029,15 +993,14 @@ function toggleRegister(event) {
   setRegisterMode(!isRegistering);
 }
 
-function login(event) {
+async function login(event) {
   event.preventDefault();
-  
-  const username = document.getElementById("username").value;
-  const email = document.getElementById("email").value;
+
+  const username = document.getElementById("username").value.trim();
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  
-  // 抓取目前的模式 (login 還是 register)
+
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -1046,72 +1009,106 @@ function login(event) {
     return;
   }
 
-  // 確認必填欄位都有填寫
-  if (username && password && (!isRegistering || email)) {
-    // 建立使用者資料
-    currentUser = isRegistering
+  if (!username || !password || (isRegistering && !email)) {
+    alert("Please complete the form.");
+    return;
+  }
+
+  try {
+    const endpoint = isRegistering ? "/api/register" : "/api/login";
+    const payload = isRegistering
       ? {
-          username: username,
-          email: email,
+          username,
+          email,
+          password,
           avatarAnimal: document.getElementById("avatarAnimal").value,
           gender: document.getElementById("gender").value,
         }
-      : getDefaultProfile(username);
-      
-    // 儲存到瀏覽器
+      : {
+          identifier: username,
+          password,
+        };
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Authentication failed.");
+      return;
+    }
+
+    currentUser = data.user;
     localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    
-    // 【關鍵修正】直接呼叫 checkUserLogin()！
-    // 它裡面已經寫好了打開 navBlock、打開 mainContentBlock、隱藏 modal 並更新頭像的完美邏輯
-    checkUserLogin(); 
-    
-    // 清空輸入框
+    await checkUserLogin();
+
     document.getElementById("authForm").reset();
-    
-    // 確保下次打開是登入狀態
-    switchAuthTab("login"); 
+    switchAuthTab("login");
+  } catch (error) {
+    alert("Unable to complete authentication.");
   }
 }
 
-function logout() {
+async function logout() {
+  try {
+    await fetch("/api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch (error) {
+  }
+
   currentUser = null;
   localStorage.removeItem("currentUser");
   updateAuthUI();
 
-  // 登出後，徹底隱藏後台
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  
-  // 讓登入彈窗以滿版蓋台方式出現
   document.getElementById("loginModal").style.display = "block";
   document.getElementById("loginModal").classList.add("login-page-overlay");
-  
-  // 【新增這兩行】還原成一開始只有標題和 Start 按鈕的畫面，把登入輸入框先藏起來
   document.getElementById("welcomeStartSection").style.display = "block";
   document.getElementById("authCoreSection").style.display = "none";
+
+  document.getElementById("authForm").reset();
 }
 
-function checkUserLogin() {
-  const savedUser = localStorage.getItem("currentUser");
-  if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-    } catch (error) {
-      currentUser = getDefaultProfile(savedUser);
+async function checkUserLogin() {
+  try {
+    const response = await fetch("/api/session", {
+      credentials: "same-origin",
+    });
+    const data = await response.json();
+
+    if (response.ok && data.authenticated && data.user) {
+      currentUser = data.user;
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    } else {
+      currentUser = null;
+      localStorage.removeItem("currentUser");
     }
-    
-    // 【核心新增】如果本來就是登入狀態，直接顯示主介面，把登入頁完全隱藏
+  } catch (error) {
+    currentUser = null;
+    localStorage.removeItem("currentUser");
+  }
+
+  if (currentUser) {
     document.getElementById("navBlock").style.display = "block";
     document.getElementById("mainContentBlock").style.display = "block";
     document.getElementById("loginModal").style.display = "none";
     document.getElementById("loginModal").classList.remove("login-page-overlay");
   } else {
-    // 如果沒有登入，確保登入蓋台和樣式都有啟動
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
     document.getElementById("loginModal").style.display = "block";
     document.getElementById("loginModal").classList.add("login-page-overlay");
   }
+
   updateAuthUI();
 }
 
@@ -1237,43 +1234,68 @@ function renderRatingBreakdown(reviews) {
 }
 
 // Load reviews
-function loadReviews(courseId) {
-  const reviews = getReviewsForCourse(courseId);
-
+async function loadReviews(courseId) {
   const reviewsList = document.getElementById("reviewsList");
-  reviewsList.innerHTML = "";
-  updateStudentReviewStats(reviews);
-  updateDetailSocialStats(courseId);
+  if (!reviewsList) return;
 
-  if (reviews.length === 0) {
-    reviewsList.innerHTML =
-      '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
-    return;
-  }
+  try {
+    const response = await fetch(`/api/courses/${courseId}/reviews`, {
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      throw new Error(`Review API returned ${response.status}`);
+    }
 
-  reviews.forEach((review) => {
-    const reviewItem = document.createElement("div");
-    reviewItem.className = "review-item";
+    const data = await response.json();
+    const reviews = data.reviews || [];
+    courseReviews[courseId] = reviews;
 
-    const starsHtml = generateStars(review.rating);
-    const replies = review.replies || [];
-    const totalReplies = replies.length;
-    const replyCountText =
-      totalReplies > 0
-        ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
-        : "Reply";
-    const showReplies = expandedReplyGroups.has(`${review.id}:root`);
+    const course = allCourses.find((entry) => entry.id === courseId);
+    if (course) {
+      course.rating = data.averageRating ?? course.rating;
+      course.reviewCount = data.reviewCount ?? course.reviewCount;
+    }
 
-    // === 判斷這則評論是不是「我」發的 ===
-    const isMyReview = currentUser && review.author === getDisplayName(currentUser);
-    const myActionsHtml = isMyReview ? `
-      <div class="my-review-actions">
-        <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
-        <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
-      </div>
-    ` : "";
+    reviewsList.innerHTML = "";
+    updateStudentReviewStats(reviews);
+    updateDetailSocialStats(courseId);
 
-    reviewItem.innerHTML = `
+    if (data.averageRating !== undefined) {
+      document.getElementById("detailRatingValue").textContent = Number(data.averageRating).toFixed(1);
+      document.getElementById("detailStars").innerHTML = generateStars(data.averageRating);
+      document.getElementById("detailReviewCount").textContent = `Based on ${data.reviewCount} review${data.reviewCount !== 1 ? "s" : ""}`;
+    }
+
+    renderRatingBreakdown(reviews);
+
+    if (reviews.length === 0) {
+      reviewsList.innerHTML =
+        '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
+      return;
+    }
+
+    reviews.forEach((review) => {
+      const reviewItem = document.createElement("div");
+      reviewItem.className = "review-item";
+
+      const starsHtml = generateStars(review.rating);
+      const replies = review.replies || [];
+      const totalReplies = replies.length;
+      const replyCountText =
+        totalReplies > 0
+          ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
+          : "Reply";
+      const showReplies = expandedReplyGroups.has(`${review.id}:root`);
+
+      const isMyReview = currentUser && review.author === getDisplayName(currentUser);
+      const myActionsHtml = isMyReview ? `
+        <div class="my-review-actions">
+          <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
+          <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
+        </div>
+      ` : "";
+
+      reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
                   <span class="review-avatar ${getGenderClass(review.avatar?.gender)}">${avatarIcon(review.avatar || getDefaultProfile(review.author))}</span>
@@ -1305,8 +1327,6 @@ function loadReviews(courseId) {
             </div>
             
             <div class="review-actions">
-              ${renderReactionControl(review, review.id)}
-
               <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
                 ${commentIcon()}
               </button>
@@ -1334,8 +1354,13 @@ function loadReviews(courseId) {
             ${showReplies ? `<div class="review-replies">${renderReplies(replies, review.id)}</div>` : ""}
         `;
 
-    reviewsList.appendChild(reviewItem);
-  });
+      reviewsList.appendChild(reviewItem);
+    });
+  } catch (error) {
+    console.warn("Unable to load reviews.", error);
+    reviewsList.innerHTML =
+      '<p class="empty-reviews">Unable to load reviews right now.</p>';
+  }
 }
 
 function updateStudentReviewStats(reviews = []) {
@@ -1402,9 +1427,7 @@ function renderReplies(replies = [], reviewId) {
                 </div>
               </div>
 
-              <div class="reply-actions">
-                ${renderReactionControl(reply, reviewId, reply.id)}
-              </div>
+              <div class="reply-actions"></div>
             </div>
           </div>
         </div>
@@ -1428,98 +1451,10 @@ function findReviewById(reviewId) {
   return reviews.find((review) => review.id === reviewId);
 }
 
-function toggleReviewLike(reviewId) {
-  if (!currentUser) {
-    alert("Please login to like reviews.");
-    openLoginModal();
-    return;
-  }
-
-  const review = findReviewById(reviewId);
-  if (!review) return;
-
-  review.liked = !review.liked;
-  review.likes += review.liked ? 1 : -1;
-  loadReviews(currentCourseId);
-}
-
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
   return review.replies.find((reply) => reply.id === replyId) || null;
-}
-
-function findReactionTarget(reviewId, replyId = null) {
-  return replyId ? findReplyById(reviewId, replyId) : findReviewById(reviewId);
-}
-
-function applyReaction(reviewId, reaction = "❤️", replyId = null) {
-  if (!currentUser) {
-    alert("Please login to react.");
-    openLoginModal();
-    return;
-  }
-
-  const target = findReactionTarget(reviewId, replyId);
-  if (!target) return;
-
-  if (!target.liked) {
-    target.likes = (target.likes ?? 0) + 1;
-  }
-
-  target.liked = true;
-  target.reaction = reaction;
-  loadReviews(currentCourseId);
-}
-
-function handleQuickLike(event, reviewId, replyId = null) {
-  event.stopPropagation();
-
-  const target = findReactionTarget(reviewId, replyId);
-  if (target?.liked && (target.reaction || "❤️") === "❤️") {
-    if (!currentUser) {
-      alert("Please login to react.");
-      openLoginModal();
-      return;
-    }
-
-    target.liked = false;
-    target.reaction = "";
-    target.likes = Math.max(0, (target.likes ?? 0) - 1);
-    loadReviews(currentCourseId);
-    return;
-  }
-
-  applyReaction(reviewId, "❤️", replyId);
-}
-
-function selectReviewEmoji(
-  event,
-  reviewId,
-  replyIdOrReaction,
-  maybeReaction = null,
-) {
-  event.stopPropagation();
-
-  const hasReplyId = maybeReaction !== null;
-  const replyId = hasReplyId ? replyIdOrReaction : null;
-  const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
-  applyReaction(reviewId, reaction, replyId);
-}
-
-function toggleReplyLike(reviewId, replyId) {
-  if (!currentUser) {
-    alert("Please login to like replies.");
-    openLoginModal();
-    return;
-  }
-
-  const reply = findReplyById(reviewId, replyId);
-  if (!reply) return;
-
-  reply.liked = !reply.liked;
-  reply.likes += reply.liked ? 1 : -1;
-  loadReviews(currentCourseId);
 }
 
 function toggleReplyForm(reviewId) {
@@ -1549,42 +1484,45 @@ function handleReplyKeydown(event, reviewId) {
   submitReply(reviewId);
 }
 
-function submitReply(reviewId) {
+async function submitReply(reviewId) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
     return;
   }
 
-  const review = findReviewById(reviewId);
   const inputId = `replyInput-${reviewId}`;
   const input = document.getElementById(inputId);
-  if (!review || !input) return;
+  if (!input) return;
 
   const text = input.value.trim();
   if (!text) return;
 
-  if (!review.replies) {
-    review.replies = [];
+  try {
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        comment: text,
+        parentId: Number(reviewId),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Failed to submit reply.");
+      return;
+    }
+
+    input.value = "";
+    expandedReplyGroups.add(`${reviewId}:root`);
+    await loadReviews(currentCourseId);
+  } catch (error) {
+    alert("Unable to submit reply.");
   }
-
-  review.replies.push({
-    id: `reply-${Date.now()}`,
-    author: getDisplayName(currentUser),
-    avatar: {
-      avatarAnimal: currentUser.avatarAnimal,
-      gender: currentUser.gender,
-    },
-    date: new Date().toISOString().slice(0, 10),
-    text: text,
-    likes: 0,
-    liked: false,
-    reaction: "",
-    replies: [],
-  });
-
-  expandedReplyGroups.add(`${reviewId}:root`);
-  loadReviews(currentCourseId);
 }
 
 // Review form modal
@@ -1631,11 +1569,12 @@ function updateStarDisplay(displayRating = selectedRating) {
 }
 
 // Submit review
-function submitReview(event) {
+async function submitReview(event) {
   event.preventDefault();
 
   if (!currentUser) {
     alert("Please login to submit a review.");
+    openLoginModal();
     return;
   }
 
@@ -1644,45 +1583,45 @@ function submitReview(event) {
     return;
   }
 
-  const reviewText = document.getElementById("reviewText").value;
-  const course = allCourses.find((c) => c.id === currentCourseId);
-  const today = new Date().toISOString().slice(0, 10);
-  const newReview = {
-    id: `review-${Date.now()}`,
-    author: getDisplayName(currentUser),
-    avatar: {
-      avatarAnimal: currentUser.avatarAnimal,
-      gender: currentUser.gender,
-    },
-    rating: selectedRating,
-    date: today,
-    language: "English",
-    text: reviewText,
-    likes: 0,
-    liked: false,
-    reaction: "",
-    replies: [],
-  };
-
-  if (!courseReviews[currentCourseId]) {
-    courseReviews[currentCourseId] = [];
+  const reviewText = document.getElementById("reviewText").value.trim();
+  if (!reviewText) {
+    alert("Please write a review.");
+    return;
   }
 
-  courseReviews[currentCourseId].unshift(newReview);
+  try {
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        rating: selectedRating,
+        comment: reviewText,
+      }),
+    });
 
-  if (course) {
-    course.reviewCount = courseReviews[currentCourseId].length;
-    course.rating = getAverageRating(
-      courseReviews[currentCourseId],
-      course.rating,
-    );
-  }
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Failed to submit review.");
+      return;
+    }
 
-  alert("Review submitted successfully!");
-  closeReviewModal();
+    courseReviews[currentCourseId] = data.reviews || [];
+    const course = allCourses.find((entry) => entry.id === currentCourseId);
+    if (course) {
+      course.rating = data.averageRating;
+      course.reviewCount = data.reviewCount;
+    }
 
-  if (currentCourseId) {
-    openCourseDetail(currentCourseId);
+    alert("Review submitted successfully!");
+    closeReviewModal();
+    await loadReviews(currentCourseId);
+    updateDetailSocialStats(currentCourseId);
+    renderRatingBreakdown(courseReviews[currentCourseId] || []);
+  } catch (error) {
+    alert("Unable to submit review.");
   }
 }
 

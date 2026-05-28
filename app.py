@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -9,11 +10,11 @@ from flask_login import (
 	login_user,
 	logout_user,
 )
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, inspect, or_, text
 from sqlalchemy.orm import selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Department, Instructor, Offer, Review, Section, Teach, User, db
+from models import Course, Department, Instructor, Offer, Review, ReviewReaction, Section, Teach, User, db
 
 
 def create_app():
@@ -42,6 +43,24 @@ def create_app():
 			return db.session.get(User, int(user_id))
 		except (TypeError, ValueError):
 			return None
+
+	def ensure_review_schema():
+		inspector = inspect(db.engine)
+		columns = {column["name"] for column in inspector.get_columns("Review")}
+		if "reactionCounts" not in columns:
+			db.session.execute(
+				text("ALTER TABLE Review ADD COLUMN reactionCounts TEXT NOT NULL DEFAULT '{}'")
+			)
+		db.session.commit()
+
+		rows = Review.query.filter((Review.reaction_counts.is_(None)) | (Review.reaction_counts == ""))
+		for review in rows:
+			review.reaction_counts = json.dumps({})
+		db.session.commit()
+
+	with app.app_context():
+		db.create_all()
+		ensure_review_schema()
 
 	@app.route("/")
 	def index():
@@ -83,6 +102,33 @@ def create_app():
 			"semester": course.semester,
 			"tags": [tag for tag in [course.department, course.course_type] if tag],
 			"description": course.description or "",
+		}
+
+	def serialize_review(review, current_user_id=None):
+		reaction_totals = review.reaction_totals or {}
+		user_reaction = None
+		if current_user_id is not None:
+			user_reaction = next(
+				(reaction.emoji for reaction in review.reactions if reaction.user_id == current_user_id),
+				None,
+			)
+
+		return {
+			"id": review.id,
+			"author": review.author.username if review.author else "Anonymous",
+			"rating": review.rating,
+			"date": review.created_at.strftime("%Y-%m-%d"),
+			"language": review.language,
+			"text": review.text,
+			"likes": reaction_totals.get("❤️", 0),
+			"liked": bool(user_reaction),
+			"reaction": user_reaction or "",
+			"reactionCounts": reaction_totals,
+			"parentId": review.parent_id,
+			"replies": [
+				serialize_review(reply, current_user_id=current_user_id)
+				for reply in sorted(review.replies, key=lambda item: item.created_at or review.created_at)
+			],
 		}
 
 	def build_search_pattern(term):
@@ -141,7 +187,13 @@ def create_app():
 
 	def reviews_for_course(course_id):
 		return (
-			Review.query.join(Section)
+			Review.query.options(
+				selectinload(Review.author),
+				selectinload(Review.reactions),
+				selectinload(Review.replies).selectinload(Review.author),
+				selectinload(Review.replies).selectinload(Review.reactions),
+			)
+			.join(Section)
 			.filter(Section.course_id == course_id, Review.parent_id.is_(None))
 			.order_by(Review.created_at.desc())
 		)
@@ -348,6 +400,155 @@ def create_app():
 			"course_detail.html",
 			course=course,
 			reviews=reviews,
+		)
+
+	@app.route("/api/courses/<int:course_id>/reviews")
+	def api_course_reviews(course_id):
+		course = Course.query.get_or_404(course_id)
+		reviews = reviews_for_course(course_id).all()
+		average_rating = (
+			sum(review.rating for review in reviews if review.rating) / len(reviews)
+			if reviews
+			else 0
+		)
+		current_user_id = current_user.id if current_user.is_authenticated else None
+		return jsonify(
+			{
+				"courseId": course.id,
+				"reviewCount": len(reviews),
+				"averageRating": round(float(average_rating), 1),
+				"reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
+			}
+		)
+
+	@app.route("/api/courses/<int:course_id>/reviews", methods=["POST"])
+	@login_required
+	def api_submit_course_review(course_id):
+		course = Course.query.get_or_404(course_id)
+		payload = request.get_json(silent=True) or {}
+		comment = str(payload.get("comment", request.form.get("comment", ""))).strip()
+		parent_id = payload.get("parentId")
+		if parent_id in (None, ""):
+			parent_id = None
+		else:
+			try:
+				parent_id = int(parent_id)
+			except (TypeError, ValueError):
+				return jsonify({"error": "Parent review id must be an integer."}), 400
+
+		if not comment:
+			return jsonify({"error": "Review text is required."}), 400
+
+		section = course.latest_section
+		if not section:
+			return jsonify({"error": "This course has no section to review."}), 400
+
+		section_id = section.section_id
+		rating = None
+		if parent_id is None:
+			rating_raw = str(payload.get("rating", request.form.get("rating", ""))).strip()
+			try:
+				rating = int(rating_raw)
+			except ValueError:
+				return jsonify({"error": "Rating must be a number between 1 and 5."}), 400
+			if rating < 1 or rating > 5:
+				return jsonify({"error": "Rating must be between 1 and 5."}), 400
+		else:
+			parent_review = Review.query.get(parent_id)
+			if parent_review is None:
+				return jsonify({"error": "Parent review not found."}), 404
+			if parent_review.course_id != course.id:
+				return jsonify({"error": "Parent review does not belong to this course."}), 400
+			section_id = parent_review.section_id
+
+		review = Review(
+			section_id=section_id,
+			user_id=current_user.id,
+			parent_id=parent_id,
+			rating=rating,
+			text=comment,
+		)
+		db.session.add(review)
+		db.session.commit()
+
+		reviews = reviews_for_course(course_id).all()
+		average_rating = (
+			sum(review.rating for review in reviews if review.rating) / len(reviews)
+			if reviews
+			else 0
+		)
+		current_user_id = current_user.id if current_user.is_authenticated else None
+		return jsonify(
+			{
+				"courseId": course.id,
+				"reviewCount": len(reviews),
+				"averageRating": round(float(average_rating), 1),
+				"review": serialize_review(review, current_user_id=current_user_id),
+				"reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
+			}
+		)
+
+	@app.route("/api/courses/<int:course_id>/reviews/<int:review_id>/reactions", methods=["POST"])
+	@login_required
+	def api_react_to_review(course_id, review_id):
+		course = Course.query.get_or_404(course_id)
+		review = (
+			Review.query.join(Section)
+			.filter(Review.review_id == review_id, Section.course_id == course.id)
+			.first_or_404()
+		)
+		payload = request.get_json(silent=True) or {}
+		reaction = str(payload.get("reaction", "")).strip()
+		remove = bool(payload.get("remove"))
+		allowed_reactions = {"❤️", "😮", "👍", "🔥"}
+
+		if reaction not in allowed_reactions and not remove:
+			return jsonify({"error": "Unsupported reaction."}), 400
+
+		reaction_totals = review.reaction_totals or {}
+		existing_reaction = (
+			ReviewReaction.query.filter_by(review_id=review.id, user_id=current_user.id)
+			.first()
+		)
+
+		if remove and existing_reaction:
+			old_emoji = existing_reaction.emoji
+			if old_emoji in reaction_totals:
+				reaction_totals[old_emoji] = max(0, reaction_totals[old_emoji] - 1)
+				if reaction_totals[old_emoji] == 0:
+					del reaction_totals[old_emoji]
+			db.session.delete(existing_reaction)
+		elif reaction in allowed_reactions:
+			if existing_reaction is None:
+				existing_reaction = ReviewReaction(review_id=review.id, user_id=current_user.id, emoji=reaction)
+				db.session.add(existing_reaction)
+				reaction_totals[reaction] = reaction_totals.get(reaction, 0) + 1
+			elif existing_reaction.emoji == reaction:
+				remove = True
+				old_emoji = existing_reaction.emoji
+				if old_emoji in reaction_totals:
+					reaction_totals[old_emoji] = max(0, reaction_totals[old_emoji] - 1)
+					if reaction_totals[old_emoji] == 0:
+						del reaction_totals[old_emoji]
+				db.session.delete(existing_reaction)
+				existing_reaction = None
+			else:
+				old_emoji = existing_reaction.emoji
+				if old_emoji in reaction_totals:
+					reaction_totals[old_emoji] = max(0, reaction_totals[old_emoji] - 1)
+					if reaction_totals[old_emoji] == 0:
+						del reaction_totals[old_emoji]
+				existing_reaction.emoji = reaction
+				reaction_totals[reaction] = reaction_totals.get(reaction, 0) + 1
+
+		review.reaction_counts = json.dumps(reaction_totals)
+		db.session.commit()
+		current_user_id = current_user.id if current_user.is_authenticated else None
+		return jsonify(
+			{
+				"review": serialize_review(review, current_user_id=current_user_id),
+				"reactionCounts": reaction_totals,
+			}
 		)
 
 	@app.route("/courses/<int:course_id>/review", methods=["POST"])

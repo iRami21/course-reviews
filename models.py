@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from flask_login import UserMixin
@@ -19,6 +20,7 @@ class User(UserMixin, db.Model):
     dept_id = db.Column("deptId", db.Integer, db.ForeignKey("Department.deptId"))
 
     reviews = db.relationship("Review", back_populates="author")
+    review_reactions = db.relationship("ReviewReaction", back_populates="user")
 
     @property
     def id(self):
@@ -213,10 +215,22 @@ class Review(db.Model):
     created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
     rating = db.Column(db.Integer)
     text = db.Column("reviewContent", db.Text, nullable=False)
+    reaction_counts = db.Column("reactionCounts", db.Text, nullable=False, default="{}")
 
     section = db.relationship("Section", back_populates="reviews")
     author = db.relationship("User", back_populates="reviews")
-    replies = db.relationship("Review", cascade="all, delete-orphan")
+    parent = db.relationship(
+        "Review",
+        remote_side=[review_id],
+        back_populates="replies",
+    )
+    replies = db.relationship(
+        "Review",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        foreign_keys=[parent_id],
+    )
+    reactions = db.relationship("ReviewReaction", back_populates="review", cascade="all, delete-orphan")
 
     @property
     def id(self):
@@ -229,3 +243,41 @@ class Review(db.Model):
     @property
     def language(self):
         return "English"
+
+    @property
+    def reaction_totals(self):
+        if not self.reaction_counts:
+            return {}
+        try:
+            return json.loads(self.reaction_counts)
+        except (TypeError, ValueError):
+            return {}
+
+
+class ReviewReaction(db.Model):
+    __tablename__ = "ReviewReaction"
+
+    reaction_id = db.Column("reactionId", db.Integer, primary_key=True)
+    review_id = db.Column(
+        "reviewId",
+        db.Integer,
+        db.ForeignKey("Review.reviewId"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        "userId",
+        db.Integer,
+        db.ForeignKey("User.userId"),
+        nullable=False,
+        index=True,
+    )
+    emoji = db.Column(db.String(16), nullable=False)
+    created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
+
+    review = db.relationship("Review", back_populates="reactions")
+    user = db.relationship("User", back_populates="review_reactions")
+
+    __table_args__ = (
+        db.UniqueConstraint("reviewId", "userId", name="uq_review_reaction_user"),
+    )
