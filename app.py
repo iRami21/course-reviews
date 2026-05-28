@@ -1,7 +1,5 @@
 import os
 import re
-import sqlite3
-from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import (
@@ -11,54 +9,18 @@ from flask_login import (
 	login_user,
 	logout_user,
 )
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Review, User, db
-
-
-def parse_term_from_filename(path):
-	match = re.search(r"_(\d{4})\.db$", path.name)
-	if not match:
-		return None, None
-
-	term = match.group(1)
-	roc_year = int(term[:3])
-	semester = int(term[3])
-	return roc_year + 1911, semester
-
-
-def split_course_name(raw):
-	if not raw:
-		return "", ""
-
-	parts = [part.strip() for part in str(raw).splitlines() if part.strip()]
-	if not parts:
-		return "", ""
-
-	if len(parts) == 1:
-		return parts[0], ""
-
-	return " ".join(parts[1:]), parts[0]
-
-
-def parse_credits(value):
-	if value is None:
-		return None
-	text = str(value).strip()
-	if not text:
-		return None
-	try:
-		return int(float(text))
-	except ValueError:
-		return None
+from models import Course, Department, Instructor, Offer, Review, Section, Teach, User, db
 
 
 def create_app():
 	app = Flask(__name__, static_folder="static", template_folder="templates")
 	app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
 
-	db_path = os.path.join(app.root_path, "app.db")
+	db_path = os.path.join(app.root_path, "12354.db")
 	app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 	app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -94,6 +56,96 @@ def create_app():
 			"gender": user.gender,
 		}
 
+	def serialize_course(course, review_stats=None):
+		review_count = 0
+		average_rating = 0
+		if review_stats is not None:
+			review_count, average_rating = review_stats.get(course.id, (0, 0))
+		else:
+			reviews = reviews_for_course(course.id).all()
+			ratings = [review.rating for review in reviews if review.rating]
+			review_count = len(reviews)
+			average_rating = sum(ratings) / len(ratings) if ratings else 0
+
+		return {
+			"id": course.id,
+			"code": course.code,
+			"title": course.title,
+			"titleZh": course.title_zh,
+			"professor": course.professor or "TBD",
+			"department": course.department or "TBD",
+			"credits": course.credits or 0,
+			"rating": round(float(average_rating or 0), 1),
+			"reviewCount": int(review_count or 0),
+			"followed": False,
+			"saveCount": 0,
+			"year": course.year,
+			"semester": course.semester,
+			"tags": [tag for tag in [course.department, course.course_type] if tag],
+			"description": course.description or "",
+		}
+
+	def build_search_pattern(term):
+		cleaned = term.strip()
+		if not cleaned:
+			return None
+		if len(cleaned) == 1:
+			return f"{cleaned}%"
+		return f"%{cleaned}%"
+
+	def course_query_with_details():
+		return Course.query.options(
+			selectinload(Course.offers).selectinload(Offer.department),
+			selectinload(Course.sections)
+			.selectinload(Section.teaches)
+			.selectinload(Teach.instructor),
+		)
+
+	def course_review_stats(course_ids=None):
+		query = (
+			db.session.query(
+				Section.course_id,
+				func.count(Review.review_id),
+				func.avg(Review.rating),
+			)
+			.join(Review, Review.section_id == Section.section_id)
+			.filter(Review.parent_id.is_(None))
+		)
+		if course_ids:
+			query = query.filter(Section.course_id.in_(course_ids))
+		rows = query.group_by(Section.course_id).all()
+		return {course_id: (count, average or 0) for course_id, count, average in rows}
+
+	def review_stats_subquery():
+		return (
+			db.session.query(
+				Section.course_id.label("course_id"),
+				func.count(Review.review_id).label("review_count"),
+				func.avg(Review.rating).label("average_rating"),
+			)
+			.join(Review, Review.section_id == Section.section_id)
+			.filter(Review.parent_id.is_(None))
+			.group_by(Section.course_id)
+			.subquery()
+		)
+
+	def latest_section_subquery():
+		return (
+			db.session.query(
+				Section.course_id.label("course_id"),
+				func.max(Section.roc_year * 10 + Section.term).label("latest_key"),
+			)
+			.group_by(Section.course_id)
+			.subquery()
+		)
+
+	def reviews_for_course(course_id):
+		return (
+			Review.query.join(Section)
+			.filter(Section.course_id == course_id, Review.parent_id.is_(None))
+			.order_by(Review.created_at.desc())
+		)
+
 	@app.route("/courses")
 	def courses():
 		query = request.args.get("q", "").strip()
@@ -105,44 +157,193 @@ def create_app():
 
 			for token in tokens:
 				lower = token.lower()
-				if lower.isdigit() and len(lower) == 4:
-					filters.append(Course.year == int(lower))
+				if lower.isdigit() and len(lower) in {3, 4}:
+					year = int(lower)
+					if len(lower) == 4:
+						year -= 1911
+					filters.append(Course.sections.any(Section.roc_year == year))
 					continue
 
 				if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
-					filters.append(Course.semester == 1)
+					filters.append(Course.sections.any(Section.term == 1))
 					continue
 				if lower in {"s2", "sem2", "semester2", "semester-2", "semester_2"}:
-					filters.append(Course.semester == 2)
+					filters.append(Course.sections.any(Section.term == 2))
 					continue
 
 				text_terms.append(token)
 
 			for term in text_terms:
-				pattern = f"%{term}%"
+				pattern = build_search_pattern(term)
+				if pattern is None:
+					continue
 				filters.append(
 					or_(
-						Course.title.ilike(pattern),
+						Course.name.ilike(pattern),
 						Course.code.ilike(pattern),
-						Course.department.ilike(pattern),
-						Course.professor.ilike(pattern),
+						Course.offers.any(
+							Offer.department.has(Department.name.ilike(pattern))
+						),
+						Course.sections.any(
+							Section.teaches.any(
+								Teach.instructor.has(Instructor.name.ilike(pattern))
+							)
+						),
 					)
 				)
 
 			if filters:
 				courses_query = courses_query.filter(and_(*filters))
 
-		courses_list = courses_query.order_by(Course.code).all()
+		courses_list = courses_query.order_by(Course.code).limit(300).all()
 		return render_template("courses.html", courses=courses_list, q=query)
+
+	@app.route("/api/courses")
+	def api_courses():
+		query = request.args.get("q", "").strip()
+		department = request.args.get("department", "").strip()
+		year = request.args.get("year", "").strip()
+		semester = request.args.get("semester", "").strip()
+		sort_by = request.args.get("sort", "popular").strip()
+		min_rating_raw = request.args.get("min_rating", "").strip()
+		page = max(request.args.get("page", 1, type=int), 1)
+		per_page = request.args.get("per_page", 20, type=int)
+		per_page = min(max(per_page, 1), 50)
+
+		courses_query = course_query_with_details()
+		if query:
+			pattern = build_search_pattern(query)
+			if pattern is not None:
+				courses_query = courses_query.filter(
+					or_(
+						Course.name.ilike(pattern),
+						Course.code.ilike(pattern),
+						Course.offers.any(Offer.department.has(Department.name.ilike(pattern))),
+						Course.sections.any(
+							Section.teaches.any(
+								Teach.instructor.has(Instructor.name.ilike(pattern))
+							)
+						),
+					)
+				)
+
+		if department:
+			courses_query = courses_query.filter(
+				Course.offers.any(Offer.department.has(Department.name == department))
+			)
+		if year:
+			try:
+				courses_query = courses_query.filter(
+					Course.sections.any(Section.roc_year == int(year))
+				)
+			except ValueError:
+				return jsonify({"error": "Invalid year."}), 400
+		if semester:
+			try:
+				courses_query = courses_query.filter(
+					Course.sections.any(Section.term == int(semester))
+				)
+			except ValueError:
+				return jsonify({"error": "Invalid semester."}), 400
+
+		stats = review_stats_subquery()
+		if min_rating_raw:
+			try:
+				min_rating = float(min_rating_raw)
+			except ValueError:
+				return jsonify({"error": "Invalid minimum rating."}), 400
+			courses_query = courses_query.outerjoin(stats, stats.c.course_id == Course.course_id)
+			courses_query = courses_query.filter(
+				func.coalesce(stats.c.average_rating, 0) >= min_rating
+			)
+
+		total = courses_query.order_by(None).count()
+		total_pages = max(1, (total + per_page - 1) // per_page)
+		page = min(page, total_pages)
+
+		if sort_by in {"popular", "rating"} and min_rating_raw:
+			sort_stats = stats
+		elif sort_by in {"popular", "rating"}:
+			sort_stats = review_stats_subquery()
+			courses_query = courses_query.outerjoin(
+				sort_stats,
+				sort_stats.c.course_id == Course.course_id,
+			)
+		else:
+			sort_stats = None
+
+		if sort_by == "latest":
+			latest = latest_section_subquery()
+			courses_query = courses_query.outerjoin(latest, latest.c.course_id == Course.course_id)
+			courses_query = courses_query.order_by(
+				func.coalesce(latest.c.latest_key, 0).desc(),
+				Course.code,
+			)
+		elif sort_by == "rating":
+			courses_query = courses_query.order_by(
+				func.coalesce(sort_stats.c.average_rating, 0).desc(),
+				Course.code,
+			)
+		elif sort_by == "popular":
+			courses_query = courses_query.order_by(
+				func.coalesce(sort_stats.c.review_count, 0).desc(),
+				Course.code,
+			)
+		else:
+			courses_query = courses_query.order_by(Course.code)
+
+		courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
+		review_stats = course_review_stats([course.id for course in courses_list])
+		return jsonify(
+			{
+				"courses": [serialize_course(course, review_stats) for course in courses_list],
+				"pagination": {
+					"page": page,
+					"perPage": per_page,
+					"total": total,
+					"totalPages": total_pages,
+				},
+			}
+		)
+
+	@app.route("/api/filter-options")
+	def api_filter_options():
+		years = [
+			row[0]
+			for row in db.session.query(Section.roc_year)
+			.filter(Section.roc_year.isnot(None))
+			.distinct()
+			.order_by(Section.roc_year.desc())
+			.all()
+		]
+		semesters = [
+			row[0]
+			for row in db.session.query(Section.term)
+			.filter(Section.term.isnot(None))
+			.distinct()
+			.order_by(Section.term)
+			.all()
+		]
+		departments = [
+			row[0]
+			for row in db.session.query(Department.name)
+			.filter(Department.name.isnot(None), Department.name != "")
+			.distinct()
+			.order_by(Department.name)
+			.all()
+		]
+		return jsonify(
+			{
+				"years": years,
+				"semesters": semesters,
+				"departments": departments,
+			}
+		)
 
 	@app.route("/courses/<int:course_id>")
 	def course_detail(course_id):
 		course = Course.query.get_or_404(course_id)
-		reviews = (
-			Review.query.filter_by(course_id=course_id)
-			.order_by(Review.created_at.desc())
-			.all()
-		)
+		reviews = reviews_for_course(course_id).all()
 		return render_template(
 			"course_detail.html",
 			course=course,
@@ -153,6 +354,11 @@ def create_app():
 	@login_required
 	def submit_review(course_id):
 		course = Course.query.get_or_404(course_id)
+		section = course.latest_section
+		if not section:
+			flash("This course has no section to review.")
+			return redirect(url_for("course_detail", course_id=course.id))
+
 		rating_raw = request.form.get("rating", "").strip()
 		comment = request.form.get("comment", "").strip()
 		language = request.form.get("language", "English").strip() or "English"
@@ -172,10 +378,9 @@ def create_app():
 			return redirect(url_for("course_detail", course_id=course.id))
 
 		review = Review(
-			course_id=course.id,
+			section_id=section.section_id,
 			user_id=current_user.id,
 			rating=rating,
-			language=language,
 			text=comment,
 		)
 		db.session.add(review)
@@ -338,52 +543,8 @@ def create_app():
 
 	@app.cli.command("seed-nsysu")
 	def seed_nsysu():
-		base_dir = Path(app.root_path) / "NSYSU Course Database"
-		db_files = sorted(base_dir.glob("NSYSU_Course_*.db"))
-		if not db_files:
-			print("No NSYSU database files found.")
-			return
-
-		with app.app_context():
-			db.create_all()
-			Review.query.delete()
-			Course.query.delete()
-			db.session.commit()
-
-			seen = set()
-			for db_file in db_files:
-				year, semester = parse_term_from_filename(db_file)
-				conn = sqlite3.connect(db_file)
-				conn.row_factory = sqlite3.Row
-				cur = conn.cursor()
-				cur.execute(
-					"SELECT id, name, department, teacher, credit, description FROM course_list"
-				)
-				for row in cur.fetchall():
-					code = str(row["id"] or "").strip()
-					if not code:
-						continue
-					key = (code, year, semester)
-					if key in seen:
-						continue
-					title, title_zh = split_course_name(row["name"])
-					course = Course(
-						code=code,
-						title=title or title_zh or code,
-						title_zh=title_zh or None,
-						professor=str(row["teacher"] or "").strip() or None,
-						department=str(row["department"] or "").strip() or None,
-						credits=parse_credits(row["credit"]),
-						year=year,
-						semester=semester,
-						description=str(row["description"] or "").strip() or None,
-					)
-					db.session.add(course)
-					seen.add(key)
-				conn.close()
-
-			db.session.commit()
-			print(f"Seeded {len(seen)} courses from {len(db_files)} files.")
+		print("12354.db already contains the normalized NSYSU course data.")
+		print("Run `flask init-db` only if you need Flask to create missing tables.")
 
 	return app
 

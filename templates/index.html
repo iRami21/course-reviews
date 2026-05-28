@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -26,13 +26,7 @@
               
               <div class="search-dropdown-card" id="searchDropdownCard" style="display: none;">
                 <div class="search-dropdown-header">Hot Search 🔥</div>
-                <div class="trending-tags">
-                  <button type="button" class="trending-tag-btn">Calculus</button>
-                  <button type="button" class="trending-tag-btn">Computer Science</button>
-                  <button type="button" class="trending-tag-btn">Dr. Lin</button>
-                  <button type="button" class="trending-tag-btn">Writing</button>
-                  <button type="button" class="trending-tag-btn">Physics</button>
-                </div>
+                <div class="trending-tags"></div>
               </div>
             </div>
 
@@ -54,7 +48,7 @@
                   <div class="notification-item unread">
                     <div class="noti-icon">📚</div>
                     <div class="noti-content">
-                      <p>There is 1 new review on your saved course <strong>Calculus II</strong>!</p>
+                      <p>There is 1 new review on your saved course.</p>
                       <span class="noti-time">10 minutes ago</span>
                     </div>
                   </div>
@@ -62,7 +56,7 @@
                   <div class="notification-item unread">
                     <div class="noti-icon">💬</div>
                     <div class="noti-content">
-                      <p>Someone replied to your review in <strong>Introduction to Computer Science</strong>!</p>
+                      <p>Someone replied to your review.</p>
                       <span class="noti-time">2 hours ago</span>
                     </div>
                   </div>
@@ -233,31 +227,16 @@
         <div class="filter-row" id="deptFilterRow">
           <span class="filter-label">Department │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="Computer Science">Computer Science</button>
-          <button type="button" class="filter-tag-btn" data-value="Information Management">Information Management</button>
-          <button type="button" class="filter-tag-btn" data-value="Business Administration">Business Administration</button>
-          <button type="button" class="filter-tag-btn" data-value="Finance">Finance</button>
-          <button type="button" class="filter-tag-btn" data-value="Mathematics">Mathematics</button>
-          <button type="button" class="filter-tag-btn" data-value="English">English</button>
-          <button type="button" class="filter-tag-btn" data-value="Physics">Physics</button>
-          <button type="button" class="filter-tag-btn" data-value="Electrical Engineering">Electrical Engineering</button>
-          <button type="button" class="filter-tag-btn" data-value="Mechanical Engineering">Mechanical Engineering</button>
         </div>
 
         <div class="filter-row" id="yearFilterRow">
           <span class="filter-label">Year │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="2024">2024</button>
-          <button type="button" class="filter-tag-btn" data-value="2023">2023</button>
-          <button type="button" class="filter-tag-btn" data-value="2022">2022</button>
         </div>
 
         <div class="filter-row" id="semesterFilterRow">
           <span class="filter-label">Semester │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="1">S1</button>
-          <button type="button" class="filter-tag-btn" data-value="2">S2</button>
-          <button type="button" class="filter-tag-btn" data-value="3">Summer Vacation</button>
         </div>
 
         <div class="filter-row" id="ratingFilterRow">
@@ -276,6 +255,7 @@
       <div class="courses-container" id="coursesContainer">
         <!-- Courses will be loaded here by JavaScript -->
       </div>
+      <nav class="course-pagination" id="coursePagination" aria-label="Course pages" hidden></nav>
 
       <section id="favoritesPage" class="favorites-page" style="display: none">
         <div class="section-heading">

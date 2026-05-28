@@ -1,187 +1,24 @@
-// Global variables
+﻿// Global variables
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
+let currentFilteredCourses = [];
+let currentPage = 1;
+let courseRequestToken = 0;
+let searchDebounceTimer = null;
+let currentPagination = {
+  page: 1,
+  perPage: 20,
+  total: 0,
+  totalPages: 1,
+};
 let selectedRating = 0;
+const COURSES_PER_PAGE = 20;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
 
-// Sample course data (will be replaced with API calls)
-const sampleCourses = [
-  {
-    id: 1,
-    code: "CS101",
-    title: "Introduction to Computer Science",
-    titleZh: "計算機科學導論",
-    professor: "Dr. Wang",
-    department: "Computer Science",
-    credits: 3,
-    rating: 4.5,
-    reviewCount: 2,
-    followed: false,
-    saveCount: 0,
-    year: 2024,
-    semester: 1,
-    tags: ["Computer Science", "Programming", "Foundation"],
-    description: "Fundamental concepts of computer science and programming",
-  },
-  {
-    id: 2,
-    code: "MATH201",
-    title: "Calculus II",
-    titleZh: "微積分二",
-    professor: "Prof. Chen",
-    department: "Mathematics",
-    credits: 4,
-    rating: 3.0,
-    reviewCount: 1,
-    followed: false,
-    saveCount: 0,
-    year: 2024,
-    semester: 1,
-    tags: ["Mathematics", "Calculus", "Workload"],
-    description:
-      "Advanced techniques for integration, series, and applications",
-  },
-  {
-    id: 3,
-    code: "ENG102",
-    title: "Academic Writing",
-    titleZh: "學術寫作",
-    professor: "Dr. Liu",
-    department: "English",
-    credits: 3,
-    rating: 5.0,
-    reviewCount: 1,
-    followed: false,
-    saveCount: 0,
-    year: 2024,
-    semester: 2,
-    tags: ["Writing", "Research", "Feedback"],
-    description:
-      "Academic essay structure, research writing, and revision skills",
-  },
-  {
-    id: 4,
-    code: "PHYS101",
-    title: "Physics I",
-    titleZh: "物理學一",
-    professor: "Dr. Lin",
-    department: "Physics",
-    credits: 4,
-    rating: 4.0,
-    reviewCount: 3,
-    followed: false,
-    saveCount: 0,
-    year: 2023,
-    semester: 2,
-    tags: ["Physics", "Lab", "Mechanics"],
-    description:
-      "Mechanics, motion, forces, energy, and foundational physics models",
-  },
-];
-
-const courseReviews = {
-  1: [
-    {
-      id: "cs101-r1",
-      author: "student123",
-      rating: 5,
-      date: "2024-03-15",
-      language: "中文",
-      text: "Excellent course! Dr. Wang explains concepts very clearly.",
-      likes: 12,
-      liked: false,
-      replies: [
-        {
-          id: "cs101-r1-reply1",
-          author: "student789",
-          avatar: {
-            avatarAnimal: "monkey",
-            gender: "female",
-          },
-          date: "2024-03-16",
-          text: "Totally agree. The examples in class were really helpful.",
-          likes: 4,
-          liked: false,
-        },
-      ],
-    },
-    {
-      id: "cs101-r2",
-      author: "student456",
-      rating: 4,
-      date: "2024-03-10",
-      language: "English",
-      text: "Good content and helpful assignments, but sometimes moves too fast.",
-      likes: 5,
-      liked: false,
-      replies: [],
-    },
-  ],
-  2: [
-    {
-      id: "math201-r1",
-      author: "mathFan",
-      rating: 3,
-      date: "2024-04-02",
-      language: "English",
-      text: "Useful course, though the weekly workload is heavy.",
-      likes: 3,
-      liked: false,
-      replies: [],
-    },
-  ],
-  3: [
-    {
-      id: "eng102-r1",
-      author: "writer01",
-      rating: 5,
-      date: "2024-04-18",
-      language: "English",
-      text: "The writing feedback is practical and easy to apply.",
-      likes: 8,
-      liked: false,
-      replies: [],
-    },
-  ],
-  4: [
-    {
-      id: "phys101-r1",
-      author: "labStudent",
-      rating: 5,
-      date: "2023-12-04",
-      language: "中文",
-      text: "Lectures are organized and the labs make the concepts easier to understand.",
-      likes: 6,
-      liked: false,
-      replies: [],
-    },
-    {
-      id: "phys101-r2",
-      author: "scienceMajor",
-      rating: 4,
-      date: "2023-11-21",
-      language: "English",
-      text: "Clear examples and fair exams.",
-      likes: 4,
-      liked: false,
-      replies: [],
-    },
-    {
-      id: "phys101-r3",
-      author: "freshman",
-      rating: 3,
-      date: "2023-10-08",
-      language: "English",
-      text: "The pace can be challenging, but office hours help.",
-      likes: 2,
-      liked: false,
-      replies: [],
-    },
-  ],
-};
+const courseReviews = {};
 
 // Utility functions to generate SVG icons
 function starIcon(fillPercent = 100) {
@@ -382,11 +219,196 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
-  allCourses = JSON.parse(JSON.stringify(sampleCourses));
-  displayCourses(allCourses);
+  displayCourses([], "Loading courses...");
+  loadCoursesFromApi({ page: 1 });
+  loadFilterOptions();
   setupEventListeners();
   checkUserLogin();
 });
+
+function getCourseRequestParams(page = 1) {
+  const params = new URLSearchParams();
+  const searchBox = document.getElementById("searchBox");
+  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
+  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
+  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+
+  const searchTerm = searchBox ? searchBox.value.trim() : "";
+  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
+  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+  const minRating = ratingActiveBtn ? ratingActiveBtn.dataset.value : "";
+  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
+  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
+
+  params.set("page", String(page));
+  params.set("per_page", String(COURSES_PER_PAGE));
+  params.set("sort", sortBy);
+  if (searchTerm) params.set("q", searchTerm);
+  if (year) params.set("year", year);
+  if (department) params.set("department", department);
+  if (minRating) params.set("min_rating", minRating);
+  if (semester) params.set("semester", semester);
+  return params;
+}
+
+async function loadCoursesFromApi({ page = 1 } = {}) {
+  const requestToken = ++courseRequestToken;
+  displayCourses([], "Loading courses...", {
+    pagination: {
+      page,
+      perPage: COURSES_PER_PAGE,
+      total: 0,
+      totalPages: 1,
+    },
+  });
+
+  try {
+    const response = await fetch(`/api/courses?${getCourseRequestParams(page).toString()}`);
+    if (!response.ok) {
+      throw new Error(`Course API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data.courses)) {
+      throw new Error("Course API returned invalid data.");
+    }
+    if (requestToken !== courseRequestToken) return;
+
+    allCourses = data.courses;
+    displayCourses(data.courses, "No courses found.", {
+      pagination: data.pagination,
+    });
+    if (typeof generateDynamicTrending === "function") {
+      generateDynamicTrending();
+    }
+  } catch (error) {
+    if (requestToken !== courseRequestToken) return;
+    console.warn("Unable to load courses from the API.", error);
+    displayCourses([], "Unable to load courses.");
+  }
+}
+
+async function loadFilterOptions() {
+  try {
+    const response = await fetch("/api/filter-options");
+    if (!response.ok) return;
+
+    const options = await response.json();
+    renderFilterRow("yearFilterRow", "Year", options.years || [], (year) => String(year));
+    renderFilterRow(
+      "semesterFilterRow",
+      "Semester",
+      options.semesters || [],
+      (term) => (Number(term) === 3 ? "Summer Vacation" : `S${term}`),
+    );
+    renderDepartmentFilterRow(
+      "deptFilterRow",
+      "Department",
+      options.departments || [],
+      (department) => String(department),
+    );
+  } catch (error) {
+    console.warn("Using static filter options because the filter API is unavailable.", error);
+  }
+}
+
+function renderFilterRow(rowId, label, values, getLabel) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+
+  row.innerHTML = "";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "filter-label";
+  labelEl.textContent = `${label} \u2502`;
+  row.appendChild(labelEl);
+
+  const allButton = createFilterButton("All", "");
+  allButton.classList.add("active");
+  row.appendChild(allButton);
+
+  values.forEach((value) => {
+    const button = createFilterButton(getLabel(value), value);
+    row.appendChild(button);
+  });
+}
+
+function renderDepartmentFilterRow(rowId, label, values, getLabel) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+
+  const visibleCount = 5;
+  const visibleValues = values.slice(0, visibleCount);
+  const tuckedValues = values.slice(visibleCount);
+
+  row.classList.add("department-filter-row");
+  row.innerHTML = "";
+
+  const mainGroup = document.createElement("div");
+  mainGroup.className = "department-filter-main";
+  row.appendChild(mainGroup);
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "filter-label";
+  labelEl.textContent = `${label} \u2502`;
+  mainGroup.appendChild(labelEl);
+
+  const allButton = createFilterButton("All", "");
+  allButton.classList.add("active");
+  mainGroup.appendChild(allButton);
+
+  visibleValues.forEach((value) => {
+    mainGroup.appendChild(createFilterButton(getLabel(value), value));
+  });
+
+  if (!tuckedValues.length) return;
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "filter-more-btn";
+  toggleButton.setAttribute("aria-expanded", "false");
+  toggleButton.textContent = `More departments (${tuckedValues.length})`;
+  mainGroup.appendChild(toggleButton);
+
+  const drawer = document.createElement("div");
+  drawer.className = "department-filter-drawer";
+  drawer.hidden = true;
+  row.appendChild(drawer);
+
+  tuckedValues.forEach((value) => {
+    drawer.appendChild(createFilterButton(getLabel(value), value));
+  });
+
+  toggleButton.addEventListener("click", function () {
+    const isOpen = !drawer.hidden;
+    drawer.hidden = isOpen;
+    toggleButton.setAttribute("aria-expanded", String(!isOpen));
+    toggleButton.textContent = isOpen
+      ? `More departments (${tuckedValues.length})`
+      : "Hide departments";
+  });
+}
+
+function createFilterButton(label, value) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filter-tag-btn";
+  button.dataset.value = String(value);
+  button.textContent = label;
+  button.addEventListener("click", function () {
+    const row = button.closest(".filter-row");
+    if (row) {
+      row.querySelectorAll(".filter-tag-btn").forEach((btn) => {
+        btn.classList.remove("active");
+      });
+    }
+    button.classList.add("active");
+    filterCourses();
+  });
+  return button;
+}
 
 
 
@@ -432,21 +454,14 @@ function setupEventListeners() {
   safeAddListener("authForm", "submit", login);
   safeAddListener("avatarAnimal", "change", updateAvatarPreview);
   safeAddListener("gender", "change", updateAvatarPreview);
-  safeAddListener("searchBox", "input", filterCourses);
-
-  // 收藏頁面過濾器 (維持不變)
-  safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
-  safeAddListener("favoriteRatingFilter", "change", renderFavorites);
-  safeAddListener("favoriteSortFilter", "change", renderFavorites);
+  safeAddListener("searchBox", "input", queueCourseSearch);
 
   // ✅ 全新：補上個人資料 (Profile) 專屬的頭像切換事件
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
-  
-  safeAddListener("searchBox", "input", filterCourses);
 
   // 3. 橫向篩選按鈕列事件 (維持不變)
-  const filterRows = ['yearFilterRow', 'deptFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
+  const filterRows = ['ratingFilterRow'];
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
@@ -513,9 +528,21 @@ function setupEventListeners() {
 }
 
 // Display courses
-function displayCourses(courses) {
+function displayCourses(courses, emptyText = "No courses found.", options = {}) {
   const container = document.getElementById("coursesContainer");
-  renderCourseCards(container, courses, "No courses found.");
+  if (!container) return;
+
+  currentFilteredCourses = courses;
+  currentPagination = {
+    page: options.pagination?.page || 1,
+    perPage: options.pagination?.perPage || COURSES_PER_PAGE,
+    total: options.pagination?.total ?? courses.length,
+    totalPages: options.pagination?.totalPages || 1,
+  };
+  currentPage = currentPagination.page;
+
+  renderCourseCards(container, courses, emptyText);
+  renderPagination(currentPagination.total, currentPagination.totalPages);
 }
 
 function renderCourseCards(container, courses, emptyText) {
@@ -575,53 +602,86 @@ function renderCourseCards(container, courses, emptyText) {
   });
 }
 
-// Filter courses based on search and filters
-function filterCourses() {
-  const searchTerm = document.getElementById("searchBox").value.toLowerCase();
-  
-  // 【關鍵修正】精準抓取新版橫向按鈕身上亮燈（active）的 data-value 屬性
-  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
-  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
+function renderPagination(totalItems, totalPages) {
+  const pagination = document.getElementById("coursePagination");
+  if (!pagination) return;
 
-  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+  pagination.innerHTML = "";
+  pagination.hidden = totalItems <= currentPagination.perPage;
+  if (pagination.hidden) return;
 
-  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
-  const minRating = ratingActiveBtn && ratingActiveBtn.dataset.value
-    ? parseFloat(ratingActiveBtn.dataset.value)
-    : 0;
+  const summary = document.createElement("span");
+  summary.className = "pagination-summary";
+  const start = (currentPage - 1) * currentPagination.perPage + 1;
+  const end = Math.min(currentPage * currentPagination.perPage, totalItems);
+  summary.textContent = `${start}-${end} of ${totalItems}`;
+  pagination.appendChild(summary);
 
-  // ✅ 換成這兩行新的
-  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
-  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
+  pagination.appendChild(createPaginationButton("Prev", currentPage - 1, currentPage === 1));
 
-  // ✅ 在下面補上這兩行，抓取學期的值：
-  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
-  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
+  getVisiblePageNumbers(totalPages).forEach((page) => {
+    if (page === "...") {
+      const ellipsis = document.createElement("span");
+      ellipsis.className = "pagination-ellipsis";
+      ellipsis.textContent = "...";
+      pagination.appendChild(ellipsis);
+      return;
+    }
 
-  // 進行搜尋與標籤過濾
-  let filtered = allCourses.filter((course) => {
-    const matchSearch = course.code.toLowerCase().includes(searchTerm) ||
-                        course.title.toLowerCase().includes(searchTerm) ||
-                        course.titleZh.includes(searchTerm) ||
-                        course.professor.toLowerCase().includes(searchTerm);
-                        
-    // 因為按鈕抓出來的是字串，資料裡的 course.year 是數字，要 toString() 轉換
-    const matchYear = !year || course.year.toString() === year;
-    const matchDept = !department || course.department === department;
-    const matchRating = course.rating >= minRating;
-
-    // ✅ 補上這一行：如果沒有選學期就全過，有選的話就比對數字是否一樣
-    const matchSemester = !semester || course.semester.toString() === semester;
-
-    // ✅ 最後 return 的地方，也要把 matchSemester 加上去（用 && 連接）
-    return matchSearch && matchYear && matchDept && matchRating && matchSemester;
-  
+    const button = createPaginationButton(String(page), page, false);
+    button.classList.toggle("active", page === currentPage);
+    pagination.appendChild(button);
   });
 
-  // 執行排序邏輯
-  filtered = sortCourses(filtered, sortBy);
-  displayCourses(filtered);
+  pagination.appendChild(createPaginationButton("Next", currentPage + 1, currentPage === totalPages));
+}
+
+function createPaginationButton(label, page, disabled) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "pagination-btn";
+  button.textContent = label;
+  button.disabled = disabled;
+  button.addEventListener("click", function () {
+    loadCoursesFromApi({ page });
+    document.getElementById("coursesContainer")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+  return button;
+}
+
+function getVisiblePageNumbers(totalPages) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set([1, totalPages, currentPage]);
+  if (currentPage > 1) pages.add(currentPage - 1);
+  if (currentPage < totalPages) pages.add(currentPage + 1);
+
+  const sorted = [...pages].sort((a, b) => a - b);
+  const result = [];
+  sorted.forEach((page, index) => {
+    if (index > 0 && page - sorted[index - 1] > 1) {
+      result.push("...");
+    }
+    result.push(page);
+  });
+  return result;
+}
+
+// Filter courses based on search and filters
+function filterCourses(options = {}) {
+  loadCoursesFromApi({ page: options.page || 1 });
+}
+
+function queueCourseSearch() {
+  window.clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = window.setTimeout(() => {
+    filterCourses();
+  }, 250);
 }
 
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
@@ -638,28 +698,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 });
-
-// === 新版：主頁面課程排序邏輯 ===
-function sortCourses(courses, sortBy) {
-  const sorted = [...courses];
-
-  if (sortBy === "popular") {
-    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
-    sorted.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
-      return bPopularity - aPopularity;
-    });
-  } else if (sortBy === "latest") {
-    // Latest (最新開課): 依照年份與學期由新到舊排序
-    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
-  } else if (sortBy === "rating") {
-    // Ratings (評分最高): 依照星星數由高到低排序
-    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }
-
-  return sorted;
-}
 
 // Toggle follow
 function toggleFollow(courseId) {
@@ -679,7 +717,7 @@ function toggleFollow(courseId) {
     if (document.getElementById("favoritesPage").style.display === "block") {
       renderFavorites();
     } else {
-      filterCourses();
+      displayCourses(currentFilteredCourses);
     }
   }
 
@@ -762,6 +800,7 @@ function showFavorites() {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "none";
+  if (document.getElementById("coursePagination")) document.getElementById("coursePagination").hidden = true;
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
   renderFavorites();
@@ -773,7 +812,7 @@ function showBrowseCourses() {
   
   // 🟢 修正：回到主頁時，再次把選單顯示出來
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
-
+  
   document.getElementById("coursesContainer").style.display = "";
   filterCourses();
 }
@@ -1140,6 +1179,7 @@ function openCourseDetail(courseId) {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
   
   document.getElementById("coursesContainer").style.display = "none";
+  if (document.getElementById("coursePagination")) document.getElementById("coursePagination").hidden = true;
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1160,6 +1200,7 @@ function closeCourseDetail() {
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "";
+  displayCourses(currentFilteredCourses);
   currentCourseId = null;
 }
 
@@ -1623,15 +1664,6 @@ function submitReview(event) {
     replies: [],
   };
 
-  // Mock API call
-  console.log({
-    courseId: currentCourseId,
-    author: getDisplayName(currentUser),
-    rating: selectedRating,
-    text: reviewText,
-    language: "English",
-  });
-
   if (!courseReviews[currentCourseId]) {
     courseReviews[currentCourseId] = [];
   }
@@ -1708,60 +1740,6 @@ window.showAuthFields = function() {
   document.getElementById("authCoreSection").style.display = "block";
 }
 
-// 控制 Filter 面板的開關
-window.toggleFilterPanel = function() {
-  const panel = document.getElementById('filterPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-};
-
-// 綁定「標籤」的點擊事件
-document.addEventListener("DOMContentLoaded", function() {
-  const filterOptions = document.querySelectorAll('.filter-options');
-  
-  filterOptions.forEach(group => {
-    const pills = group.querySelectorAll('.filter-pill');
-    pills.forEach(pill => {
-      pill.addEventListener('click', (e) => {
-        // 把同一個 row 裡面的標籤全部取消 active
-        pills.forEach(p => p.classList.remove('active'));
-        // 幫剛點擊的標籤加上 active
-        e.target.classList.add('active');
-        // 觸發重新篩選
-        filterCourses();
-      });
-    });
-  });
-});
-
-// === 強效修正：確保頭像點擊絕對能開關選單 ===
-document.addEventListener("DOMContentLoaded", function() {
-  const userAvatar = document.getElementById("userAvatar");
-  
-  if (userAvatar) {
-    // 移除舊的監聽，重新綁定一個最直接、不會壞的點擊事件
-    userAvatar.onclick = function(e) {
-      e.stopPropagation(); // 阻止事件擴散
-      
-      // 如果還沒登入，就打開歡迎/登入視窗
-      if (!currentUser) {
-        if (typeof window.openLoginModal === "function") {
-          window.openLoginModal();
-        }
-        return;
-      }
-      
-      // 如果已經登入，就精準開關我們的 Google 風格卡片
-      const menuCard = document.getElementById("avatarMenuCard");
-      if (menuCard) {
-        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
-        menuCard.style.display = isHidden ? "block" : "none";
-      } else {
-        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
-      }
-    };
-  }
-});
-
 // === 控制 Filter 面板的開關與一鍵重置 ===
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
@@ -1802,7 +1780,7 @@ window.toggleFilterPanel = function() {
 
 // === 專屬的標籤重置小幫手 ===
 window.resetAllFilters = function() {
-  const filterRows = ['yearFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow', 'semesterFilterRow'];
+  const filterRows = ['yearFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
   
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
