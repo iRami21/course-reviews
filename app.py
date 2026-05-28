@@ -488,6 +488,75 @@ def create_app():
 			}
 		)
 
+	@app.route("/api/courses/<int:course_id>/reviews/<int:review_id>", methods=["PATCH"])
+	@login_required
+	def api_update_review(course_id, review_id):
+		course = Course.query.get_or_404(course_id)
+		review = (
+			Review.query.join(Section)
+			.filter(Review.review_id == review_id, Section.course_id == course.id)
+			.first_or_404()
+		)
+		if review.user_id != current_user.id:
+			return jsonify({"error": "You can only edit your own review."}), 403
+
+		payload = request.get_json(silent=True) or {}
+		new_text = str(payload.get("text", "")).strip()
+		if not new_text:
+			return jsonify({"error": "Review text is required."}), 400
+
+		review.text = new_text
+		db.session.commit()
+
+		reviews = reviews_for_course(course_id).all()
+		average_rating = (
+			sum(review_item.rating for review_item in reviews if review_item.rating) / len(reviews)
+			if reviews
+			else 0
+		)
+		current_user_id = current_user.id if current_user.is_authenticated else None
+		return jsonify(
+			{
+				"courseId": course.id,
+				"reviewCount": len(reviews),
+				"averageRating": round(float(average_rating), 1),
+				"review": serialize_review(review, current_user_id=current_user_id),
+				"reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
+			}
+		)
+
+	@app.route("/api/courses/<int:course_id>/reviews/<int:review_id>", methods=["DELETE"])
+	@login_required
+	def api_delete_review(course_id, review_id):
+		course = Course.query.get_or_404(course_id)
+		review = (
+			Review.query.join(Section)
+			.filter(Review.review_id == review_id, Section.course_id == course.id)
+			.first_or_404()
+		)
+		if review.user_id != current_user.id:
+			return jsonify({"error": "You can only delete your own review."}), 403
+
+		db.session.delete(review)
+		db.session.commit()
+
+		reviews = reviews_for_course(course_id).all()
+		average_rating = (
+			sum(review_item.rating for review_item in reviews if review_item.rating) / len(reviews)
+			if reviews
+			else 0
+		)
+		current_user_id = current_user.id if current_user.is_authenticated else None
+		return jsonify(
+			{
+				"courseId": course.id,
+				"reviewCount": len(reviews),
+				"averageRating": round(float(average_rating), 1),
+				"review": serialize_review(review, current_user_id=current_user_id),
+				"reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
+			}
+		)
+
 	@app.route("/api/courses/<int:course_id>/reviews/<int:review_id>/reactions", methods=["POST"])
 	@login_required
 	def api_react_to_review(course_id, review_id):
