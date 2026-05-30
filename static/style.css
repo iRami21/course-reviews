@@ -1924,21 +1924,31 @@ button {
   flex-direction: column;
   justify-content: center;
   min-height: 5.8rem;
+  min-width: 0;
 }
 
 .course-title {
   color: var(--text);
+  display: -webkit-box;
   font-size: 1.05rem;
   line-height: 1.35;
+  max-height: 2.7em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .course-title-zh {
   margin: 0.35rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .course-professor-name {
   display: inline-flex;
   align-self: flex-start;
+  max-width: 100%;
   margin-top: 0.45rem;
   padding-top: 0.35rem;
   border-top: 1px dashed rgba(91, 100, 114, 0.28);
@@ -1946,6 +1956,9 @@ button {
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .course-rating-inline {

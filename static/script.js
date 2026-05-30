@@ -378,6 +378,10 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function containsCjk(value) {
+  return /[\u3400-\u9fff]/.test(String(value || ""));
+}
+
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
     credentials: "same-origin",
@@ -905,6 +909,15 @@ function renderCourseCards(container, courses, emptyText) {
     const professorLine = showProfessor
       ? `<div class="course-professor-name">${escapeHtml(course.professor)}</div>`
       : "";
+    const titlePartsBelongTogether =
+      course.titleZh && !containsCjk(course.titleZh) && !containsCjk(course.title);
+    const displayTitle = titlePartsBelongTogether
+      ? `${course.title} ${course.titleZh}`
+      : course.title;
+    const subtitleLine =
+      course.titleZh && !titlePartsBelongTogether
+        ? `<div class="course-title-zh">${escapeHtml(course.titleZh)}</div>`
+        : "";
 
     courseCard.innerHTML = `
             <div class="course-card-header">
@@ -924,8 +937,8 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-title-section">
                 <div class="course-title-copy">
-                  <div class="course-title">${escapeHtml(course.title)}</div>
-                  <div class="course-title-zh">${escapeHtml(course.titleZh)}</div>
+                  <div class="course-title">${escapeHtml(displayTitle)}</div>
+                  ${subtitleLine}
                   ${professorLine}
                 </div>
                 <div class="course-rating-inline">${starIcon()}${course.rating.toFixed(1)}</div>

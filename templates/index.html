@@ -1,10 +1,10 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Course Review Platform</title>
-    <link rel="stylesheet" href="../static/style.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single+Ink:wght@100..900&family=Cause:wght@100..900&family=Chewy&family=Comic+Relief:wght@400;700&family=Delicious+Handrawn&family=Grandstander:ital,wght@0,100..900;1,100..900&family=Jersey+10&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Rampart+One&family=Roboto:ital,wght@0,100..900;1,100..900&family=Sniglet:wght@400;800&family=Space+Mono&display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
           <div class="nav-search-group">
             
             <div class="expandable-search" id="searchContainer" style="position: relative;">
-              <img src="../static/icons/search2.png" class="search-icon">
+              <img src="{{ url_for('static', filename='icons/search2.png') }}" class="search-icon">
               <input type="text" placeholder="Search courses..." class="search-box" id="searchBox" autocomplete="off" />
               
               <div class="search-dropdown-card" id="searchDropdownCard" style="display: none;">
@@ -456,6 +456,6 @@
       window.__SPORT_ACTIVITY_OPTIONS__ = {{ sport_activity_options | default([]) | tojson }};
       window.__CURRENT_USER__ = {{ current_user_json | default(none) | tojson }};
     </script>
-    <script src="../static/script.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
   </body>
 </html>
