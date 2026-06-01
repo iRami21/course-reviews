@@ -17,6 +17,7 @@ class User(UserMixin, db.Model):
     avatar_animal = db.Column(db.String(32), default="question")
     gender = db.Column(db.String(16), default="undisclosed")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    role = db.Column(db.String(16), default="student")
 
     reviews = db.relationship(
         "Review",
@@ -109,6 +110,6 @@ class Review(db.Model):
     language = db.Column(db.String(32), default="English")
     text = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    is_visible = db.Column(db.Boolean, default=True)
     course = db.relationship("Course", back_populates="reviews")
     author = db.relationship("User", back_populates="reviews")

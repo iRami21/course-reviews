@@ -846,6 +846,82 @@ def create_app():
 		db.session.commit()
 		return jsonify({"user": serialize_user(current_user)})
 
+	def is_admin():
+		return current_user.is_authenticated and getattr(current_user, 'role', 'student') == "admin"
+
+	@app.route("/admin/courses/add", methods=["POST"])
+	@login_required
+	def admin_add_course():
+		if not is_admin():
+			flash("權限不足：僅限管理員操作 (Access denied)")
+			return redirect(url_for("index"))
+
+		code = request.form.get("code")
+		title = request.form.get("title")
+		
+		if code and title:
+			new_course = Course(code=code, title=title)
+			db.session.add(new_course)
+			db.session.commit()
+			flash("Course added successfully.")
+		
+		return redirect(url_for("courses"))
+
+	@app.route("/admin/courses/<int:course_id>/edit", methods=["POST"])
+	@login_required
+	def admin_edit_course(course_id):
+		if not is_admin():
+			flash("權限不足：僅限管理員操作 (Access denied)")
+			return redirect(url_for("index"))
+
+		course = Course.query.get_or_404(course_id)
+		new_title = request.form.get("title")
+		if new_title:
+			course.title = new_title
+			
+		db.session.commit()
+		flash("Course updated successfully.")
+		return redirect(url_for("course_detail", course_id=course.id))
+
+	@app.route("/admin/courses/<int:course_id>/delete", methods=["POST"])
+	@login_required
+	def admin_delete_course(course_id):
+		if not is_admin():
+			flash("權限不足：僅限管理員操作 (Access denied)")
+			return redirect(url_for("index"))
+
+		course = Course.query.get_or_404(course_id)
+		db.session.delete(course)
+		db.session.commit()
+		flash("Course deleted successfully.")
+		return redirect(url_for("courses"))
+	
+	@app.route("/admin/reviews/<int:review_id>/hide", methods=["POST"])
+	@login_required
+	def admin_hide_review(review_id):
+		if not is_admin():
+			flash("權限不足：僅限管理員操作 (Access denied)")
+			return redirect(url_for("index"))
+
+		review = Review.query.get_or_404(review_id)
+		review.is_visible = False
+		db.session.commit()
+		flash("Review has been hidden.")
+		return redirect(request.referrer or url_for("index"))
+
+	@app.route("/admin/reviews/<int:review_id>/delete", methods=["POST"])
+	@login_required
+	def admin_delete_review(review_id):
+		if not is_admin():
+			flash("權限不足：僅限管理員操作 (Access denied)")
+			return redirect(url_for("index"))
+
+		review = Review.query.get_or_404(review_id)
+		db.session.delete(review)
+		db.session.commit()
+		flash("Review deleted permanently.")
+		return redirect(request.referrer or url_for("index"))
+	
 	@app.route("/profile")
 	@login_required
 	def profile():
