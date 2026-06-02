@@ -1745,7 +1745,7 @@ button {
   background-color: #fefaf0;
   color: #4f67b1;
   cursor: pointer;
-  font-family: "Sniglet", system-ui;
+  font-family: "Comic Relief", system-ui;
   font-size: 1rem;
   font-weight: 800;
   box-shadow: 0 4px 12px rgba(79, 103, 177, 0.1);
@@ -1758,7 +1758,7 @@ button {
 
 .pagination-btn:hover:not(:disabled),
 .pagination-btn.active {
-  background-color: #4f67b1;
+  background-color: #c74d30;
   color: #fefaf0;
   box-shadow: 0 10px 22px rgba(79, 103, 177, 0.22);
   transform: translateY(-1px);
@@ -1785,6 +1785,8 @@ button {
   flex-basis: 100%;
   margin-top: 0.25rem;
   text-align: center;
+  font-family: "Comic Relief", system-ui !important;
+  font-weight: 800 !important;
 }
 
 .page-kicker {
@@ -2244,21 +2246,24 @@ button {
 .user-avatar.avatar-male,
 .avatar-preview.avatar-male,
 .profile-avatar.avatar-male,
-.reply-avatar.avatar-male {
+.reply-avatar.avatar-male,
+.review-avatar.avatar-male {
   background-color: #dbeafe;
 }
 
 .user-avatar.avatar-female,
 .avatar-preview.avatar-female,
 .profile-avatar.avatar-female,
-.reply-avatar.avatar-female {
+.reply-avatar.avatar-female,
+.review-avatar.avatar-female {
   background-color: #fce7f3;
 }
 
 .user-avatar.avatar-undisclosed,
 .avatar-preview.avatar-undisclosed,
 .profile-avatar.avatar-undisclosed,
-.reply-avatar.avatar-undisclosed {
+.reply-avatar.avatar-undisclosed,
+.review-avatar.avatar-undisclosed {
   background-color: #ede9fe;
 }
 
@@ -3461,6 +3466,32 @@ button {
   background: #f9fafb;
 }
 
+.notification-tab-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.notification-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  color: #4b5563;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.notification-tab-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.notification-tab-btn:hover {
+  background: #eff6ff;
+}
+
 .notification-header h3 {
   font-family: "Sniglet", system-ui;
   font-size: 1.1rem;
@@ -3507,6 +3538,23 @@ button {
 
 .notification-item.unread:hover {
   background: #e0f2fe;
+}
+
+/* Activity styling tweaks */
+.notification-item {
+  border-left: 4px solid transparent;
+}
+.notification-item.unread {
+  border-left-color: #2563eb;
+}
+.notification-item .noti-content p {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+.notification-item .noti-content .noti-time {
+  font-size: 0.78rem;
+  color: #6b7280;
 }
 
 .noti-icon {
@@ -3579,4 +3627,16 @@ button {
     width: 2.75rem;
     height: 2.75rem;
   }
+}
+
+.reaction-summary-item {
+  border: 1px solid #ffffff;
+  border-radius: 999px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+.review-action-btn:not(.liked) .reaction-summary-item {
+  border-color: #ffffff;
+  background-color: #ffffff;
 }

@@ -14,7 +14,7 @@ from flask_login import (
 from sqlalchemy import and_, func, or_, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Favorite, Review, User, db
+from models import Course, Favorite, Notification, Review, ReviewReaction, ReviewReply, User, db
 
 
 DEPARTMENT_CATEGORY_ORDER = [
@@ -394,8 +394,29 @@ def create_app():
 			"description": course.description or "No description available.",
 		}
 
+	def summarize_reactions(reactions):
+		counts = {}
+		for reaction in reactions or []:
+			if not reaction.reaction:
+				continue
+			counts[reaction.reaction] = counts.get(reaction.reaction, 0) + 1
+		return [
+			{"reaction": reaction, "count": count}
+			for reaction, count in sorted(
+				counts.items(),
+				key=lambda item: (-item[1], item[0]),
+			)
+		]
+
 	def serialize_review(review):
 		author = review.author
+		current_reaction = None
+		if current_user.is_authenticated:
+			current_reaction = ReviewReaction.query.filter_by(
+				user_id=current_user.id,
+				review_id=review.id,
+				reply_id=None,
+			).first()
 		return {
 			"id": str(review.id),
 			"author": author.username if author else "Anonymous",
@@ -407,11 +428,69 @@ def create_app():
 			"date": review.created_at.strftime("%Y-%m-%d"),
 			"language": review.language or "English",
 			"text": review.text,
-			"likes": 0,
-			"liked": False,
-			"reaction": "",
+			"likes": len(review.reactions or []),
+			"liked": current_reaction is not None,
+			"reaction": current_reaction.reaction if current_reaction else "",
+			"reactionSummary": summarize_reactions(review.reactions),
+			"replies": [
+				serialize_reply(reply)
+				for reply in (review.replies or [])
+				if reply.is_visible
+			],
+		}
+
+	def serialize_reply(reply):
+		author = reply.author
+		current_reaction = None
+		if current_user.is_authenticated:
+			current_reaction = ReviewReaction.query.filter_by(
+				user_id=current_user.id,
+				review_id=None,
+				reply_id=reply.id,
+			).first()
+		return {
+			"id": str(reply.id),
+			"author": author.username if author else "Anonymous",
+			"avatar": {
+				"avatarAnimal": author.avatar_animal if author else "question",
+				"gender": author.gender if author else "undisclosed",
+			},
+			"date": reply.created_at.strftime("%Y-%m-%d"),
+			"text": reply.text,
+			"likes": len(reply.reactions or []),
+			"liked": current_reaction is not None,
+			"reaction": current_reaction.reaction if current_reaction else "",
+			"reactionSummary": summarize_reactions(reply.reactions),
 			"replies": [],
 		}
+
+	def save_notification(user_id, message, link="", category="notification"):
+		if not user_id or not message:
+			return None
+		notification = Notification(
+			user_id=user_id,
+			category=category,
+			message=message,
+			link=link or "",
+			is_read=False,
+		)
+		db.session.add(notification)
+		return notification
+
+	def serialize_notification(notification):
+		return {
+			"id": str(notification.id),
+			"message": notification.message,
+			"link": notification.link or "",
+			"category": notification.category,
+			"isRead": notification.is_read,
+			"createdAt": notification.created_at.strftime("%Y-%m-%d %H:%M"),
+		}
+
+	def get_user_notifications(limit=30):
+		if not current_user.is_authenticated:
+			return []
+		return Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).limit(limit).all()
 
 	def get_courses_payload(page=None, per_page=None):
 		page = max(1, int(page or request.args.get("page", 1)))
@@ -674,9 +753,6 @@ def create_app():
 		if rating < 1 or rating > 5:
 			return jsonify({"error": "Rating must be between 1 and 5."}), 400
 
-		if not comment:
-			return jsonify({"error": "Review text is required."}), 400
-
 		review = Review(
 			course_id=course.id,
 			user_id=current_user.id,
@@ -690,6 +766,133 @@ def create_app():
 			"review": serialize_review(review),
 			"course": serialize_course(course),
 		}), 201
+
+	@app.route("/api/reviews/<int:review_id>/reply", methods=["POST"])
+	@login_required
+	def api_submit_reply(review_id):
+		review = Review.query.get_or_404(review_id)
+		data = request.get_json(silent=True) or request.form
+		text_value = str(data.get("text", "")).strip()
+
+		if not text_value:
+			return jsonify({"error": "Reply text is required."}), 400
+
+		reply = ReviewReply(
+			review_id=review.id,
+			user_id=current_user.id,
+			text=text_value,
+		)
+		db.session.add(reply)
+		if review.author and review.author.id != current_user.id:
+			save_notification(
+				review.author.id,
+				f"{current_user.username} replied to your review on {review.course.title or review.course.code}.",
+				category="activity",
+			)
+		db.session.commit()
+		return jsonify({
+			"reply": serialize_reply(reply),
+			"review": serialize_review(review),
+		}), 201
+
+	def save_reaction(user_id, reaction, review_id=None, reply_id=None):
+		if not review_id and not reply_id:
+			return None
+
+		query = ReviewReaction.query.filter_by(user_id=user_id)
+		if review_id:
+			query = query.filter_by(review_id=review_id, reply_id=None)
+		else:
+			query = query.filter_by(review_id=None, reply_id=reply_id)
+
+		existing = query.first()
+		reaction_value = str(reaction or "").strip()
+		if not reaction_value:
+			if existing:
+				db.session.delete(existing)
+			return None
+
+		if existing:
+			existing.reaction = reaction_value
+			return existing
+
+		new_reaction = ReviewReaction(
+			user_id=user_id,
+			review_id=review_id,
+			reply_id=reply_id,
+			reaction=reaction_value,
+		)
+		db.session.add(new_reaction)
+		return new_reaction
+
+	@app.route("/api/reviews/<int:review_id>/reaction", methods=["POST"])
+	@login_required
+	def api_review_reaction(review_id):
+		review = Review.query.get_or_404(review_id)
+		data = request.get_json(silent=True) or request.form
+		reaction_value = str(data.get("reaction", "")).strip()
+		save_reaction(
+			current_user.id,
+			reaction_value,
+			review_id=review.id,
+		)
+		if review.author and review.author.id != current_user.id and reaction_value:
+			save_notification(
+				review.author.id,
+				f"{current_user.username} reacted {reaction_value} to your review on {review.course.title or review.course.code}.",
+				category="activity",
+			)
+		db.session.commit()
+		return jsonify({"review": serialize_review(review)})
+
+	@app.route("/api/replies/<int:reply_id>/reaction", methods=["POST"])
+	@login_required
+	def api_reply_reaction(reply_id):
+		reply = ReviewReply.query.get_or_404(reply_id)
+		data = request.get_json(silent=True) or request.form
+		reaction_value = str(data.get("reaction", "")).strip()
+		save_reaction(
+			current_user.id,
+			reaction_value,
+			reply_id=reply.id,
+		)
+		if reply.author and reply.author.id != current_user.id and reaction_value:
+			save_notification(
+				reply.author.id,
+				f"{current_user.username} reacted {reaction_value} to your comment.",
+				category="activity",
+			)
+		db.session.commit()
+		return jsonify({
+			"reply": serialize_reply(reply),
+			"review": serialize_review(reply.review),
+		})
+
+	@app.route("/api/notifications")
+	@login_required
+	def api_notifications():
+		notifications = get_user_notifications(limit=30)
+		unread_count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+		serialized = [serialize_notification(n) for n in notifications]
+		return jsonify({
+			"notifications": serialized,
+			"activity": serialized,
+			"unreadCount": unread_count,
+		})
+
+	@app.route("/api/notifications/mark_read", methods=["POST"])
+	@login_required
+	def api_mark_notifications_read():
+		data = request.get_json(silent=True) or request.form
+		ids = data.get("ids")
+		query = Notification.query.filter_by(user_id=current_user.id, is_read=False)
+		if isinstance(ids, list) and ids:
+			valid_ids = [int(item) for item in ids if str(item).isdigit()]
+			if valid_ids:
+				query = query.filter(Notification.id.in_(valid_ids))
+		updated = query.update({"is_read": True}, synchronize_session=False)
+		db.session.commit()
+		return jsonify({"marked": updated})
 
 	@app.route("/register", methods=["GET", "POST"])
 	def register():

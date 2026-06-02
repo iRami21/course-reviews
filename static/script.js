@@ -14,6 +14,12 @@ let coursePagination = {
   totalPages: 1,
 };
 let isLoadingCourses = false;
+let pendingCourseFetchPage = null;
+let notificationState = {
+  activeTab: "notifications",
+  items: [],
+  unreadCount: 0,
+};
 let departmentGroups = {};
 let sportActivityOptions = [];
 const DEPARTMENT_SUBFILTER_GROUPS = {
@@ -352,7 +358,9 @@ function renderReactionControl(item, reviewId, replyId = null) {
       </button>
       <div class="reaction-palette">
         <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '❤️')">❤️</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🙂')">🙂</button>
         <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😮')">😮</button>
+        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😭')">😭</button>
         <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '👍')">👍</button>
         <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🔥')">🔥</button>
       </div>
@@ -362,6 +370,7 @@ function renderReactionControl(item, reviewId, replyId = null) {
 
 function replyIcon() {
   return `
+
     <svg class="reply-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="m9 17-5-5 5-5"></path>
       <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
@@ -396,6 +405,82 @@ async function apiRequest(url, options = {}) {
     throw new Error(data.error || "Request failed.");
   }
   return data;
+}
+
+function buildNotificationItem(item) {
+  const statusClass = item.isRead ? "" : "unread";
+  const icon = item.category === "activity" ? "💬" : "🔔";
+  const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
+  return `
+    <div class="notification-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
+      <div class="noti-icon">${icon}</div>
+      <div class="noti-content">
+        <p>${escapeHtml(item.message)}</p>
+        <span class="noti-time">${escapeHtml(item.createdAt)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderNotificationList() {
+  const list = document.getElementById("notificationList");
+  const empty = document.getElementById("notificationEmpty");
+  if (!list || !empty) return;
+
+  const items = notificationState.items || [];
+  list.innerHTML = items.length ? items.map(buildNotificationItem).join("") : "";
+  empty.style.display = items.length ? "none" : "block";
+}
+
+function updateNotificationBadge() {
+  const badge = document.getElementById("notiBadge");
+  if (!badge) return;
+  badge.textContent = notificationState.unreadCount || "";
+  badge.style.display = notificationState.unreadCount ? "flex" : "none";
+}
+
+function switchNotificationTab(tab) {
+  notificationState.activeTab = tab;
+  document.querySelectorAll(".notification-tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+  renderNotificationList();
+}
+
+async function refreshNotifications() {
+  if (!currentUser) return;
+  try {
+    const data = await apiRequest("/api/notifications");
+    notificationState.items = data.notifications || [];
+    notificationState.unreadCount = data.unreadCount || 0;
+    updateNotificationBadge();
+    if (document.getElementById("notificationDropdown")?.style.display === "block") {
+      renderNotificationList();
+    }
+  } catch (error) {
+    console.warn("Failed to refresh notifications:", error);
+  }
+}
+
+async function markAllAsRead() {
+  if (!currentUser) return;
+  try {
+    await apiRequest("/api/notifications/mark_read", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await refreshNotifications();
+  } catch (error) {
+    console.warn("Failed to mark notifications read:", error);
+  }
+}
+
+function startNotificationPolling() {
+  setInterval(() => {
+    if (currentUser) {
+      refreshNotifications();
+    }
+  }, 15000);
 }
 
 function renderExpandableText(text, key, className) {
@@ -448,6 +533,8 @@ document.addEventListener("DOMContentLoaded", function () {
   displayCourses(allCourses);
   setupEventListeners();
   checkUserLogin();
+  refreshNotifications();
+  startNotificationPolling();
 });
 
 function getDepartmentsForCategory(category) {
@@ -650,6 +737,15 @@ function setupEventListeners() {
   // 2. 精準綁定你 HTML 裡面原本就有的選單按鈕 ID
   safeAddListener("profileMenuBtn", "click", openProfileModal);
   safeAddListener("favoritesMenuBtn", "click", showFavorites);
+  safeAddListener("activityMenuBtn", "click", function () {
+    // open notification dropdown and show activity tab
+    const notiDropdown = document.getElementById("notificationDropdown");
+    if (notiDropdown) {
+      notiDropdown.style.display = "block";
+    }
+    switchNotificationTab("activity");
+    refreshNotifications();
+  });
   safeAddListener("signOutMenuBtn", "click", logout);
   
   safeAddListener("loginBtn", "click", openLoginModal);
@@ -730,7 +826,11 @@ function setupEventListeners() {
     // 點鈴鐺開關卡片
     notiBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      notiDropdown.style.display = notiDropdown.style.display === "none" ? "block" : "none";
+      const isOpen = notiDropdown.style.display === "block";
+      notiDropdown.style.display = isOpen ? "none" : "block";
+      if (!isOpen) {
+        refreshNotifications();
+      }
     });
 
     // 點擊網頁其他地方收起卡片
@@ -739,7 +839,21 @@ function setupEventListeners() {
         notiDropdown.style.display = "none";
       }
     });
+    notiDropdown.addEventListener("click", function (e) {
+      const item = e.target.closest(".notification-item");
+      if (item) {
+        const link = item.dataset.link;
+        if (link) {
+          window.location.href = link;
+        }
+      }
+    });
   }
+    document.querySelectorAll(".notification-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", function () {
+        switchNotificationTab(this.dataset.tab);
+      });
+    });
 }
 
 // Display courses
@@ -757,19 +871,20 @@ function getActiveCourseFilters() {
   const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
-  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+  const sortActiveBtn = document.querySelector("#quickSortMenu .sort-text-btn.active");
   const selectedDepartmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
   const selectedSubDepartment = deptSubFilterSelect?.value || "";
   const selectedSportActivity = selectedDepartmentGroup === "運動健康" ? selectedSubDepartment : "";
+  const selectedDepartment = selectedDepartmentGroup && selectedDepartmentGroup !== "運動健康"
+    ? selectedSubDepartment
+    : deptActiveBtn?.dataset.value || "";
 
   return {
     q: searchTerm,
     year: yearActiveBtn?.dataset.value || "",
     department_category: deptCategoryActiveBtn?.dataset.value || "",
     department_group: selectedDepartmentGroup,
-    department: selectedDepartmentGroup && selectedDepartmentGroup !== "運動健康"
-      ? selectedSubDepartment
-      : deptActiveBtn?.dataset.value || "",
+    department: selectedDepartment,
     sport_activity: selectedSportActivity,
     min_rating: ratingActiveBtn?.dataset.value || "",
     semester: semActiveBtn?.dataset.value || "",
@@ -963,67 +1078,7 @@ function renderCourseCards(container, courses, emptyText) {
 
 // Filter courses based on search and filters
 function filterCourses() {
-  if (window.__COURSE_PAGINATION__) {
-    fetchCoursesPage(1);
-    return;
-  }
-
-  const searchTerm = document.getElementById("searchBox").value.toLowerCase();
-  
-  // 【關鍵修正】精準抓取新版橫向按鈕身上亮燈（active）的 data-value 屬性
-  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
-  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
-
-  const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
-  const departmentCategory = deptCategoryActiveBtn ? deptCategoryActiveBtn.dataset.value : "";
-
-  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
-  const departmentGroup = deptSubFilterSelect?.dataset.group || (deptActiveBtn ? (deptActiveBtn.dataset.group || "") : "");
-  const sportActivity = departmentGroup === "運動健康" ? (deptSubFilterSelect?.value || "") : "";
-  const department = departmentGroup && departmentGroup !== "運動健康"
-    ? (deptSubFilterSelect?.value || "")
-    : (deptActiveBtn ? deptActiveBtn.dataset.value : "");
-
-  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
-  const minRating = ratingActiveBtn && ratingActiveBtn.dataset.value
-    ? parseFloat(ratingActiveBtn.dataset.value)
-    : 0;
-
-  // ✅ 換成這兩行新的
-  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
-  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
-
-  // ✅ 在下面補上這兩行，抓取學期的值：
-  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
-  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
-
-  // 進行搜尋與標籤過濾
-  let filtered = allCourses.filter((course) => {
-    const matchSearch = course.code.toLowerCase().includes(searchTerm) ||
-                        course.title.toLowerCase().includes(searchTerm) ||
-                        course.titleZh.includes(searchTerm) ||
-                        (course.professor || "").toLowerCase().includes(searchTerm);
-                        
-    // 因為按鈕抓出來的是字串，資料裡的 course.year 是數字，要 toString() 轉換
-    const matchYear = !year || course.year.toString() === year;
-    const matchCategory = !departmentCategory || getDepartmentCategory(course.department) === departmentCategory;
-    const matchDepartmentGroup = !departmentGroup || getDepartmentsForGroup(departmentGroup).includes(course.department);
-    const matchDept = !department || course.department === department;
-    const matchSportActivity = !sportActivity || course.titleZh.endsWith(`：${sportActivity}`) || course.titleZh.endsWith(`:${sportActivity}`);
-    const matchRating = course.rating >= minRating;
-
-    // ✅ 補上這一行：如果沒有選學期就全過，有選的話就比對數字是否一樣
-    const matchSemester = !semester || course.semester.toString() === semester;
-
-    // ✅ 最後 return 的地方，也要把 matchSemester 加上去（用 && 連接）
-    return matchSearch && matchYear && matchCategory && matchDepartmentGroup && matchDept && matchSportActivity && matchRating && matchSemester;
-  
-  });
-
-  // 執行排序邏輯
-  filtered = sortCourses(filtered, sortBy);
-  displayCourses(filtered);
+  fetchCoursesPage(1);
 }
 
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
@@ -1462,6 +1517,12 @@ async function login(event) {
 
     currentUser = result.user;
     checkUserLogin();
+    // refresh courses so `followed` flags come from backend for this user
+    try {
+      await fetchCoursesPage(1);
+    } catch (e) {
+      console.warn('Failed to refresh courses after login', e);
+    }
     document.getElementById("authForm").reset();
     switchAuthTab("login");
   } catch (error) {
@@ -1477,13 +1538,15 @@ async function logout() {
   }
   currentUser = null;
   updateAuthUI();
-
+  // Immediately switch UI to logged-out state to avoid flicker
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
   document.getElementById("loginModal").style.display = "block";
   document.getElementById("loginModal").classList.add("login-page-overlay");
   document.getElementById("welcomeStartSection").style.display = "block";
   document.getElementById("authCoreSection").style.display = "none";
+  // Refresh courses in background (non-blocking)
+  fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));
 }
 
 async function checkUserLogin() {
@@ -1980,6 +2043,196 @@ function submitReply(reviewId) {
 
   expandedReplyGroups.add(`${reviewId}:root`);
   loadReviews(currentCourseId);
+}
+
+const DEFAULT_REACTION = "❤️";
+const REACTION_OPTIONS = [
+  "❤️",
+  "🙂",
+  "👍",
+  "😮",
+  "😭",
+  "🔥",
+];
+
+function getReactionSummary(item) {
+  if (Array.isArray(item?.reactionSummary) && item.reactionSummary.length > 0) {
+    return item.reactionSummary;
+  }
+
+  if ((item?.likes ?? 0) > 0 && item?.reaction) {
+    return [{ reaction: item.reaction, count: item.likes }];
+  }
+
+  return [];
+}
+
+function renderReactionStack(item) {
+  const summary = getReactionSummary(item);
+  if (summary.length === 0) {
+    return reactionIcon(item?.liked ? DEFAULT_REACTION : "");
+  }
+
+  return summary
+    .slice(0, 3)
+    .map(
+      (entry) =>
+        `<span class="emoji-item reaction-summary-item" title="${entry.count}">${entry.reaction}</span>`,
+    )
+    .join("");
+}
+
+function renderReactionControl(item, reviewId, replyId = null) {
+  const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
+  const paletteButtons = REACTION_OPTIONS.map(
+    (reaction) =>
+      `<button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
+  ).join("");
+
+  return `
+    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
+      <button
+        class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
+        onclick="handleQuickLike(event, ${targetArgs})"
+        type="button"
+      >
+        <span class="emoji-stack">
+          ${renderReactionStack(item)}
+        </span>
+        <span class="like-count-num">${item.likes ?? 0}</span>
+      </button>
+      <div class="reaction-palette">
+        ${paletteButtons}
+      </div>
+    </div>
+  `;
+}
+
+function replaceReviewInState(review) {
+  if (!review || !currentCourseId) return;
+  const reviews = getReviewsForCourse(currentCourseId);
+  const index = reviews.findIndex((item) => String(item.id) === String(review.id));
+  if (index >= 0) {
+    reviews[index] = review;
+  }
+}
+
+function replaceReplyInState(reviewId, reply) {
+  if (!reply) return;
+  const review = findReviewById(String(reviewId));
+  if (!review) return;
+  if (!review.replies) {
+    review.replies = [];
+  }
+  const index = review.replies.findIndex((item) => String(item.id) === String(reply.id));
+  if (index >= 0) {
+    review.replies[index] = reply;
+  } else {
+    review.replies.push(reply);
+  }
+}
+
+async function persistReaction(reviewId, reaction, replyId = null) {
+  const endpoint = replyId
+    ? `/api/replies/${replyId}/reaction`
+    : `/api/reviews/${reviewId}/reaction`;
+  const result = await apiRequest(endpoint, {
+    method: "POST",
+    body: JSON.stringify({ reaction }),
+  });
+
+  if (result.review) {
+    replaceReviewInState(result.review);
+  }
+  if (result.reply) {
+    replaceReplyInState(reviewId, result.reply);
+  }
+}
+
+async function applyReaction(reviewId, reaction = "❤️", replyId = null) {
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
+  }
+
+  const target = findReactionTarget(String(reviewId), replyId ? String(replyId) : null);
+  const shouldClear = target?.liked && target.reaction === reaction;
+
+  try {
+    await persistReaction(reviewId, shouldClear ? "" : reaction, replyId);
+    loadReviews(currentCourseId);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function handleQuickLike(event, reviewId, replyId = null) {
+  event.stopPropagation();
+
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
+  }
+
+  const target = findReactionTarget(String(reviewId), replyId ? String(replyId) : null);
+  const shouldClear = target?.liked && (target.reaction || "\u2764\uFE0F") === "\u2764\uFE0F";
+
+  try {
+    await persistReaction(reviewId, shouldClear ? "" : "\u2764\uFE0F", replyId);
+    loadReviews(currentCourseId);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function selectReviewEmoji(
+  event,
+  reviewId,
+  replyIdOrReaction,
+  maybeReaction = null,
+) {
+  event.stopPropagation();
+
+  const hasReplyId = maybeReaction !== null;
+  const replyId = hasReplyId ? replyIdOrReaction : null;
+  const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
+  applyReaction(reviewId, reaction, replyId);
+}
+
+async function submitReply(reviewId) {
+  if (!currentUser) {
+    alert("Please login to reply.");
+    openLoginModal();
+    return;
+  }
+
+  const inputId = `replyInput-${reviewId}`;
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+
+    if (result.review) {
+      replaceReviewInState(result.review);
+    } else if (result.reply) {
+      replaceReplyInState(reviewId, result.reply);
+    }
+
+    input.value = "";
+    expandedReplyGroups.add(`${reviewId}:root`);
+    loadReviews(currentCourseId);
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 // Review form modal

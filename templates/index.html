@@ -46,27 +46,13 @@
 
               <div class="notification-dropdown-card" id="notificationDropdown" style="display: none;">
                 <div class="notification-header">
-                  <h3>Notifications</h3>
+                  <div class="notification-tab-group">
+                  </div>
                   <button type="button" class="mark-read-btn" onclick="markAllAsRead()">Mark all as read</button>
                 </div>
                 
-                <div class="notification-list">
-                  <div class="notification-item unread">
-                    <div class="noti-icon">📚</div>
-                    <div class="noti-content">
-                      <p>There is 1 new review on your saved course <strong>Calculus II</strong>!</p>
-                      <span class="noti-time">10 minutes ago</span>
-                    </div>
-                  </div>
-                  
-                  <div class="notification-item unread">
-                    <div class="noti-icon">💬</div>
-                    <div class="noti-content">
-                      <p>Someone replied to your review in <strong>Introduction to Computer Science</strong>!</p>
-                      <span class="noti-time">2 hours ago</span>
-                    </div>
-                  </div>
-                </div>
+                <div class="notification-list" id="notificationList"></div>
+                <div class="notification-empty" id="notificationEmpty" style="display: flex !important; justify-content: center;">No notifications yet.</div>
               </div>
             </div>
 
@@ -83,6 +69,7 @@
             <div class="user-dropdown" id="userDropdown" hidden>
               <button type="button" id="profileMenuBtn">Profile</button>
               <button type="button" id="favoritesMenuBtn">Favorite</button>
+              <button type="button" id="activityMenuBtn">Activity</button>
               <button type="button" id="signOutMenuBtn">Sign out</button>
             </div>
           </div>
@@ -416,8 +403,7 @@
               <label for="reviewText">Review:</label>
               <textarea
                 id="reviewText"
-                placeholder="Write your review..."
-                required
+                placeholder="Write your review... (optional)"
               ></textarea>
             </div>
 

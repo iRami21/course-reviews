@@ -24,10 +24,26 @@ class User(UserMixin, db.Model):
         back_populates="author",
         cascade="all, delete-orphan",
     )
+    replies = db.relationship(
+        "ReviewReply",
+        back_populates="author",
+        cascade="all, delete-orphan",
+    )
+    reactions = db.relationship(
+        "ReviewReaction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     favorites = db.relationship(
         "Favorite",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    notifications = db.relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="Notification.created_at.desc()",
     )
 
 
@@ -113,3 +129,92 @@ class Review(db.Model):
     is_visible = db.Column(db.Boolean, default=True)
     course = db.relationship("Course", back_populates="reviews")
     author = db.relationship("User", back_populates="reviews")
+    replies = db.relationship(
+        "ReviewReply",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="ReviewReply.created_at.asc()",
+    )
+    reactions = db.relationship(
+        "ReviewReaction",
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReviewReply(db.Model):
+    __tablename__ = "review_replies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    review_id = db.Column(
+        db.Integer,
+        db.ForeignKey("reviews.id"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_visible = db.Column(db.Boolean, default=True)
+
+    review = db.relationship("Review", back_populates="replies")
+    author = db.relationship("User", back_populates="replies")
+    reactions = db.relationship(
+        "ReviewReaction",
+        back_populates="reply",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReviewReaction(db.Model):
+    __tablename__ = "review_reactions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    review_id = db.Column(
+        db.Integer,
+        db.ForeignKey("reviews.id"),
+        nullable=True,
+        index=True,
+    )
+    reply_id = db.Column(
+        db.Integer,
+        db.ForeignKey("review_replies.id"),
+        nullable=True,
+        index=True,
+    )
+    reaction = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", back_populates="reactions")
+    review = db.relationship("Review", back_populates="reactions")
+    reply = db.relationship("ReviewReply", back_populates="reactions")
+
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    category = db.Column(db.String(32), nullable=False, default="notification")
+    message = db.Column(db.Text, nullable=False)
+    link = db.Column(db.String(255), default="")
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", back_populates="notifications")
