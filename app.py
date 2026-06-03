@@ -372,7 +372,7 @@ def create_app():
 		}
 
 	def serialize_course(course, favorite_counts=None, favorite_ids=None):
-		reviews = course.reviews or []
+		reviews = [review for review in (course.reviews or []) if review.is_visible]
 		average_rating = (
 			sum(review.rating for review in reviews) / len(reviews)
 			if reviews
@@ -526,20 +526,54 @@ def create_app():
 
 		avg_rating = func.coalesce(func.avg(Review.rating), 0)
 		review_count = func.count(Review.id)
-		courses_query = Course.query.outerjoin(Review).group_by(Course.id)
+		courses_query = Course.query.outerjoin(
+			Review,
+			and_(Review.course_id == Course.id, Review.is_visible.is_(True)),
+		).group_by(Course.id)
 
 		filters = []
 		if query_text:
-			pattern = f"%{query_text}%"
-			filters.append(
-				or_(
-					Course.title.ilike(pattern),
-					Course.title_zh.ilike(pattern),
-					Course.code.ilike(pattern),
-					Course.department.ilike(pattern),
-					Course.professor.ilike(pattern),
-				)
-			)
+			search_filters = []
+			text_terms = []
+			tokens = [token for token in re.split(r"\s+", query_text) if token]
+
+			if query_text in {"必修", "選修"}:
+				search_filters.append(Course.requirement == query_text)
+			elif query_text == "全英授課":
+				search_filters.append(Course.english_taught.is_(True))
+			elif re.fullmatch(r"\d+年級", query_text):
+				search_filters.append(Course.grade == query_text.replace("年級", ""))
+			else:
+				for token in tokens:
+					lower = token.lower()
+					if lower.isdigit():
+						search_filters.append(Course.year == int(lower))
+						continue
+
+					if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
+						search_filters.append(Course.semester == 1)
+						continue
+					if lower in {"s2", "sem2", "semester2", "semester-2", "semester_2"}:
+						search_filters.append(Course.semester == 2)
+						continue
+
+					text_terms.append(token)
+
+				for term in text_terms:
+					pattern = f"%{term}%"
+					search_filters.append(
+						or_(
+							Course.title.ilike(pattern),
+							Course.title_zh.ilike(pattern),
+							Course.code.ilike(pattern),
+							Course.department.ilike(pattern),
+							Course.professor.ilike(pattern),
+							Course.requirement.ilike(pattern),
+						)
+					)
+
+			if search_filters:
+				filters.extend(search_filters)
 		if year:
 			filters.append(Course.year == int(year))
 		if department_category:
@@ -592,7 +626,10 @@ def create_app():
 		favorite_ids = set()
 		if course_ids:
 			for review in (
-				Review.query.filter(Review.course_id.in_(course_ids))
+				Review.query.filter(
+					Review.course_id.in_(course_ids),
+					Review.is_visible.is_(True),
+				)
 				.order_by(Review.created_at.desc())
 				.all()
 			):
@@ -712,7 +749,7 @@ def create_app():
 	def course_detail(course_id):
 		course = Course.query.get_or_404(course_id)
 		reviews = (
-			Review.query.filter_by(course_id=course_id)
+			Review.query.filter_by(course_id=course_id, is_visible=True)
 			.order_by(Review.created_at.desc())
 			.all()
 		)
@@ -786,10 +823,57 @@ def create_app():
 			"course": serialize_course(course),
 		}), 201
 
+	def can_modify_review(review):
+		return (
+			current_user.is_authenticated
+			and (review.user_id == current_user.id or is_admin())
+		)
+
+	@app.route("/api/reviews/<int:review_id>", methods=["PATCH"])
+	@login_required
+	def api_update_review(review_id):
+		review = Review.query.get_or_404(review_id)
+		if not review.is_visible:
+			return jsonify({"error": "Review not found."}), 404
+		if not can_modify_review(review):
+			return jsonify({"error": "You can only edit your own reviews."}), 403
+
+		data = request.get_json(silent=True) or request.form
+		text_value = str(data.get("text", data.get("comment", ""))).strip()
+		if not text_value:
+			return jsonify({"error": "Review text is required."}), 400
+
+		review.text = text_value
+		db.session.commit()
+		return jsonify({
+			"review": serialize_review(review),
+			"course": serialize_course(review.course),
+		})
+
+	@app.route("/api/reviews/<int:review_id>", methods=["DELETE"])
+	@login_required
+	def api_delete_review(review_id):
+		review = Review.query.get_or_404(review_id)
+		if not review.is_visible:
+			return jsonify({"ok": True})
+		if not can_modify_review(review):
+			return jsonify({"error": "You can only delete your own reviews."}), 403
+
+		course = review.course
+		review.is_visible = False
+		db.session.commit()
+		return jsonify({
+			"ok": True,
+			"reviewId": str(review.id),
+			"course": serialize_course(course),
+		})
+
 	@app.route("/api/reviews/<int:review_id>/reply", methods=["POST"])
 	@login_required
 	def api_submit_reply(review_id):
 		review = Review.query.get_or_404(review_id)
+		if not review.is_visible:
+			return jsonify({"error": "Review not found."}), 404
 		data = request.get_json(silent=True) or request.form
 		text_value = str(data.get("text", "")).strip()
 
@@ -848,6 +932,8 @@ def create_app():
 	@login_required
 	def api_review_reaction(review_id):
 		review = Review.query.get_or_404(review_id)
+		if not review.is_visible:
+			return jsonify({"error": "Review not found."}), 404
 		data = request.get_json(silent=True) or request.form
 		reaction_value = str(data.get("reaction", "")).strip()
 		save_reaction(

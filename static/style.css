@@ -2020,6 +2020,17 @@ button {
   min-width: 0;
 }
 
+.course-tag-btn {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.course-tag-btn:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+
 .course-follow-btn {
   display: inline-flex;
   align-items: center;
@@ -3007,6 +3018,20 @@ button {
   margin-bottom: 1.9rem;
 }
 
+.detail-course-code,
+.detail-course-term {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.detail-course-code:hover,
+.detail-course-term:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
 .detail-course-code {
   background-color: #ffcf76 !important;
   color: #891d1a !important;
@@ -3107,12 +3132,24 @@ button {
   align-items: center;
   min-height: 2.5rem;
   padding: 0.5rem 1rem;
+  border: 0;
   border-radius: 999px;
   background-color: #f0f0f1;
   color: #2b2f44;
+  font-family: inherit;
   font-size: 1rem;
   font-weight: 850;
   line-height: 1;
+}
+
+.detail-tag-btn {
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+
+.detail-tag-btn:hover {
+  background-color: #ffcf76;
+  transform: translateY(-1px);
 }
 
 .detail-social-row {

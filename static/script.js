@@ -1037,8 +1037,8 @@ function renderCourseCards(container, courses, emptyText) {
     courseCard.innerHTML = `
             <div class="course-card-header">
                 <div class="course-card-tags">
-                  <div class="course-code">${course.code}</div>
-                  <div class="course-semester">${semesterText}</div>
+                  ${tagSearchButton(course.code, "course-code course-tag-btn")}
+                  ${tagSearchButton(semesterText, "course-semester course-tag-btn")}
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
@@ -1079,6 +1079,25 @@ function renderCourseCards(container, courses, emptyText) {
 // Filter courses based on search and filters
 function filterCourses() {
   fetchCoursesPage(1);
+}
+
+function searchByTag(tag) {
+  const searchBox = document.getElementById("searchBox");
+  const value = String(tag || "").trim();
+  if (!searchBox || !value) return;
+
+  searchBox.value = value;
+  if (document.body.classList.contains("detail-open")) {
+    closeCourseDetail();
+  }
+  filterCourses();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function tagSearchButton(tag, className) {
+  const safeTag = escapeHtml(tag);
+  const encodedTag = encodeURIComponent(String(tag || ""));
+  return `<button type="button" class="${className}" onclick="event.stopPropagation(); searchByTag(decodeURIComponent('${encodedTag}'))">${safeTag}</button>`;
 }
 
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
@@ -1182,7 +1201,7 @@ function renderDetailTags(course) {
     ? course.tags
     : [course.department, `${course.year} S${course.semester}`];
   tagList.innerHTML = tags
-    .map((tag) => `<span class="detail-tag-chip">${escapeHtml(tag)}</span>`)
+    .map((tag) => tagSearchButton(tag, "detail-tag-chip detail-tag-btn"))
     .join("");
 }
 
@@ -1609,8 +1628,19 @@ function openCourseDetail(courseId) {
   const reviews = getReviewsForCourse(courseId);
   const averageRating = getAverageRating(reviews, course.rating);
 
-  document.getElementById("detailCourseCode").textContent = course.code;
-  document.getElementById("detailCourseTerm").textContent = `${course.year} S${course.semester}`;
+  const detailCourseCode = document.getElementById("detailCourseCode");
+  const detailCourseTerm = document.getElementById("detailCourseTerm");
+  const detailTermText = `${course.year} S${course.semester}`;
+  detailCourseCode.textContent = course.code;
+  detailCourseCode.onclick = (event) => {
+    event.stopPropagation();
+    searchByTag(course.code);
+  };
+  detailCourseTerm.textContent = detailTermText;
+  detailCourseTerm.onclick = (event) => {
+    event.stopPropagation();
+    searchByTag(detailTermText);
+  };
   document.getElementById("detailCourseTitle").textContent = course.title;
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
@@ -2123,7 +2153,32 @@ function replaceReviewInState(review) {
   const index = reviews.findIndex((item) => String(item.id) === String(review.id));
   if (index >= 0) {
     reviews[index] = review;
+  } else {
+    reviews.unshift(review);
   }
+}
+
+function replaceCourseInState(course) {
+  if (!course) return;
+  const index = allCourses.findIndex((item) => String(item.id) === String(course.id));
+  if (index >= 0) {
+    allCourses[index] = { ...allCourses[index], ...course };
+  }
+}
+
+function refreshDetailRatingSummary(courseId) {
+  const course = allCourses.find((item) => String(item.id) === String(courseId));
+  const reviews = getReviewsForCourse(courseId);
+  const averageRating = getAverageRating(reviews, course?.rating || 0);
+
+  const value = document.getElementById("detailRatingValue");
+  const stars = document.getElementById("detailStars");
+  const count = document.getElementById("detailReviewCount");
+  if (value) value.textContent = averageRating.toFixed(1);
+  if (stars) stars.innerHTML = generateStars(averageRating);
+  if (count) count.textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
+  renderRatingBreakdown(reviews);
+  updateDetailSocialStats(courseId);
 }
 
 function replaceReplyInState(reviewId, reply) {
@@ -2517,33 +2572,25 @@ window.resetAllFilters = function() {
 
 
 // === 刪除評論邏輯 ===
-window.deleteReview = function(reviewId) {
+window.deleteReview = async function(reviewId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-  const reviews = courseReviews[currentCourseId];
-  if (!reviews) return;
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}`, {
+      method: "DELETE",
+    });
 
-  // 找出該則評論在陣列中的位置並刪除
-  const index = reviews.findIndex(r => r.id === reviewId);
-  if (index !== -1) {
-    reviews.splice(index, 1); // 刪除資料
-
-    // 重新計算這堂課的平均星星數與評論總數
-    const course = allCourses.find(c => c.id === currentCourseId);
-    if (course) {
-      course.reviewCount = reviews.length;
-      course.rating = getAverageRating(reviews, course.rating);
+    const reviews = courseReviews[currentCourseId];
+    if (reviews) {
+      const index = reviews.findIndex((review) => String(review.id) === String(reviewId));
+      if (index !== -1) reviews.splice(index, 1);
     }
+    if (result.course) replaceCourseInState(result.course);
 
-    // 重新渲染畫面
     loadReviews(currentCourseId);
-    
-    // 如果有打開上方課程詳細卡片，也一併更新右上角的星星數字
-    if (document.getElementById("courseDetailPage").style.display === "block") {
-      document.getElementById("detailRatingValue").textContent = course.rating.toFixed(1);
-      document.getElementById("detailStars").innerHTML = generateStars(course.rating);
-      document.getElementById("detailReviewCount").textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
-    }
+    refreshDetailRatingSummary(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
 };
 
@@ -2560,19 +2607,27 @@ window.cancelEdit = function(reviewId) {
 };
 
 // === 儲存修改的內容 ===
-window.saveEdit = function(reviewId) {
+window.saveEdit = async function(reviewId) {
   const newText = document.getElementById(`edit-input-${reviewId}`).value.trim();
-  
+
   if (!newText) {
     alert("評論內容不能為空喔！");
     return;
   }
 
-  const review = findReviewById(reviewId);
-  if (review) {
-    review.text = newText;
-    // 更新完畢後，重新渲染評論列表
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text: newText }),
+    });
+
+    if (result.review) replaceReviewInState(result.review);
+    if (result.course) replaceCourseInState(result.course);
+
     loadReviews(currentCourseId);
+    refreshDetailRatingSummary(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
 };
 
