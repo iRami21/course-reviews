@@ -1398,30 +1398,36 @@ function renderFavorites() {
 }
 
 // Login modal
-window.openLoginModal = function() {
+window.openLoginModal = function(showWelcome = true) {
   const modal = document.getElementById("loginModal");
   if (!modal) return;
 
-  // 1. 顯示滿版粉藍色登入蓋台
   modal.style.display = "block";
   modal.classList.add("login-page-overlay");
 
-  // 2. 重設：確保一進去時，先秀出帶有 "Start" 按鈕的歡迎文字區
-  const welcomeSection = document.getElementById("welcomeStartSection");
-  const authCoreSection = document.getElementById("authCoreSection");
-  
-  if (welcomeSection) welcomeSection.style.display = "block";
-  if (authCoreSection) authCoreSection.style.display = "none";
+  if (showWelcome) {
+    showWelcomeFields();
+  } else {
+    showAuthFields();
+  }
 
-  // 3. 預設切換回登入（Login）分頁，避免上次停在註冊畫面
   if (typeof window.switchAuthTab === "function") {
-    window.switchAuthTab('login');
+    window.switchAuthTab("login");
   }
 };
 
 function closeLoginModal() {
-  document.getElementById("loginModal").style.display = "none";
+  const modal = document.getElementById("loginModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  modal.classList.remove("login-page-overlay");
 }
+
+window.continueAsGuest = function() {
+  document.getElementById("navBlock").style.display = "block";
+  document.getElementById("mainContentBlock").style.display = "block";
+  closeLoginModal();
+};
 
 function updateAvatarPreview() {
   const preview = document.getElementById("avatarPreview");
@@ -1538,14 +1544,9 @@ async function logout() {
   }
   currentUser = null;
   updateAuthUI();
-  // Immediately switch UI to logged-out state to avoid flicker
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  document.getElementById("loginModal").style.display = "block";
-  document.getElementById("loginModal").classList.add("login-page-overlay");
-  document.getElementById("welcomeStartSection").style.display = "block";
-  document.getElementById("authCoreSection").style.display = "none";
-  // Refresh courses in background (non-blocking)
+  openLoginModal(true);
   fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));
 }
 
@@ -1557,17 +1558,17 @@ async function checkUserLogin() {
     currentUser = window.__CURRENT_USER__ || currentUser;
   }
 
+  document.getElementById("navBlock").style.display = "block";
+  document.getElementById("mainContentBlock").style.display = "block";
+
   if (currentUser) {
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    document.getElementById("loginModal").style.display = "none";
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
+    closeLoginModal();
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
-    document.getElementById("loginModal").style.display = "block";
-    document.getElementById("loginModal").classList.add("login-page-overlay");
+    openLoginModal(true);
   }
+
   updateAuthUI();
 }
 
@@ -1627,7 +1628,8 @@ function openCourseDetail(courseId) {
   loadReviews(courseId);
 
   document.body.classList.add("detail-open");
-  document.querySelector(".navbar").style.display = "none";
+  const navLogoBtn = document.getElementById("navLogoBtn");
+  if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Back to courses");
   document.getElementById("pageHeading").style.display = "none";
   
   // 🔴 修正：隱藏全新的排序與標籤面板
@@ -1646,10 +1648,17 @@ function openCourseReviewForm(courseId) {
   openReviewForm();
 }
 
+function handleNavLogoClick() {
+  if (document.body.classList.contains("detail-open")) {
+    closeCourseDetail();
+  }
+}
+
 function closeCourseDetail() {
   document.getElementById("courseDetailPage").style.display = "none";
   document.body.classList.remove("detail-open");
-  document.querySelector(".navbar").style.display = "";
+  const navLogoBtn = document.getElementById("navLogoBtn");
+  if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Course Review Platform");
   document.getElementById("pageHeading").style.display = "";
   
   // 🟢 修正：回到主頁時，把排序面板顯示回來，過濾面板維持收合
@@ -2330,8 +2339,8 @@ window.onclick = function (event) {
   const loginModal = document.getElementById("loginModal");
   const profileModal = document.getElementById("profileModal");
 
-  if (event.target === loginModal) {
-    loginModal.style.display = "none";
+  if (event.target === loginModal && currentUser) {
+    closeLoginModal();
   }
   if (event.target === profileModal) {
     profileModal.style.display = "none";
@@ -2371,13 +2380,19 @@ window.switchAuthTab = function (mode) {
   }
 };
 
-// 按下 Start 按鈕後切換區塊
+window.showWelcomeFields = function() {
+  const welcome = document.getElementById("welcomeStartSection");
+  const auth = document.getElementById("authCoreSection");
+  if (welcome) welcome.style.display = "grid";
+  if (auth) auth.style.display = "none";
+};
+
 window.showAuthFields = function() {
-  // 1. 把第一階段的純文字與 Start 按鈕徹底隱藏（不佔空間）
-  document.getElementById("welcomeStartSection").style.display = "none";
-  // 2. 把第二階段的白色登入卡片方塊顯示出來
-  document.getElementById("authCoreSection").style.display = "block";
-}
+  const welcome = document.getElementById("welcomeStartSection");
+  const auth = document.getElementById("authCoreSection");
+  if (welcome) welcome.style.display = "none";
+  if (auth) auth.style.display = "block";
+};
 
 // 控制 Filter 面板的開關
 window.toggleFilterPanel = function() {

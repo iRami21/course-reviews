@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -11,10 +11,19 @@
   </head>
   <body>
     <!-- Navigation Bar -->
-    <nav class="navbar" id="navBlock">
+    <nav class="navbar" id="navBlock" style="display: none;">
       <div class="nav-container">
         <div class="nav-logo">
-          <h1>Course Review Platform</h1>
+          <button type="button" class="nav-logo-btn" id="navLogoBtn" onclick="handleNavLogoClick()" aria-label="Course Review Platform">
+            <span class="nav-logo-default">Course Review Platform</span>
+            <span class="nav-logo-back" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 12H5"></path>
+                <path d="m12 19-7-7 7-7"></path>
+              </svg>
+              Back to Courses
+            </span>
+          </button>
         </div>
         <div class="nav-menu">
           
@@ -82,15 +91,24 @@
     <!-- Login Modal -->
     <div id="loginModal" class="modal login-page-overlay" style="display: block">
       
-      <div id="welcomeStartSection" class="welcome-pure-text">
+      <div id="welcomeStartSection" class="welcome-shell">
         <div class="welcome-header">
           <h1>Course Review Platform</h1>
           <p class="welcome-subtitle">A platform that allows students to leave course reviews.</p>
         </div>
-        <button type="button" class="btn-submit" id="startExploreBtn" onclick="showAuthFields()">Start</button>
+        <div class="welcome-actions">
+          <button type="button" class="welcome-primary-btn" id="guestModeBtn" onclick="continueAsGuest()">Continue as Guest</button>
+          <button type="button" class="welcome-secondary-btn" id="startExploreBtn" onclick="showAuthFields()">Login / Register</button>
+        </div>
+        <div class="welcome-capabilities" aria-label="Available modes">
+          <span>Browse courses</span>
+          <span>Read reviews</span>
+          <span>Save after login</span>
+        </div>
       </div>
 
       <div id="authCoreSection" class="welcome-white-box" style="display: none;">
+        <button type="button" class="auth-back-btn" onclick="showWelcomeFields()" aria-label="Back to welcome">&larr;</button>
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
           <button type="button" id="tabRegister" class="tab-btn" onclick="switchAuthTab('register')">Register</button>
@@ -199,7 +217,7 @@
 
 
     <!-- Main Content -->
-    <main class="main-content" id="mainContentBlock">
+    <main class="main-content" id="mainContentBlock" style="display: none;">
       <section class="page-heading" id="pageHeading">
           <div>
             <p class="page-kicker"> Let's explore!</p>

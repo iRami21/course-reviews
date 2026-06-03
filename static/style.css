@@ -66,9 +66,53 @@ body {
   align-items: center;
 }
 
-.nav-logo h1 {
+.nav-logo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fefaf0;
+  font-family: "Comic Relief", system-ui;
   font-size: 1.8rem;
-  color: #fefaf0 !important;
+  font-weight: 450;
+  line-height: 1.15;
+  cursor: default;
+}
+
+.nav-logo-back {
+  display: none;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.nav-logo-back svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.detail-open .nav-logo-btn {
+  cursor: pointer;
+}
+
+.detail-open .nav-logo-btn:hover {
+  color: #ffcf76;
+  transform: translateX(-2px);
+}
+
+.detail-open .nav-logo-default {
+  display: none;
+}
+
+.detail-open .nav-logo-back {
+  display: inline-flex;
+  font-size: 1.15rem;
 }
 
 .nav-menu {
@@ -211,30 +255,29 @@ body {
   background-color: #c82333;
 }
 
-/* === 全螢幕歡迎與登入蓋台 === */
+/* === Welcome and auth entry === */
 .login-page-overlay {
-  background-color: #4f67b1 !important; /* 全螢幕粉藍色背景 */
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   z-index: 99999;
   display: flex !important;
   align-items: center;
   justify-content: center;
+  padding: 1.25rem;
+  background-color: #4f67b1 !important;
 }
 
-/* 第一階段：純文字與Start按鈕外殼（完全透明） */
-.welcome-pure-text {
+.welcome-shell {
+  display: grid;
+  gap: 1.35rem;
+  width: min(92vw, 560px);
   background: transparent !important;
   box-shadow: none !important;
   text-align: center;
-  width: min(92vw, 500px);
 }
 
-.welcome-header h1 {
-  color: #fefaf0;
+#loginModal .welcome-header h1 {
+  color: #fefaf0 !important;
   font-size: 2.5rem;
   margin-bottom: 0.2rem;
 }
@@ -246,23 +289,122 @@ body {
   font-weight: 700;
 }
 
-#startExploreBtn {
-  font-size: 1.2rem;
-  padding: 0.9rem 2.5rem;
-  width: auto;
-  display: inline-block;
-  background-color: #c74d30 !important;
+.welcome-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
 }
 
-/* 第二階段：點了 Start 才出現的白色方塊卡片 */
+.welcome-primary-btn,
+.welcome-secondary-btn {
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  font-family: "Comic Relief", system-ui;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transform: translateY(0) scale(1);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    background-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.welcome-primary-btn {
+  padding: 0.85rem 1.55rem;
+  background: #fefaf0;
+  color: #4f67b1;
+  box-shadow: 0 12px 24px rgba(32, 39, 77, 0.14);
+}
+
+.welcome-secondary-btn {
+  position: relative;
+  padding: 0.85rem 1.75rem;
+  background: #ffcf76;
+  color: #89272a;
+  box-shadow: 0 14px 28px rgba(255, 207, 118, 0.34), 0 5px 0 rgba(137, 39, 42, 0.16);
+  animation: welcomeLoginPulse 2.4s ease-in-out infinite;
+}
+
+.welcome-primary-btn:hover,
+.welcome-secondary-btn:hover {
+  transform: translateY(-4px) scale(1.03);
+}
+
+.welcome-primary-btn:hover {
+  background: #fff6db;
+  color: #40589f;
+  box-shadow: 0 16px 30px rgba(32, 39, 77, 0.22);
+}
+
+.welcome-secondary-btn:hover {
+  background: #ffc24d;
+  box-shadow: 0 20px 36px rgba(255, 207, 118, 0.46), 0 7px 0 rgba(137, 39, 42, 0.2);
+}
+
+.welcome-primary-btn:focus-visible,
+.welcome-secondary-btn:focus-visible {
+  outline: 3px solid rgba(254, 250, 240, 0.86);
+  outline-offset: 4px;
+}
+
+@keyframes welcomeLoginPulse {
+  0%, 100% {
+    box-shadow: 0 14px 28px rgba(255, 207, 118, 0.34), 0 5px 0 rgba(137, 39, 42, 0.16);
+  }
+  50% {
+    box-shadow: 0 18px 36px rgba(255, 207, 118, 0.52), 0 5px 0 rgba(137, 39, 42, 0.16);
+  }
+}
+
+.welcome-capabilities {
+  display: none;
+}
+
 .welcome-white-box {
-  background: #ffffff !important; /* 维持底下白色底 */
-  padding: 2.5rem 2rem;
-  border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.15);
+  position: relative;
   width: min(92vw, 400px);
+  padding: 2.75rem 2rem 2rem;
+  border-radius: var(--radius-md);
+  background: #ffffff !important;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.15);
   text-align: center;
-  animation: fadeIn 0.3s ease-in-out; /* 加上一個順滑的淡入效果 */
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.auth-back-btn {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #4f67b1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transform: none;
+  transition: color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.auth-back-btn:hover {
+  background: #eef3ff;
+  color: #89272a;
+  transform: scale(1.08);
 }
 
 /* 簡單的淡入動畫 */
@@ -2820,6 +2962,14 @@ button {
   color: #2b2f44;
 }
 
+.detail-open .course-detail-page {
+  padding-top: 2rem;
+}
+
+.detail-open .course-detail-page .back-button {
+  display: none;
+}
+
 .back-button {
   border-bottom: 1px solid rgba(79, 103, 177, 0.28);
   background-color: #4f67b1;
@@ -3639,4 +3789,30 @@ button {
 .review-action-btn:not(.liked) .reaction-summary-item {
   border-color: #ffffff;
   background-color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .login-page-overlay {
+    align-items: stretch;
+    overflow-y: auto;
+  }
+
+  .welcome-shell,
+  .welcome-white-box {
+    width: 100%;
+    margin: auto 0;
+  }
+
+  .welcome-actions {
+    flex-direction: column;
+  }
+
+  .welcome-primary-btn,
+  .welcome-secondary-btn {
+    width: 100%;
+  }
+
+  .welcome-capabilities span {
+    font-size: 0.86rem;
+  }
 }

@@ -227,11 +227,29 @@ def create_app():
 			return jsonify({"error": "Authentication required."}), 401
 		return redirect(url_for("login", next=request.path))
 
-	def ensure_course_schema():
-		columns = {
+	def get_table_columns(table_name):
+		return {
 			row[1]
-			for row in db.session.execute(text("PRAGMA table_info(courses)")).all()
+			for row in db.session.execute(text(f"PRAGMA table_info({table_name})")).all()
 		}
+
+	def ensure_app_schema():
+		user_columns = get_table_columns("users")
+		if "role" not in user_columns:
+			db.session.execute(
+				text("ALTER TABLE users ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
+			)
+
+		review_columns = get_table_columns("reviews")
+		if "is_visible" not in review_columns:
+			db.session.execute(
+				text("ALTER TABLE reviews ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+			)
+
+		db.session.commit()
+
+	def ensure_course_schema():
+		columns = get_table_columns("courses")
 		if "grade" not in columns:
 			db.session.execute(text("ALTER TABLE courses ADD COLUMN grade VARCHAR(16)"))
 		if "requirement" not in columns:
@@ -246,6 +264,7 @@ def create_app():
 
 	with app.app_context():
 		db.create_all()
+		ensure_app_schema()
 		ensure_course_schema()
 
 	@login_manager.user_loader
