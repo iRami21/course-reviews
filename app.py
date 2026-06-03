@@ -787,6 +787,7 @@ def create_app():
 			save_notification(
 				review.author.id,
 				f"{current_user.username} replied to your review on {review.course.title or review.course.code}.",
+				link=url_for("course_detail", course_id=review.course_id),
 				category="activity",
 			)
 		db.session.commit()
@@ -840,6 +841,7 @@ def create_app():
 			save_notification(
 				review.author.id,
 				f"{current_user.username} reacted {reaction_value} to your review on {review.course.title or review.course.code}.",
+				link=url_for("course_detail", course_id=review.course_id),
 				category="activity",
 			)
 		db.session.commit()
@@ -860,6 +862,7 @@ def create_app():
 			save_notification(
 				reply.author.id,
 				f"{current_user.username} reacted {reaction_value} to your comment.",
+				link=url_for("course_detail", course_id=reply.review.course_id),
 				category="activity",
 			)
 		db.session.commit()

@@ -46,13 +46,11 @@
 
               <div class="notification-dropdown-card" id="notificationDropdown" style="display: none;">
                 <div class="notification-header">
-                  <div class="notification-tab-group">
-                  </div>
                   <button type="button" class="mark-read-btn" onclick="markAllAsRead()">Mark all as read</button>
                 </div>
                 
                 <div class="notification-list" id="notificationList"></div>
-                <div class="notification-empty" id="notificationEmpty" style="display: flex !important; justify-content: center;">No notifications yet.</div>
+                <div class="notification-empty" id="notificationEmpty" style="display: flex !important; justify-content: center !important;">No notifications yet.</div>
               </div>
             </div>
 
@@ -202,7 +200,7 @@
     <main class="main-content" id="mainContentBlock">
       <section class="page-heading" id="pageHeading">
           <div>
-            <p class="page-kicker"> Let's explore!</p>
+            <p class="page-kicker"> Let's explore !</p>
             <h2>All Courses</h2>
           </div>
         </div>
@@ -290,6 +288,20 @@
           </div>
         </div>
         <div class="courses-container" id="favoritesContainer"></div>
+      </section>
+
+      <section id="activityPage" class="favorites-page" style="display: none">
+        <div class="section-heading">
+          <div>
+            <p class="page-kicker">Your Activity</p>
+            <h2>Activity</h2>
+          </div>
+          <button class="btn-secondary" type="button" onclick="showBrowseCourses()">
+            Back to Browse
+          </button>
+        </div>
+        <div class="activity-list" id="activityList"></div>
+        <div class="notification-empty" id="activityEmpty" style="display: flex !important; justify-content: center;">No activity yet.</div>
       </section>
 
       <!-- Course Detail Page -->

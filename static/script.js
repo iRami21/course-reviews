@@ -428,8 +428,15 @@ function renderNotificationList() {
   if (!list || !empty) return;
 
   const items = notificationState.items || [];
-  list.innerHTML = items.length ? items.map(buildNotificationItem).join("") : "";
-  empty.style.display = items.length ? "none" : "block";
+  const filteredItems = notificationState.activeTab === "activity"
+    ? items.filter((item) => item.category === "activity")
+    : items.filter((item) => item.category !== "activity" && !item.isRead);
+
+  list.innerHTML = filteredItems.length ? filteredItems.map(buildNotificationItem).join("") : "";
+  empty.textContent = notificationState.activeTab === "activity"
+    ? "No activity yet."
+    : "No notifications yet.";
+  empty.style.display = filteredItems.length ? "none" : "block";
 }
 
 function updateNotificationBadge() {
@@ -457,10 +464,14 @@ async function refreshNotifications() {
     if (document.getElementById("notificationDropdown")?.style.display === "block") {
       renderNotificationList();
     }
+    if (document.getElementById("activityPage")?.style.display === "block") {
+      renderActivityList();
+    }
   } catch (error) {
     console.warn("Failed to refresh notifications:", error);
   }
 }
+
 
 async function markAllAsRead() {
   if (!currentUser) return;
@@ -738,13 +749,7 @@ function setupEventListeners() {
   safeAddListener("profileMenuBtn", "click", openProfileModal);
   safeAddListener("favoritesMenuBtn", "click", showFavorites);
   safeAddListener("activityMenuBtn", "click", function () {
-    // open notification dropdown and show activity tab
-    const notiDropdown = document.getElementById("notificationDropdown");
-    if (notiDropdown) {
-      notiDropdown.style.display = "block";
-    }
-    switchNotificationTab("activity");
-    refreshNotifications();
+    showActivity();
   });
   safeAddListener("signOutMenuBtn", "click", logout);
   
@@ -839,13 +844,47 @@ function setupEventListeners() {
         notiDropdown.style.display = "none";
       }
     });
-    notiDropdown.addEventListener("click", function (e) {
+    notiDropdown.addEventListener("click", async function (e) {
       const item = e.target.closest(".notification-item");
-      if (item) {
-        const link = item.dataset.link;
-        if (link) {
-          window.location.href = link;
+      if (!item) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const link = item.dataset.link;
+      const notiId = String(item.dataset.id);
+      const index = notificationState.items.findIndex((n) => String(n.id) === notiId);
+
+      if (index !== -1) {
+        const wasUnread = !notificationState.items[index].isRead;
+        notificationState.items[index].isRead = true;
+        notificationState.unreadCount = Math.max(0, notificationState.unreadCount - 1);
+        updateNotificationBadge();
+
+        // 先從畫面上隱藏已讀通知
+        notificationState.items.splice(index, 1);
+        renderNotificationList();
+      }
+
+      notiDropdown.style.display = "none";
+
+      apiRequest("/api/notifications/mark_read", {
+        method: "POST",
+        body: JSON.stringify({ ids: [notiId] }),
+      }).catch((error) => {
+        console.warn("Failed to mark notification read:", error);
+      });
+
+      if (link) {
+        const courseMatch = String(link).match(/\/courses\/(\d+)/);
+        if (courseMatch && typeof openCourseDetail === "function") {
+          const courseId = Number(courseMatch[1]);
+          if (!Number.isNaN(courseId)) {
+            openCourseDetail(courseId);
+            return;
+          }
         }
+        window.location.href = link;
       }
     });
   }
@@ -1068,7 +1107,9 @@ function renderCourseCards(container, courses, emptyText) {
                     </span>
                     <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
-                <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
+                <div class="course-footer-actions">
+                  <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
+                </div>
             </div>
         `;
 
@@ -1230,16 +1271,52 @@ function showFavorites() {
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
+  document.getElementById("activityPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
   renderFavorites();
 }
 
+function showActivity() {
+  if (!currentUser) {
+    alert("Please login to view activity.");
+    openLoginModal();
+    return;
+  }
+
+  document.getElementById("pageHeading").style.display = "none";
+  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+
+  document.getElementById("coursesContainer").style.display = "none";
+  const pagination = document.getElementById("coursesPagination");
+  if (pagination) pagination.style.display = "none";
+  document.getElementById("courseDetailPage").style.display = "none";
+  document.getElementById("favoritesPage").style.display = "none";
+  document.getElementById("activityPage").style.display = "block";
+
+  refreshNotifications();
+  renderActivityList();
+}
+
+function renderActivityList() {
+  const list = document.getElementById("activityList");
+  const empty = document.getElementById("activityEmpty");
+  if (!list || !empty) return;
+
+  const items = (notificationState.items || []).filter((item) => item.category === "activity");
+  list.innerHTML = items.length ? items.map(buildNotificationItem).join("") : "";
+  empty.style.display = items.length ? "none" : "flex";
+}
+
 function showBrowseCourses() {
   document.getElementById("favoritesPage").style.display = "none";
+  document.getElementById("activityPage").style.display = "none";
+  document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("pageHeading").style.display = "";
   
   // 🟢 修正：回到主頁時，再次把選單顯示出來
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "";
 
   document.getElementById("coursesContainer").style.display = "";
   const pagination = document.getElementById("coursesPagination");
@@ -2672,4 +2749,440 @@ document.addEventListener("DOMContentLoaded", function () {
   button.addEventListener("click", scrollToPageTop);
   updateBackToTopButton();
   window.addEventListener("scroll", updateBackToTopButton, { passive: true });
+});
+
+/* ============================================================
+   SCHEDULE SIDEBAR — Weekly timetable (Mon–Sat, periods 1–14)
+   Multi-semester: each semester keeps its own independent list.
+   ============================================================ */
+ 
+// --- State ---
+// scheduleData: { "113-1": { courses: ["1","3"], colors: {"1":1,"3":2} }, ... }
+let scheduleData = {};
+let activeScheduleSemester = null; // e.g. "113-1"
+ 
+// Helpers to get/set active semester's data
+function getActiveSemData() {
+  if (!activeScheduleSemester) return { courses: [], colors: {} };
+  if (!scheduleData[activeScheduleSemester]) {
+    scheduleData[activeScheduleSemester] = { courses: [], colors: {} };
+  }
+  return scheduleData[activeScheduleSemester];
+}
+ 
+// Legacy aliases so existing code still works
+Object.defineProperty(window, 'myScheduleCourses', {
+  get() { return getActiveSemData().courses; },
+  set(v) { getActiveSemData().courses = v; },
+  configurable: true,
+});
+ 
+function getScheduleColorMap() { return getActiveSemData().colors; }
+ 
+const SCHEDULE_COLORS = [1,2,3,4,5,6,7,8];
+ 
+// Period definitions: label + time range
+const SCHEDULE_PERIODS = [
+  { p: 1,  label: "1",  time: "08:10–09:00" },
+  { p: 2,  label: "2",  time: "09:10–10:00" },
+  { p: 3,  label: "3",  time: "10:10–11:00" },
+  { p: 4,  label: "4",  time: "11:10–12:00" },
+  { p: 5,  label: "Lunch", time: "12:00–13:00" },
+  { p: 6,  label: "5",  time: "13:10–14:00" },
+  { p: 7,  label: "6",  time: "14:10–15:00" },
+  { p: 8,  label: "7",  time: "15:10–16:00" },
+  { p: 9,  label: "8",  time: "16:10–17:00" },
+  { p: 10, label: "9",  time: "17:10–18:00" },
+  { p: 11, label: "A",  time: "18:25–19:15" },
+  { p: 12, label: "B",  time: "19:20–20:10" },
+  { p: 13, label: "C",  time: "20:15–21:05" },
+  { p: 14, label: "D",  time: "21:10–22:00" },
+];
+const SCHEDULE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // day index 1–6
+ 
+// --- Toggle sidebar open/close ---
+window.toggleScheduleSidebar = function () {
+  const sidebar = document.getElementById("scheduleSidebar");
+  const overlay = document.getElementById("scheduleOverlay");
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.contains("open");
+  sidebar.classList.toggle("open", !isOpen);
+  document.body.classList.toggle("schedule-open", !isOpen);
+  if (overlay) overlay.style.display = !isOpen ? "block" : "none";
+};
+ 
+window.closeScheduleSidebar = function () {
+  const sidebar = document.getElementById("scheduleSidebar");
+  const overlay = document.getElementById("scheduleOverlay");
+  if (sidebar) sidebar.classList.remove("open");
+  document.body.classList.remove("schedule-open");
+  if (overlay) overlay.style.display = "none";
+};
+ 
+// --- Collect all available semesters from allCourses ---
+function getAvailableSemesters() {
+  const seen = new Set();
+  allCourses.forEach(c => {
+    if (c.year && c.semester) seen.add(`${c.year}-${c.semester}`);
+  });
+  // Sort descending (newest first)
+  return [...seen].sort((a, b) => {
+    const [ay, as_] = a.split("-").map(Number);
+    const [by, bs] = b.split("-").map(Number);
+    return (by - ay) || (bs - as_);
+  });
+}
+ 
+// --- Switch active semester tab ---
+window.switchScheduleSemester = function(semKey) {
+  activeScheduleSemester = semKey;
+  if (!scheduleData[semKey]) scheduleData[semKey] = { courses: [], colors: {} };
+  // Update tab UI
+  document.querySelectorAll(".sched-sem-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.sem === semKey);
+  });
+  renderScheduleSidebar();
+  updateAllAddButtons();
+  updateScheduleBadge();
+};
+ 
+// --- Add a course to the active semester's schedule ---
+window.addToSchedule = function (courseId) {
+  if (!activeScheduleSemester) {
+    // Auto-pick the semester that matches this course, or first available
+    const course = allCourses.find(c => String(c.id) === String(courseId));
+    const key = course ? `${course.year}-${course.semester}` : getAvailableSemesters()[0];
+    if (key) window.switchScheduleSemester(key);
+    else { showConflictToast("No semester available."); return; }
+  }
+ 
+  const semData = getActiveSemData();
+  const course = allCourses.find(c => String(c.id) === String(courseId));
+  if (!course) return;
+ 
+  // Toggle off if already in schedule
+  if (semData.courses.includes(String(courseId))) {
+    removeFromSchedule(courseId);
+    return;
+  }
+ 
+  // Warn if course belongs to a different semester
+  const courseSemKey = `${course.year}-${course.semester}`;
+  if (courseSemKey !== activeScheduleSemester) {
+    if (!confirm(`This course is from ${courseSemKey}, but your active schedule is ${activeScheduleSemester}.\nSwitch to ${courseSemKey} and add?`)) return;
+    window.switchScheduleSemester(courseSemKey);
+  }
+ 
+  const freshSemData = getActiveSemData();
+ 
+  // Conflict check
+  if (course.schedule && course.schedule.length > 0) {
+    const conflictCourses = freshSemData.courses
+      .map(id => allCourses.find(c => String(c.id) === String(id)))
+      .filter(Boolean)
+      .filter(c => c.schedule && c.schedule.some(
+        slot => course.schedule.some(s => s.day === slot.day && s.period === slot.period)
+      ));
+    if (conflictCourses.length > 0) {
+      const names = conflictCourses.map(c => c.titleZh || c.title).join(", ");
+      showConflictToast(`⚠️ Time conflict with: ${names}`);
+      return;
+    }
+  }
+ 
+  // Assign color
+  const usedColors = Object.values(freshSemData.colors);
+  const freeColor = SCHEDULE_COLORS.find(c => !usedColors.includes(c)) || 1;
+  freshSemData.colors[String(courseId)] = freeColor;
+  freshSemData.courses.push(String(courseId));
+ 
+  renderScheduleSidebar();
+  updateAllAddButtons();
+  updateScheduleBadge();
+ 
+  // Open sidebar
+  const sidebar = document.getElementById("scheduleSidebar");
+  if (sidebar && !sidebar.classList.contains("open")) toggleScheduleSidebar();
+};
+ 
+// --- Remove from active semester ---
+window.removeFromSchedule = function (courseId) {
+  const semData = getActiveSemData();
+  semData.courses = semData.courses.filter(id => String(id) !== String(courseId));
+  delete semData.colors[String(courseId)];
+  renderScheduleSidebar();
+  updateAllAddButtons();
+  updateScheduleBadge();
+};
+ 
+// --- Clear active semester ---
+window.clearSchedule = function () {
+  const semData = getActiveSemData();
+  if (semData.courses.length === 0) return;
+  if (!confirm(`Remove all courses from ${activeScheduleSemester} schedule?`)) return;
+  semData.courses = [];
+  semData.colors = {};
+  renderScheduleSidebar();
+  updateAllAddButtons();
+  updateScheduleBadge();
+};
+ 
+// --- Render the full sidebar content ---
+function renderScheduleSidebar() {
+  renderScheduleSemesterTabs();
+  renderScheduleGrid();
+  renderScheduleCourseList();
+  renderScheduleCredits();
+}
+ 
+// --- Build the timetable grid ---
+function renderScheduleGrid() {
+  const grid = document.getElementById("scheduleGrid");
+  if (!grid) return;
+ 
+  const semData = getActiveSemData();
+ 
+  // Build a lookup: "day-period" → courseId
+  const slotMap = {};
+  semData.courses.forEach(courseId => {
+    const course = allCourses.find(c => String(c.id) === String(courseId));
+    if (!course || !course.schedule) return;
+    course.schedule.forEach(({ day, period }) => {
+      const key = `${day}-${period}`;
+      slotMap[key] = courseId;
+    });
+  });
+ 
+  let html = "";
+ 
+  // Top-left corner cell
+  html += `<div class="sched-header-cell period-col" style="font-size:0.6rem;">P\\D</div>`;
+ 
+  // Day header cells
+  SCHEDULE_DAYS.forEach(day => {
+    html += `<div class="sched-header-cell">${escapeHtml(day)}</div>`;
+  });
+ 
+  // Period rows (1-indexed days: Mon=1, Tue=2, … Sat=6)
+  SCHEDULE_PERIODS.forEach(({ p, label, time }) => {
+    // Period label cell
+    html += `
+      <div class="sched-period-cell">
+        <span>${escapeHtml(label)}</span>
+        <span class="sched-period-time">${escapeHtml(time.split("–")[0])}</span>
+      </div>
+    `;
+ 
+    // Day cells for this period
+    for (let dayIndex = 1; dayIndex <= 6; dayIndex++) {
+      const key = `${dayIndex}-${p}`;
+      const courseId = slotMap[key];
+      if (courseId) {
+        const course = allCourses.find(c => String(c.id) === String(courseId));
+        const colorClass = `course-color-${semData.colors[String(courseId)] || 1}`;
+        const shortName = course
+          ? (course.titleZh || course.title || "").slice(0, 10)
+          : "?";
+        html += `
+          <div class="sched-cell has-course ${colorClass}">
+            <button class="cell-remove-btn" onclick="removeFromSchedule(${courseId})" title="Remove">✕</button>
+            <span class="cell-course-name">${escapeHtml(shortName)}</span>
+          </div>
+        `;
+      } else {
+        html += `<div class="sched-cell"></div>`;
+      }
+    }
+  });
+ 
+  grid.innerHTML = html;
+}
+ 
+// --- Course list chips below grid ---
+function renderScheduleCourseList() {
+  const list = document.getElementById("scheduleList");
+  if (!list) return;
+ 
+  const semData = getActiveSemData();
+ 
+  if (semData.courses.length === 0) {
+    list.innerHTML = `
+      <div class="schedule-empty-state">
+        <span class="empty-icon">🗓️</span>
+        No courses in <strong>${activeScheduleSemester || "this semester"}</strong> yet.<br>
+        Click <strong>"+ Schedule"</strong> on any course card.
+      </div>
+    `;
+    return;
+  }
+ 
+  let html = `<h4>Added Courses (${semData.courses.length})</h4>`;
+  semData.courses.forEach(courseId => {
+    const course = allCourses.find(c => String(c.id) === String(courseId));
+    if (!course) return;
+    const colorIndex = semData.colors[String(courseId)] || 1;
+    const bgColors = [
+      "#4f67b1","#2a8f6f","#c74d30","#7c3aed",
+      "#0891b2","#9d5c0d","#b02473","#374151"
+    ];
+    const bg = bgColors[(colorIndex - 1) % bgColors.length];
+    const credits = course.credits ? `${course.credits} cr.` : "";
+    const displayName = course.titleZh || course.title;
+    const slots = course.schedule && course.schedule.length > 0
+      ? course.schedule.map(s => `${SCHEDULE_DAYS[s.day - 1] || "?"}${s.period}`).join(", ")
+      : "No time data";
+ 
+    html += `
+      <div class="schedule-course-chip" style="background:${bg};">
+        <div class="chip-title">
+          <div style="font-weight:800;font-size:0.82rem;">${escapeHtml(displayName)}</div>
+          <div style="font-size:0.7rem;opacity:0.85;">${escapeHtml(slots)}</div>
+        </div>
+        ${credits ? `<span class="chip-credits">${escapeHtml(credits)}</span>` : ""}
+        <button class="chip-remove" onclick="removeFromSchedule(${courseId})" title="Remove">✕</button>
+      </div>
+    `;
+  });
+  list.innerHTML = html;
+}
+ 
+// --- Credits bar ---
+function renderScheduleCredits() {
+  const bar = document.getElementById("scheduleCreditsBar");
+  if (!bar) return;
+  const semData = getActiveSemData();
+  const total = semData.courses.reduce((sum, id) => {
+    const c = allCourses.find(x => String(x.id) === String(id));
+    return sum + (c?.credits || 0);
+  }, 0);
+  bar.textContent = `📚 ${semData.courses.length} course${semData.courses.length !== 1 ? "s" : ""} · ${total} credits`;
+}
+ 
+// --- Badge on toggle button (total across ALL semesters) ---
+function updateScheduleBadge() {
+  const badge = document.querySelector("#scheduleToggleBtn .schedule-badge");
+  if (!badge) return;
+  const n = Object.values(scheduleData).reduce((sum, d) => sum + (d.courses?.length || 0), 0);
+  badge.textContent = n;
+  badge.style.display = n > 0 ? "flex" : "none";
+}
+ 
+// --- Update all "Add to Schedule" buttons across the page ---
+function updateAllAddButtons() {
+  const semData = getActiveSemData();
+  document.querySelectorAll("[data-schedule-id]").forEach(btn => {
+    const id = String(btn.dataset.scheduleId);
+    const inSchedule = semData.courses.includes(id);
+    btn.classList.toggle("in-schedule", inSchedule);
+    btn.textContent = inSchedule ? "✓ In Schedule" : "+ Schedule";
+  });
+}
+ 
+// --- Conflict toast ---
+function showConflictToast(msg) {
+  let toast = document.getElementById("scheduleConflictToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "scheduleConflictToast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.display = "block";
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => { toast.style.display = "none"; }, 3500);
+}
+ 
+// --- Render semester tabs ---
+function renderScheduleSemesterTabs() {
+  const tabBar = document.getElementById("scheduleTabBar");
+  if (!tabBar) return;
+ 
+  const semesters = getAvailableSemesters();
+  if (semesters.length === 0) {
+    tabBar.innerHTML = `<span style="font-size:0.75rem;opacity:0.7;padding:4px 8px;">No semesters found</span>`;
+    return;
+  }
+ 
+  // If no active semester yet, pick first
+  if (!activeScheduleSemester || !semesters.includes(activeScheduleSemester)) {
+    activeScheduleSemester = semesters[0];
+    if (!scheduleData[activeScheduleSemester]) scheduleData[activeScheduleSemester] = { courses: [], colors: {} };
+  }
+ 
+  tabBar.innerHTML = semesters.map(sem => {
+    const count = scheduleData[sem]?.courses?.length || 0;
+    const [year, s] = sem.split("-");
+    const label = `${year} S${s}`;
+    const isActive = sem === activeScheduleSemester;
+    return `
+      <button
+        class="sched-sem-tab${isActive ? " active" : ""}"
+        data-sem="${escapeHtml(sem)}"
+        onclick="switchScheduleSemester('${escapeHtml(sem)}')"
+      >${escapeHtml(label)}${count > 0 ? `<span class="sched-sem-count">${count}</span>` : ""}</button>
+    `;
+  }).join("");
+}
+ 
+// --- Inject HTML for the sidebar and toggle button into the page ---
+function injectScheduleSidebarHTML() {
+  // Avoid double injection
+  if (document.getElementById("scheduleSidebar")) return;
+ 
+  // Toggle button (fixed to right edge)
+  const toggleBtn = document.createElement("button");
+  toggleBtn.id = "scheduleToggleBtn";
+  toggleBtn.setAttribute("aria-label", "Toggle schedule sidebar");
+  toggleBtn.innerHTML = `
+    📅
+    <span class="schedule-toggle-label">Schedule</span>
+    <span class="schedule-badge">0</span>
+  `;
+  toggleBtn.addEventListener("click", toggleScheduleSidebar);
+  document.body.appendChild(toggleBtn);
+ 
+  // Overlay (mobile dim)
+  const overlay = document.createElement("div");
+  overlay.id = "scheduleOverlay";
+  overlay.addEventListener("click", closeScheduleSidebar);
+  document.body.appendChild(overlay);
+ 
+  // Sidebar panel
+  const sidebar = document.createElement("aside");
+  sidebar.id = "scheduleSidebar";
+  sidebar.className = "schedule-sidebar";
+  sidebar.innerHTML = `
+    <div class="schedule-sidebar-header">
+      <h3>📅 My Schedule</h3>
+      <div class="schedule-header-actions">
+        <button class="schedule-clear-btn" onclick="clearSchedule()">Clear</button>
+        <button class="schedule-close-btn" onclick="closeScheduleSidebar()" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="sched-tab-bar" id="scheduleTabBar"></div>
+    <div class="schedule-credits-bar" id="scheduleCreditsBar">📚 0 courses · 0 credits</div>
+    <div class="schedule-grid-wrapper">
+      <div class="schedule-grid" id="scheduleGrid"></div>
+    </div>
+    <div class="schedule-course-list" id="scheduleList"></div>
+  `;
+  document.body.appendChild(sidebar);
+}
+ 
+// "+ Schedule" button is now embedded directly in renderCourseCards HTML template above.
+ 
+// Add sample schedule data to sampleCourses so the grid is populated in demo mode
+// (Day: 1=Mon … 6=Sat, Period: 1–14)
+sampleCourses.forEach(c => {
+  if (c.id === 1 && !c.schedule) c.schedule = [{ day: 1, period: 2 }, { day: 1, period: 3 }, { day: 3, period: 2 }, { day: 3, period: 3 }];
+  if (c.id === 2 && !c.schedule) c.schedule = [{ day: 2, period: 1 }, { day: 2, period: 2 }, { day: 5, period: 1 }, { day: 5, period: 2 }];
+  if (c.id === 3 && !c.schedule) c.schedule = [{ day: 2, period: 5 }, { day: 4, period: 5 }];
+  if (c.id === 4 && !c.schedule) c.schedule = [{ day: 1, period: 6 }, { day: 1, period: 7 }, { day: 4, period: 6 }, { day: 4, period: 7 }];
+});
+ 
+// --- Bootstrap on DOM ready ---
+document.addEventListener("DOMContentLoaded", function () {
+  injectScheduleSidebarHTML();
+  renderScheduleSidebar();
+  updateScheduleBadge();
 });
