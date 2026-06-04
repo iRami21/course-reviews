@@ -72,6 +72,11 @@ body {
   padding-top: 0.2rem;
 }
 
+#databaseLogoHomepage{
+  width: 400px;
+  height: 300px;
+}
+
 .nav-logo-btn {
   display: inline-flex;
   align-items: center;
@@ -268,9 +273,43 @@ body {
   z-index: 99999;
   display: flex !important;
   align-items: center;
+  justify-content: flex-end;
+  padding: 0;
+  background-color: transparent !important;
+  pointer-events: none;
+  display: flex !important;
   justify-content: center;
-  padding: 1.25rem;
-  background-color: #4f67b1 !important;
+}
+
+.login-page-overlay.active {
+  background-color: rgba(79, 103, 177, 0.3) !important;
+  pointer-events: auto;
+}
+
+.login-page-overlay .welcome-shell,
+.login-page-overlay .welcome-white-box {
+  animation: slideInFromRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Logo slide animation - move logo to left half when login modal opens */
+.navbar.logo-shifted .nav-logo-btn {
+  transform: translateX(calc(-200% - 40px));
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navbar .nav-logo-btn {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .welcome-shell {
@@ -289,9 +328,9 @@ body {
 }
 
 .welcome-subtitle {
-  color: #ffd8b9;
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
+  color: #ffffbc;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
   font-weight: 700;
 }
 
@@ -2758,9 +2797,7 @@ button {
 /* Colorful Auth Modal */
 #loginModal,
 #profileModal {
-  background-color: rgba(79, 103, 177, 0.32);
-  backdrop-filter: blur(4px);
-  
+  background-color:#4f67b1 !important;  
 }
 
 #loginModal .modal-content,

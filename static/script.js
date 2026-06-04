@@ -1733,6 +1733,16 @@ window.openLoginModal = function(showWelcome = true) {
 
   modal.style.display = "block";
   modal.classList.add("login-page-overlay");
+  // Add active class to trigger background overlay and logo shift
+  setTimeout(() => {
+    modal.classList.add("active");
+  }, 10);
+
+  // Shift logo to the left
+  const navbar = document.querySelector(".navbar");
+  if (navbar) {
+    navbar.classList.add("logo-shifted");
+  }
 
   if (showWelcome) {
     showWelcomeFields();
@@ -1749,7 +1759,13 @@ function closeLoginModal() {
   const modal = document.getElementById("loginModal");
   if (!modal) return;
   modal.style.display = "none";
-  modal.classList.remove("login-page-overlay");
+  modal.classList.remove("login-page-overlay", "active");
+  
+  // Make sure navbar is not shifted
+  const navbar = document.querySelector(".navbar");
+  if (navbar) {
+    navbar.classList.remove("logo-shifted");
+  }
 }
 
 window.continueAsGuest = function() {
