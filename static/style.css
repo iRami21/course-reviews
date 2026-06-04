@@ -1107,6 +1107,54 @@ body {
   fill: currentColor;
 }
 
+.review-reaction-bar {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.review-reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 2.8rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(79, 103, 177, 0.18);
+  border-radius: 999px;
+  background-color: #ffffff;
+  color: #2b2f44;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.review-reaction-btn:hover {
+  background-color: #fff1f4;
+  border-color: rgba(217, 45, 80, 0.28);
+  transform: translateY(-1px);
+}
+
+.review-reaction-btn.selected {
+  background-color: #d92d50;
+  border-color: #d92d50;
+  color: #ffffff;
+}
+
+.review-reaction-emoji {
+  font-size: 1rem;
+}
+
+.review-reaction-count {
+  min-width: 0.75rem;
+  text-align: center;
+}
+
 .review-action-btn .comment-icon {
   width: 1.05em;
   height: 1.05em;

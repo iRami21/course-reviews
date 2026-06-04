@@ -17,6 +17,7 @@ const COURSES_PER_PAGE = 20;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
+const REVIEW_REACTIONS = ["❤️", "😮", "👍", "🔥"];
 
 const courseReviews = {};
 
@@ -559,6 +560,7 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
+                    <span class="stat-save-display">${heartIcon()} <span id="save-count-${course.id}">${course.saveCount || 0}</span></span>
                     <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <button class="btn-reviews-card" onclick="openCourseReviewForm(${course.id})">Add Review</button>
@@ -667,7 +669,7 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // Toggle follow
-function toggleFollow(courseId) {
+async function toggleFollow(courseId) {
   if (!currentUser) {
     alert("Please login to save courses.");
     openLoginModal();
@@ -675,25 +677,62 @@ function toggleFollow(courseId) {
   }
 
   const course = allCourses.find((c) => c.id === courseId);
-  if (course) {
-    course.followed = !course.followed;
-    course.saveCount = Math.max(
-      0,
-      (course.saveCount || 0) + (course.followed ? 1 : -1),
-    );
-    if (document.getElementById("favoritesPage").style.display === "block") {
-      renderFavorites();
-    } else {
-      displayCourses(currentFilteredCourses);
+  if (!course) return;
+
+  const previousFollowed = Boolean(course.followed);
+  const previousSaveCount = Number(course.saveCount || 0);
+  const nextFollowed = !previousFollowed;
+
+  course.followed = nextFollowed;
+  course.saveCount = Math.max(0, previousSaveCount + (nextFollowed ? 1 : -1));
+  refreshCourseFavoriteDisplay(courseId);
+
+  try {
+    const response = await fetch(`/api/courses/${courseId}/favorite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ followed: nextFollowed }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to update favorite.");
     }
+
+    course.followed = Boolean(data.followed);
+    course.saveCount = Number(data.saveCount || 0);
+    refreshCourseFavoriteDisplay(courseId);
+  } catch (error) {
+    course.followed = previousFollowed;
+    course.saveCount = previousSaveCount;
+    refreshCourseFavoriteDisplay(courseId);
+    alert("Unable to update saved course.");
+  }
+}
+
+function refreshCourseFavoriteDisplay(courseId) {
+  const course = allCourses.find((c) => c.id === courseId);
+  if (!course) return;
+
+  if (document.getElementById("favoritesPage").style.display === "block") {
+    renderFavorites();
+  } else {
+    renderCourseCards(document.getElementById("coursesContainer"), currentFilteredCourses, "No courses found.");
   }
 
   const countSpan = document.getElementById(`save-count-${courseId}`);
-  if (countSpan && course) {
+  if (countSpan) {
     countSpan.textContent = course.saveCount || 0;
   }
   syncDetailFollowButton(courseId);
   updateDetailSocialStats(courseId);
+}
+
+function getCourseSaveTotal(courseId) {
+  const course = allCourses.find((entry) => entry.id === courseId);
+  return course ? Number(course.saveCount || 0) : 0;
 }
 
 function syncDetailFollowButton(courseId) {
@@ -744,6 +783,9 @@ function updateDetailSocialStats(courseId) {
   if (!stats) return;
 
   stats.innerHTML = `
+    <span class="detail-social-stat stat-save-display">
+      ${heartIcon()} <span>${getCourseSaveTotal(courseId)}</span>
+    </span>
     <span class="detail-social-stat stat-comment">
       ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
     </span>
@@ -1047,6 +1089,7 @@ async function login(event) {
     currentUser = data.user;
     localStorage.setItem("currentUser", JSON.stringify(currentUser));
     await checkUserLogin();
+    await loadCoursesFromApi({ page: currentPage });
 
     document.getElementById("authForm").reset();
     switchAuthTab("login");
@@ -1233,6 +1276,83 @@ function renderRatingBreakdown(reviews) {
   }
 }
 
+function renderReactionButtons(review) {
+  const counts = review.reactionCounts || {};
+  const selectedReaction = review.reaction || "";
+
+  return `
+    <div class="review-reaction-bar" aria-label="Review reactions">
+      ${REVIEW_REACTIONS.map((emoji) => {
+        const count = Number(counts[emoji] || 0);
+        const selected = selectedReaction === emoji;
+        return `
+          <button
+            type="button"
+            class="review-reaction-btn ${selected ? "selected" : ""}"
+            onclick="reactToReview('${review.id}', '${emoji}')"
+            aria-pressed="${selected ? "true" : "false"}"
+            title="React ${emoji}"
+          >
+            <span class="review-reaction-emoji">${emoji}</span>
+            <span class="review-reaction-count">${count}</span>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+async function reactToReview(reviewId, reaction) {
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
+  }
+  if (!currentCourseId) return;
+
+  try {
+    const response = await fetch(
+      `/api/courses/${currentCourseId}/reviews/${reviewId}/reactions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ reaction }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to update reaction.");
+      return;
+    }
+
+    applyReviewReactionUpdate(reviewId, data.review);
+    await loadReviews(currentCourseId);
+  } catch (error) {
+    alert("Unable to update reaction.");
+  }
+}
+
+function applyReviewReactionUpdate(reviewId, updatedReview) {
+  if (!updatedReview || !currentCourseId) return;
+  const reviews = getReviewsForCourse(currentCourseId);
+  const reviewIdNumber = Number(reviewId);
+
+  for (const review of reviews) {
+    if (Number(review.id) === reviewIdNumber) {
+      Object.assign(review, updatedReview);
+      return;
+    }
+    const reply = (review.replies || []).find((item) => Number(item.id) === reviewIdNumber);
+    if (reply) {
+      Object.assign(reply, updatedReview);
+      return;
+    }
+  }
+}
+
 // Load reviews
 async function loadReviews(courseId) {
   const reviewsList = document.getElementById("reviewsList");
@@ -1327,6 +1447,7 @@ async function loadReviews(courseId) {
             </div>
             
             <div class="review-actions">
+              ${renderReactionButtons(review)}
               <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
                 ${commentIcon()}
               </button>
@@ -1427,7 +1548,9 @@ function renderReplies(replies = [], reviewId) {
                 </div>
               </div>
 
-              <div class="reply-actions"></div>
+              <div class="reply-actions">
+                ${renderReactionButtons(reply)}
+              </div>
             </div>
           </div>
         </div>

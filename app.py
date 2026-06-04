@@ -14,7 +14,7 @@ from sqlalchemy import and_, func, inspect, or_, text
 from sqlalchemy.orm import selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Department, Instructor, Offer, Review, ReviewReaction, Section, Teach, User, db
+from models import Course, CourseFavorite, Department, Instructor, Offer, Review, ReviewReaction, Section, Teach, User, db
 
 
 def create_app():
@@ -75,7 +75,24 @@ def create_app():
 			"gender": user.gender,
 		}
 
-	def serialize_course(course, review_stats=None):
+	def favorite_counts_for_courses(course_ids=None):
+		query = db.session.query(CourseFavorite.course_id, func.count(CourseFavorite.favorite_id))
+		if course_ids:
+			query = query.filter(CourseFavorite.course_id.in_(course_ids))
+		rows = query.group_by(CourseFavorite.course_id).all()
+		return {course_id: count for course_id, count in rows}
+
+	def user_favorite_course_ids(course_ids=None):
+		if not current_user.is_authenticated:
+			return set()
+		query = db.session.query(CourseFavorite.course_id).filter(
+			CourseFavorite.user_id == current_user.id
+		)
+		if course_ids:
+			query = query.filter(CourseFavorite.course_id.in_(course_ids))
+		return {course_id for (course_id,) in query.all()}
+
+	def serialize_course(course, review_stats=None, favorite_counts=None, favorite_course_ids=None):
 		review_count = 0
 		average_rating = 0
 		if review_stats is not None:
@@ -85,6 +102,19 @@ def create_app():
 			ratings = [review.rating for review in reviews if review.rating]
 			review_count = len(reviews)
 			average_rating = sum(ratings) / len(ratings) if ratings else 0
+
+		if favorite_counts is not None:
+			save_count = favorite_counts.get(course.id, 0)
+		else:
+			save_count = CourseFavorite.query.filter_by(course_id=course.id).count()
+
+		if favorite_course_ids is not None:
+			followed = course.id in favorite_course_ids
+		else:
+			followed = (
+				current_user.is_authenticated
+				and CourseFavorite.query.filter_by(course_id=course.id, user_id=current_user.id).first() is not None
+			)
 
 		return {
 			"id": course.id,
@@ -96,8 +126,8 @@ def create_app():
 			"credits": course.credits or 0,
 			"rating": round(float(average_rating or 0), 1),
 			"reviewCount": int(review_count or 0),
-			"followed": False,
-			"saveCount": 0,
+			"followed": followed,
+			"saveCount": int(save_count or 0),
 			"year": course.year,
 			"semester": course.semester,
 			"tags": [tag for tag in [course.department, course.course_type] if tag],
@@ -175,6 +205,16 @@ def create_app():
 			.subquery()
 		)
 
+	def favorite_stats_subquery():
+		return (
+			db.session.query(
+				CourseFavorite.course_id.label("course_id"),
+				func.count(CourseFavorite.favorite_id).label("save_count"),
+			)
+			.group_by(CourseFavorite.course_id)
+			.subquery()
+		)
+
 	def latest_section_subquery():
 		return (
 			db.session.query(
@@ -248,7 +288,13 @@ def create_app():
 				courses_query = courses_query.filter(and_(*filters))
 
 		courses_list = courses_query.order_by(Course.code).limit(300).all()
-		return render_template("courses.html", courses=courses_list, q=query)
+		favorite_counts = favorite_counts_for_courses([course.id for course in courses_list])
+		return render_template(
+			"courses.html",
+			courses=courses_list,
+			q=query,
+			favorite_counts=favorite_counts,
+		)
 
 	@app.route("/api/courses")
 	def api_courses():
@@ -337,7 +383,13 @@ def create_app():
 				Course.code,
 			)
 		elif sort_by == "popular":
+			favorite_stats = favorite_stats_subquery()
+			courses_query = courses_query.outerjoin(
+				favorite_stats,
+				favorite_stats.c.course_id == Course.course_id,
+			)
 			courses_query = courses_query.order_by(
+				func.coalesce(favorite_stats.c.save_count, 0).desc(),
 				func.coalesce(sort_stats.c.review_count, 0).desc(),
 				Course.code,
 			)
@@ -345,16 +397,58 @@ def create_app():
 			courses_query = courses_query.order_by(Course.code)
 
 		courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
-		review_stats = course_review_stats([course.id for course in courses_list])
+		course_ids = [course.id for course in courses_list]
+		review_stats = course_review_stats(course_ids)
+		favorite_counts = favorite_counts_for_courses(course_ids)
+		favorite_course_ids = user_favorite_course_ids(course_ids)
 		return jsonify(
 			{
-				"courses": [serialize_course(course, review_stats) for course in courses_list],
+				"courses": [
+					serialize_course(
+						course,
+						review_stats=review_stats,
+						favorite_counts=favorite_counts,
+						favorite_course_ids=favorite_course_ids,
+					)
+					for course in courses_list
+				],
 				"pagination": {
 					"page": page,
 					"perPage": per_page,
 					"total": total,
 					"totalPages": total_pages,
 				},
+			}
+		)
+
+	@app.route("/api/courses/<int:course_id>/favorite", methods=["POST"])
+	@login_required
+	def api_toggle_course_favorite(course_id):
+		course = Course.query.get_or_404(course_id)
+		payload = request.get_json(silent=True) or {}
+		wanted = payload.get("followed")
+		existing = CourseFavorite.query.filter_by(
+			course_id=course.id,
+			user_id=current_user.id,
+		).first()
+
+		if wanted is None:
+			should_follow = existing is None
+		else:
+			should_follow = bool(wanted)
+
+		if should_follow and existing is None:
+			db.session.add(CourseFavorite(course_id=course.id, user_id=current_user.id))
+		elif not should_follow and existing is not None:
+			db.session.delete(existing)
+
+		db.session.commit()
+		save_count = CourseFavorite.query.filter_by(course_id=course.id).count()
+		return jsonify(
+			{
+				"courseId": course.id,
+				"followed": should_follow,
+				"saveCount": save_count,
 			}
 		)
 

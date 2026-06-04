@@ -21,6 +21,7 @@ class User(UserMixin, db.Model):
 
     reviews = db.relationship("Review", back_populates="author")
     review_reactions = db.relationship("ReviewReaction", back_populates="user")
+    course_favorites = db.relationship("CourseFavorite", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def id(self):
@@ -126,6 +127,7 @@ class Course(db.Model):
     year_level = db.Column("yearLevel", db.Integer)
 
     offers = db.relationship("Offer", cascade="all, delete-orphan")
+    favorites = db.relationship("CourseFavorite", back_populates="course", cascade="all, delete-orphan")
     departments = association_proxy("offers", "department")
     sections = db.relationship(
         "Section",
@@ -191,6 +193,34 @@ class Course(db.Model):
         if self.year_level:
             pieces.append(f"Year level: {self.year_level}")
         return " | ".join(pieces)
+
+
+class CourseFavorite(db.Model):
+    __tablename__ = "CourseFavorite"
+
+    favorite_id = db.Column("favoriteId", db.Integer, primary_key=True)
+    course_id = db.Column(
+        "courseDbId",
+        db.Integer,
+        db.ForeignKey("Course.courseDbId"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        "userId",
+        db.Integer,
+        db.ForeignKey("User.userId"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
+
+    course = db.relationship("Course", back_populates="favorites")
+    user = db.relationship("User", back_populates="course_favorites")
+
+    __table_args__ = (
+        db.UniqueConstraint("courseDbId", "userId", name="uq_course_favorite_user"),
+    )
 
 
 class Review(db.Model):

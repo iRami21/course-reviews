@@ -49,6 +49,7 @@
               <div class="course-footer">
                 <div class="course-reviews-count">
                   <span>{{ course.department or "" }}</span>
+                  <span class="stat-save-display">&hearts; {{ favorite_counts.get(course.id, 0) }}</span>
                 </div>
                 <a class="btn-reviews-card" href="{{ url_for('course_detail', course_id=course.id) }}">
                   View Details
