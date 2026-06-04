@@ -11,7 +11,7 @@ from flask_login import (
 	logout_user,
 )
 from sqlalchemy import and_, func, inspect, or_, text
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import Course, CourseFavorite, Department, Instructor, Offer, Review, ReviewReaction, Section, Teach, User, db
@@ -225,6 +225,23 @@ def create_app():
 			.subquery()
 		)
 
+	def filter_by_latest_section(courses_query, year=None, semester=None):
+		latest = latest_section_subquery()
+		latest_section = aliased(Section)
+		courses_query = courses_query.join(latest, latest.c.course_id == Course.course_id)
+		courses_query = courses_query.join(
+			latest_section,
+			and_(
+				latest_section.course_id == Course.course_id,
+				(latest_section.roc_year * 10 + latest_section.term) == latest.c.latest_key,
+			),
+		)
+		if year is not None:
+			courses_query = courses_query.filter(latest_section.roc_year == year)
+		if semester is not None:
+			courses_query = courses_query.filter(latest_section.term == semester)
+		return courses_query
+
 	def reviews_for_course(course_id):
 		return (
 			Review.query.options(
@@ -329,20 +346,24 @@ def create_app():
 			courses_query = courses_query.filter(
 				Course.offers.any(Offer.department.has(Department.name == department))
 			)
+		year_value = None
+		semester_value = None
 		if year:
 			try:
-				courses_query = courses_query.filter(
-					Course.sections.any(Section.roc_year == int(year))
-				)
+				year_value = int(year)
 			except ValueError:
 				return jsonify({"error": "Invalid year."}), 400
 		if semester:
 			try:
-				courses_query = courses_query.filter(
-					Course.sections.any(Section.term == int(semester))
-				)
+				semester_value = int(semester)
 			except ValueError:
 				return jsonify({"error": "Invalid semester."}), 400
+		if year_value is not None or semester_value is not None:
+			courses_query = filter_by_latest_section(
+				courses_query,
+				year=year_value,
+				semester=semester_value,
+			)
 
 		stats = review_stats_subquery()
 		if min_rating_raw:

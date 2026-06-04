@@ -369,16 +369,25 @@ function createFilterButton(label, value) {
   button.dataset.value = String(value);
   button.textContent = label;
   button.addEventListener("click", function () {
-    const row = button.closest(".filter-row");
-    if (row) {
-      row.querySelectorAll(".filter-tag-btn").forEach((btn) => {
-        btn.classList.remove("active");
-      });
-    }
-    button.classList.add("active");
-    filterCourses();
+    activateFilterButton(button);
   });
   return button;
+}
+
+function activateFilterButton(button) {
+  const row = button.closest(".filter-row");
+  if (!row) return;
+
+  const buttons = row.querySelectorAll(".filter-tag-btn");
+  const allButton = row.querySelector('.filter-tag-btn[data-value=""]');
+  const shouldResetToAll = button.classList.contains("active") && button.dataset.value !== "";
+  const nextActiveButton = shouldResetToAll && allButton ? allButton : button;
+
+  buttons.forEach((btn) => {
+    btn.classList.remove("active");
+  });
+  nextActiveButton.classList.add("active");
+  filterCourses();
 }
 
 
@@ -439,9 +448,7 @@ function setupEventListeners() {
     const buttons = row.querySelectorAll('.filter-tag-btn');
     buttons.forEach(btn => {
       btn.addEventListener('click', function () {
-        buttons.forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        filterCourses();
+        activateFilterButton(this);
       });
     });
   });
