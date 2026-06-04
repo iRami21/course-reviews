@@ -302,9 +302,15 @@ body {
   }
 }
 
-/* Logo slide animation - move logo to left half when login modal opens */
-.navbar.logo-shifted .nav-logo-btn {
-  transform: translateX(calc(-200% - 40px));
+/* Logo slide animation - move entire logo area to left half when login modal opens */
+.navbar.logo-shifted .nav-logo {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navbar .nav-logo {
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
