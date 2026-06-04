@@ -35,6 +35,44 @@
           </div>
         </div>
 
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+          <section class="admin-edit-course-section">
+            <h2>Admin: Edit course</h2>
+            <form class="admin-course-form" method="post" action="{{ url_for('admin_edit_course', course_id=course.id) }}">
+              <div class="admin-form-row">
+                <input type="text" name="code" placeholder="Course code" value="{{ course.code }}" required />
+                <input type="text" name="title" placeholder="Course title" value="{{ course.title }}" required />
+              </div>
+              <div class="admin-form-row">
+                <input type="text" name="title_zh" placeholder="Chinese title" value="{{ course.title_zh or '' }}" />
+                <input type="text" name="professor" placeholder="Professor" value="{{ course.professor or '' }}" />
+              </div>
+              <div class="admin-form-row">
+                <input type="text" name="department" placeholder="Department" value="{{ course.department or '' }}" />
+                <input type="text" name="credits" placeholder="Credits" value="{{ course.credits or '' }}" />
+              </div>
+              <div class="admin-form-row">
+                <input type="text" name="year" placeholder="Year" value="{{ course.year or '' }}" />
+                <input type="text" name="semester" placeholder="Semester" value="{{ course.semester or '' }}" />
+                <input type="text" name="grade" placeholder="Grade" value="{{ course.grade or '' }}" />
+              </div>
+              <div class="admin-form-row">
+                <input type="text" name="requirement" placeholder="Requirement" value="{{ course.requirement or '' }}" />
+                <label class="admin-checkbox-label">
+                  <input type="checkbox" name="english_taught" {% if course.english_taught %}checked{% endif %} /> English taught
+                </label>
+              </div>
+              <div class="admin-form-row">
+                <textarea name="description" placeholder="Description">{{ course.description or '' }}</textarea>
+              </div>
+              <button type="submit" class="btn-reviews-card">Save Changes</button>
+            </form>
+            <form class="admin-delete-form" method="post" action="{{ url_for('admin_delete_course', course_id=course.id) }}" onsubmit="return confirm('Delete this course?');">
+              <button type="submit" class="btn-secondary">Delete Course</button>
+            </form>
+          </section>
+        {% endif %}
+
         {% if course.description %}
           <div class="detail-description">
             <span>Description</span>

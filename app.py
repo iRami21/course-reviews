@@ -12,6 +12,7 @@ from flask_login import (
 	logout_user,
 )
 from sqlalchemy import and_, func, or_, text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import Course, Favorite, Notification, Review, ReviewReaction, ReviewReply, User, db
@@ -262,10 +263,40 @@ def create_app():
 			)
 		db.session.commit()
 
+	def ensure_admin_user():
+		admin_username = os.environ.get("ADMIN_USERNAME", "admin")
+		admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+		admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+
+		user_by_username = User.query.filter_by(username=admin_username).first()
+		user_by_email = User.query.filter_by(email=admin_email).first()
+
+		if user_by_username:
+			if user_by_username.role != "admin":
+				user_by_username.role = "admin"
+				db.session.commit()
+			return
+
+		if user_by_email:
+			if user_by_email.role != "admin":
+				user_by_email.role = "admin"
+				db.session.commit()
+			return
+
+		admin_user = User(
+			username=admin_username,
+			email=admin_email,
+			password_hash=generate_password_hash(admin_password, method="pbkdf2:sha256"),
+			role="admin",
+		)
+		db.session.add(admin_user)
+		db.session.commit()
+
 	with app.app_context():
 		db.create_all()
 		ensure_app_schema()
 		ensure_course_schema()
+		ensure_admin_user()
 
 	@login_manager.user_loader
 	def load_user(user_id):
@@ -369,6 +400,7 @@ def create_app():
 			"email": user.email,
 			"avatarAnimal": user.avatar_animal,
 			"gender": user.gender,
+			"role": user.role or "student",
 		}
 
 	def serialize_course(course, favorite_counts=None, favorite_ids=None):
@@ -1160,6 +1192,107 @@ def create_app():
 	def is_admin():
 		return current_user.is_authenticated and getattr(current_user, 'role', 'student') == "admin"
 
+	def admin_required_json():
+		if not is_admin():
+			return jsonify({"error": "Admin access required."}), 403
+		return None
+
+	def parse_optional_int(value, field_name):
+		value = str(value or "").strip()
+		if not value:
+			return None
+		try:
+			return int(value)
+		except ValueError:
+			raise ValueError(f"{field_name} must be a number.")
+
+	def get_course_admin_data():
+		data = request.get_json(silent=True) or request.form
+		return {
+			"code": str(data.get("code", "")).strip(),
+			"title": str(data.get("title", "")).strip(),
+			"title_zh": str(data.get("title_zh", data.get("titleZh", ""))).strip() or None,
+			"professor": str(data.get("professor", "")).strip() or None,
+			"department": str(data.get("department", "")).strip() or None,
+			"credits": parse_optional_int(data.get("credits"), "Credits"),
+			"year": parse_optional_int(data.get("year"), "Year"),
+			"semester": parse_optional_int(data.get("semester"), "Semester"),
+			"grade": str(data.get("grade", "")).strip() or None,
+			"requirement": str(data.get("requirement", "")).strip() or None,
+			"description": str(data.get("description", "")).strip() or None,
+			"english_taught": bool(data.get("english_taught", data.get("englishTaught", False))),
+		}
+
+	def apply_course_admin_data(course, data, require_identity=False):
+		if require_identity and (not data["code"] or not data["title"]):
+			raise ValueError("Course code and title are required.")
+		if data["code"]:
+			course.code = data["code"]
+		if data["title"]:
+			course.title = data["title"]
+		course.title_zh = data["title_zh"]
+		course.professor = data["professor"]
+		course.department = data["department"]
+		course.credits = data["credits"]
+		course.year = data["year"]
+		course.semester = data["semester"]
+		course.grade = data["grade"]
+		course.requirement = data["requirement"]
+		course.description = data["description"]
+		course.english_taught = data["english_taught"]
+		return course
+
+	@app.route("/api/admin/courses", methods=["POST"])
+	@login_required
+	def api_admin_add_course():
+		access_error = admin_required_json()
+		if access_error:
+			return access_error
+
+		try:
+			data = get_course_admin_data()
+			course = apply_course_admin_data(Course(), data, require_identity=True)
+			db.session.add(course)
+			db.session.commit()
+		except ValueError as error:
+			return jsonify({"error": str(error)}), 400
+		except IntegrityError:
+			db.session.rollback()
+			return jsonify({"error": "A course with the same code, year, and semester already exists."}), 400
+
+		return jsonify({"course": serialize_course(course)}), 201
+
+	@app.route("/api/admin/courses/<int:course_id>", methods=["PATCH"])
+	@login_required
+	def api_admin_edit_course(course_id):
+		access_error = admin_required_json()
+		if access_error:
+			return access_error
+
+		course = Course.query.get_or_404(course_id)
+		try:
+			apply_course_admin_data(course, get_course_admin_data())
+			db.session.commit()
+		except ValueError as error:
+			return jsonify({"error": str(error)}), 400
+		except IntegrityError:
+			db.session.rollback()
+			return jsonify({"error": "A course with the same code, year, and semester already exists."}), 400
+
+		return jsonify({"course": serialize_course(course)})
+
+	@app.route("/api/admin/courses/<int:course_id>", methods=["DELETE"])
+	@login_required
+	def api_admin_delete_course(course_id):
+		access_error = admin_required_json()
+		if access_error:
+			return access_error
+
+		course = Course.query.get_or_404(course_id)
+		db.session.delete(course)
+		db.session.commit()
+		return jsonify({"ok": True, "courseId": course_id})
+
 	@app.route("/admin/courses/add", methods=["POST"])
 	@login_required
 	def admin_add_course():
@@ -1167,15 +1300,61 @@ def create_app():
 			flash("權限不足：僅限管理員操作 (Access denied)")
 			return redirect(url_for("index"))
 
-		code = request.form.get("code")
-		title = request.form.get("title")
-		
+		code = str(request.form.get("code", "")).strip()
+		title = str(request.form.get("title", "")).strip()
+		title_zh = str(request.form.get("title_zh", "")).strip() or None
+		professor = str(request.form.get("professor", "")).strip() or None
+		department = str(request.form.get("department", "")).strip() or None
+		credits_raw = request.form.get("credits", "").strip()
+		year_raw = request.form.get("year", "").strip()
+		semester_raw = request.form.get("semester", "").strip()
+		grade = str(request.form.get("grade", "")).strip() or None
+		requirement = str(request.form.get("requirement", "")).strip() or None
+		description = str(request.form.get("description", "")).strip() or None
+		english_taught = bool(request.form.get("english_taught"))
+
+		credits = None
+		if credits_raw:
+			try:
+				credits = int(credits_raw)
+			except ValueError:
+				credits = None
+
+		year = None
+		if year_raw:
+			try:
+				year = int(year_raw)
+			except ValueError:
+				year = None
+
+		semester = None
+		if semester_raw:
+			try:
+				semester = int(semester_raw)
+			except ValueError:
+				semester = None
+
 		if code and title:
-			new_course = Course(code=code, title=title)
+			new_course = Course(
+				code=code,
+				title=title,
+				title_zh=title_zh,
+				professor=professor,
+				department=department,
+				credits=credits,
+				year=year,
+				semester=semester,
+				grade=grade,
+				requirement=requirement,
+				english_taught=english_taught,
+				description=description,
+			)
 			db.session.add(new_course)
 			db.session.commit()
 			flash("Course added successfully.")
-		
+		else:
+			flash("Please provide both code and title.")
+
 		return redirect(url_for("courses"))
 
 	@app.route("/admin/courses/<int:course_id>/edit", methods=["POST"])
@@ -1186,10 +1365,46 @@ def create_app():
 			return redirect(url_for("index"))
 
 		course = Course.query.get_or_404(course_id)
-		new_title = request.form.get("title")
-		if new_title:
-			course.title = new_title
-			
+		code = str(request.form.get("code", "")).strip()
+		title = str(request.form.get("title", "")).strip()
+		title_zh = str(request.form.get("title_zh", "")).strip() or None
+		professor = str(request.form.get("professor", "")).strip() or None
+		department = str(request.form.get("department", "")).strip() or None
+		credits_raw = request.form.get("credits", "").strip()
+		year_raw = request.form.get("year", "").strip()
+		semester_raw = request.form.get("semester", "").strip()
+		grade = str(request.form.get("grade", "")).strip() or None
+		requirement = str(request.form.get("requirement", "")).strip() or None
+		description = str(request.form.get("description", "")).strip() or None
+		english_taught = bool(request.form.get("english_taught"))
+
+		if code:
+			course.code = code
+		if title:
+			course.title = title
+		course.title_zh = title_zh
+		course.professor = professor
+		course.department = department
+		course.grade = grade
+		course.requirement = requirement
+		course.description = description
+		course.english_taught = english_taught
+
+		try:
+			course.credits = int(credits_raw) if credits_raw else None
+		except ValueError:
+			pass
+
+		try:
+			course.year = int(year_raw) if year_raw else None
+		except ValueError:
+			pass
+
+		try:
+			course.semester = int(semester_raw) if semester_raw else None
+		except ValueError:
+			pass
+
 		db.session.commit()
 		flash("Course updated successfully.")
 		return redirect(url_for("course_detail", course_id=course.id))

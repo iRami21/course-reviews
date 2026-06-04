@@ -16,6 +16,44 @@
         <a class="btn-secondary" href="{{ url_for('index') }}">Back to Home</a>
       </header>
 
+      {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <section class="admin-course-section">
+          <div class="admin-course-header">
+            <h2>Admin Course Management</h2>
+            <p class="admin-hint">Add a new course to the catalog.</p>
+          </div>
+          <form class="admin-course-form" method="post" action="{{ url_for('admin_add_course') }}">
+            <div class="admin-form-row">
+              <input type="text" name="code" placeholder="Course code" required />
+              <input type="text" name="title" placeholder="Course title" required />
+            </div>
+            <div class="admin-form-row">
+              <input type="text" name="title_zh" placeholder="Chinese title" />
+            </div>
+            <div class="admin-form-row">
+              <input type="text" name="year" placeholder="Year" />
+              <input type="text" name="semester" placeholder="Semester" />
+              <input type="text" name="credits" placeholder="Credits" />
+            </div>
+            <div class="admin-form-row">
+              <input type="text" name="professor" placeholder="Professor" />
+              <input type="text" name="department" placeholder="Department" />
+            </div>
+            <div class="admin-form-row">
+              <input type="text" name="grade" placeholder="Grade" />
+              <input type="text" name="requirement" placeholder="Requirement" />
+              <label class="admin-checkbox-label">
+                <input type="checkbox" name="english_taught" /> English taught
+              </label>
+            </div>
+            <div class="admin-form-row">
+              <textarea name="description" placeholder="Description"></textarea>
+            </div>
+            <button type="submit" class="btn-reviews-card">Add Course</button>
+          </form>
+        </section>
+      {% endif %}
+
       <form class="course-search-form" method="get" action="{{ url_for('courses') }}">
         <input
           type="text"

@@ -60,10 +60,16 @@ body {
 .nav-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem 2rem;
+  padding: 0.5rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+#databaseLogo{
+  width: 80px;
+  height: 60px;
+  padding-top: 0.2rem;
 }
 
 .nav-logo-btn {
@@ -1148,6 +1154,311 @@ body {
   gap: 0.45rem;
 }
 
+.admin-course-section,
+.admin-edit-course-section {
+  border: 2px solid rgba(79, 103, 177, 0.3);
+  border-radius: 16px;
+  background:#ffffff;
+  box-shadow: 0 8px 32px rgba(79, 103, 177, 0.15);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-course-section::before,
+.admin-edit-course-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #fbd411;
+}
+
+.admin-course-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-course-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.admin-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  margin-bottom: 0.3rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f67b1, #3a52a0);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(79, 103, 177, 0.3);
+}
+
+.admin-kicker::before {
+  content: "⚡";
+  font-size: 0.85rem;
+}
+
+.admin-hint {
+  color: #697386;
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+}
+
+.admin-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.6rem 1.25rem;
+  border: 2px solid #4f67b1;
+  border-radius: 12px;
+  background: #4f67b1;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3);
+  transition: all 0.2s ease;
+}
+
+.admin-toggle-btn:hover {
+  background: linear-gradient(135deg, #3a52a0, #2b4080);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 103, 177, 0.4);
+}
+
+.admin-toggle-btn:active {
+  transform: translateY(0);
+}
+
+.admin-course-form {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 2px dashed rgba(79, 103, 177, 0.2);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-course-form-collapsed {
+  display: none;
+}
+
+.admin-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.admin-course-form input,
+.admin-course-form textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.95rem 1.15rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.admin-course-form input:focus,
+.admin-course-form textarea:focus {
+  outline: none;
+  border-color: #4f67b1;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(79, 103, 177, 0.12);
+  transform: translateY(-1px);
+}
+
+.admin-course-form input::placeholder,
+.admin-course-form textarea::placeholder {
+  color: #94a3b8;
+}
+
+.admin-course-form textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.admin-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  font-size: 0.95rem;
+  color: #111827;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-checkbox-label:hover {
+  border-color: #4f67b1;
+  background: #f8fafc;
+}
+
+.admin-checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #4f67b1;
+  cursor: pointer;
+}
+
+.admin-delete-form {
+  margin-top: 1.2rem;
+}
+
+.admin-course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(79, 103, 177, 0.1);
+  margin-top: 0.5rem;
+}
+
+.admin-course-actions .btn-reviews-card {
+  background: #3a52a0;
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3);
+  font-weight: 800;
+  padding: 0.7rem 1.5rem;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.admin-course-actions .btn-reviews-card:hover {
+  background: #3a52a0;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 103, 177, 0.4);
+}
+
+.admin-course-actions .btn-secondary {
+  background:#d92d50;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(217, 45, 80, 0.3);
+  font-weight: 800;
+  padding: 0.7rem 1.5rem;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.admin-course-actions .btn-secondary:hover {
+  background: #d92d50;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(217, 45, 80, 0.4);
+}
+
+/* Admin action buttons on course cards */
+.course-admin-actions {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+.admin-action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 129, 41, 0.9);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.admin-action-btn:hover {
+  background: #4f67b1;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.4);
+}
+
+.admin-action-btn.admin-delete-btn {
+  background: rgba(217, 45, 80, 0.9);
+}
+
+.admin-action-btn.admin-delete-btn:hover {
+  background: #d92d50;
+  box-shadow: 0 4px 12px rgba(217, 45, 80, 0.4);
+}
+
+.admin-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Admin add course button in navbar */
+.admin-add-course-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #4f67b1, #3a52a0);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3);
+}
+
+.admin-add-course-btn:hover {
+  background: linear-gradient(135deg, #3a52a0, #2b4080);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 103, 177, 0.4);
+}
+
+.admin-add-course-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .detail-meta-grid span,
 .detail-description span {
   color: #536071;
@@ -1710,7 +2021,6 @@ button {
 .nav-container {
   max-width: var(--container);
   min-height: 72px;
-  padding: 0.9rem 1.5rem;
 }
 
 .nav-logo h1 {
@@ -3613,7 +3923,7 @@ button {
 
 .edit-textarea:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #2b923a;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
@@ -3841,7 +4151,6 @@ button {
   background-color: #ffffff;
 }
 
-<<<<<<< HEAD
 /* ============================================================
    SCHEDULE SIDEBAR — Right-side collapsible weekly timetable
    ============================================================ */
@@ -3849,8 +4158,9 @@ button {
 /* Toggle button: sticks to the right edge, vertically centered */
 #scheduleToggleBtn {
   position: fixed;
+  bottom: 0;
   right: 0;
-  top: 50%;
+  width: 200px;
   transform: translateY(-50%);
   background: #4f67b1;
   color: #fff;
@@ -4271,30 +4581,3 @@ body.schedule-open #scheduleToggleBtn {
   font-weight: 800;
   line-height: 1.4;
 }
-=======
-@media (max-width: 640px) {
-  .login-page-overlay {
-    align-items: stretch;
-    overflow-y: auto;
-  }
-
-  .welcome-shell,
-  .welcome-white-box {
-    width: 100%;
-    margin: auto 0;
-  }
-
-  .welcome-actions {
-    flex-direction: column;
-  }
-
-  .welcome-primary-btn,
-  .welcome-secondary-btn {
-    width: 100%;
-  }
-
-  .welcome-capabilities span {
-    font-size: 0.86rem;
-  }
-}
->>>>>>> 720a2d32c3d8b70c39d725acd9af304737056b04

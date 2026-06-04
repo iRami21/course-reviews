@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -15,7 +15,7 @@
       <div class="nav-container">
         <div class="nav-logo">
           <button type="button" class="nav-logo-btn" id="navLogoBtn" onclick="handleNavLogoClick()" aria-label="Course Review Platform">
-            <span class="nav-logo-default">Course Review Platform</span>
+            <img src="../static/icons//databaselogo.png"  alt="databaseLogo" id="databaseLogo">
             <span class="nav-logo-back" aria-hidden="true">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M19 12H5"></path>
@@ -221,8 +221,51 @@
             <p class="page-kicker"> Let's explore !</p>
             <h2>All Courses</h2>
           </div>
+        </section>
+
+      <section class="admin-course-section" id="adminAddCoursePanel" style="display: none;">
+        <div class="admin-course-header">
+          <div>
+            <h2>Course Management</h2>
+            <p class="admin-hint">Create courses directly from the browse page.</p>
+          </div>
+          <button type="button" class="admin-toggle-btn" id="adminAddCourseToggle" onclick="toggleAdminAddCourseForm()">
+            New Course
+          </button>
         </div>
+        <form class="admin-course-form admin-course-form-collapsed" id="adminAddCourseForm">
+          <div class="admin-form-row">
+            <input type="text" name="code" placeholder="Course code" required />
+            <input type="text" name="title" placeholder="Course title" required />
+          </div>
+          <div class="admin-form-row">
+            <input type="text" name="title_zh" placeholder="Chinese title" />
+            <input type="text" name="professor" placeholder="Professor" />
+          </div>
+          <div class="admin-form-row">
+            <input type="text" name="department" placeholder="Department" />
+            <input type="text" name="credits" placeholder="Credits" />
+          </div>
+          <div class="admin-form-row">
+            <input type="text" name="year" placeholder="Year" />
+            <input type="text" name="semester" placeholder="Semester" />
+            <input type="text" name="grade" placeholder="Grade" />
+          </div>
+          <div class="admin-form-row">
+            <input type="text" name="requirement" placeholder="Requirement" />
+            <label class="admin-checkbox-label">
+              <input type="checkbox" name="english_taught" /> English taught
+            </label>
+          </div>
+          <div class="admin-form-row">
+            <textarea name="description" placeholder="Description"></textarea>
+          </div>
+          <button type="submit" class="btn-reviews-card">Add Course</button>
+        </form>
       </section>
+
+      <!-- Admin Edit Course Panel (shown when editing a course) -->
+      <section class="admin-edit-course-section" id="adminEditCoursePanel" style="display: none;"></section>
 
       <!-- Filters -->
       <div class="quick-sort-menu" id="quickSortMenu">

@@ -407,6 +407,216 @@ async function apiRequest(url, options = {}) {
   return data;
 }
 
+function isCurrentUserAdmin() {
+  return currentUser?.role === "admin";
+}
+
+function getAdminCoursePayload(form) {
+  const formData = new FormData(form);
+  return {
+    code: String(formData.get("code") || "").trim(),
+    title: String(formData.get("title") || "").trim(),
+    title_zh: String(formData.get("title_zh") || "").trim(),
+    professor: String(formData.get("professor") || "").trim(),
+    department: String(formData.get("department") || "").trim(),
+    credits: String(formData.get("credits") || "").trim(),
+    year: String(formData.get("year") || "").trim(),
+    semester: String(formData.get("semester") || "").trim(),
+    grade: String(formData.get("grade") || "").trim(),
+    requirement: String(formData.get("requirement") || "").trim(),
+    description: String(formData.get("description") || "").trim(),
+    englishTaught: formData.has("english_taught"),
+  };
+}
+
+function renderAdminControls() {
+  const addPanel = document.getElementById("adminAddCoursePanel");
+  if (addPanel) {
+    addPanel.style.display = isCurrentUserAdmin() ? "block" : "none";
+  }
+
+  // Show/hide the "+" button in the page heading for admin users
+  const addBtn = document.getElementById("adminAddCourseBtn");
+  if (addBtn) {
+    addBtn.style.display = isCurrentUserAdmin() ? "inline-flex" : "none";
+  }
+
+  // Update user menu to show admin badge if user is admin
+  const userMenu = document.getElementById("userMenu");
+  if (userMenu && currentUser) {
+    const existingBadge = userMenu.querySelector(".admin-badge");
+    if (isCurrentUserAdmin() && !existingBadge) {
+      const badge = document.createElement("span");
+      badge.className = "admin-badge";
+      badge.textContent = "admin";
+      badge.style.cssText = "font-size: 1rem; color: #ffcf76; background: rgba(255,207,118,0.2); padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 700;";
+      userMenu.appendChild(badge);
+    } else if (!isCurrentUserAdmin() && existingBadge) {
+      existingBadge.remove();
+    }
+  }
+
+  if (currentCourseId) {
+    const course = allCourses.find((item) => String(item.id) === String(currentCourseId));
+    renderAdminCoursePanel(course);
+  }
+}
+
+function toggleAdminAddCourseForm() {
+  const form = document.getElementById("adminAddCourseForm");
+  const button = document.getElementById("adminAddCourseToggle");
+  if (!form) return;
+
+  const isCollapsed = form.classList.toggle("admin-course-form-collapsed");
+  if (button) {
+    button.textContent = isCollapsed ? "New Course" : "Close";
+  }
+}
+
+// Edit admin course - shows edit panel in the All Courses page
+window.editAdminCourse = function(courseId) {
+  const course = allCourses.find((c) => String(c.id) === String(courseId));
+  if (!course || !isCurrentUserAdmin()) return;
+
+  // Make sure we're on the main page (not in course detail)
+  if (document.body.classList.contains("detail-open")) {
+    closeCourseDetail();
+  }
+
+  // Show the admin edit panel
+  const panel = document.getElementById("adminEditCoursePanel");
+  if (panel) {
+    panel.style.display = "block";
+    renderAdminCoursePanel(course);
+    // Scroll to the panel
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+};
+
+function renderAdminCoursePanel(course) {
+  const panel = document.getElementById("adminEditCoursePanel");
+  if (!panel) return;
+
+  if (!isCurrentUserAdmin() || !course) {
+    panel.style.display = "none";
+    panel.innerHTML = "";
+    return;
+  }
+
+  panel.style.display = "block";
+  panel.innerHTML = `
+    <div class="admin-course-header">
+      <div>
+        <h2>Edit Course</h2>
+        <p class="admin-hint">Changes update this course immediately.</p>
+      </div>
+    </div>
+    <form class="admin-course-form" id="adminEditCourseForm" data-course-id="${escapeHtml(course.id)}">
+      <div class="admin-form-row">
+        <input type="text" name="code" placeholder="Course code" value="${escapeHtml(course.code || "")}" required />
+        <input type="text" name="title" placeholder="Course title" value="${escapeHtml(course.title || "")}" required />
+      </div>
+      <div class="admin-form-row">
+        <input type="text" name="title_zh" placeholder="Chinese title" value="${escapeHtml(course.titleZh || "")}" />
+        <input type="text" name="professor" placeholder="Professor" value="${escapeHtml(course.professor || "")}" />
+      </div>
+      <div class="admin-form-row">
+        <input type="text" name="department" placeholder="Department" value="${escapeHtml(course.department || "")}" />
+        <input type="text" name="credits" placeholder="Credits" value="${escapeHtml(course.credits || "")}" />
+      </div>
+      <div class="admin-form-row">
+        <input type="text" name="year" placeholder="Year" value="${escapeHtml(course.year || "")}" />
+        <input type="text" name="semester" placeholder="Semester" value="${escapeHtml(course.semester || "")}" />
+        <input type="text" name="grade" placeholder="Grade" value="${escapeHtml(course.grade || "")}" />
+      </div>
+      <div class="admin-form-row">
+        <input type="text" name="requirement" placeholder="Requirement" value="${escapeHtml(course.requirement || "")}" />
+        <label class="admin-checkbox-label">
+          <input type="checkbox" name="english_taught" ${course.englishTaught ? "checked" : ""} /> English taught
+        </label>
+      </div>
+      <div class="admin-form-row">
+        <textarea name="description" placeholder="Description">${escapeHtml(course.description || "")}</textarea>
+      </div>
+      <div class="admin-course-actions">
+        <button type="submit" class="btn-reviews-card">Save Changes</button>
+        <button type="button" class="btn-secondary" onclick="deleteAdminCourse(${course.id})">Delete Course</button>
+      </div>
+    </form>
+  `;
+}
+
+async function submitAdminCourseCreate(event) {
+  event.preventDefault();
+  try {
+    const result = await apiRequest("/api/admin/courses", {
+      method: "POST",
+      body: JSON.stringify(getAdminCoursePayload(event.currentTarget)),
+    });
+
+    if (result.course) {
+      allCourses.unshift(result.course);
+      displayCourses(allCourses);
+    }
+    event.currentTarget.reset();
+    alert("Course added successfully.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function submitAdminCourseEdit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const courseId = form.dataset.courseId;
+
+  try {
+    const result = await apiRequest(`/api/admin/courses/${courseId}`, {
+      method: "PATCH",
+      body: JSON.stringify(getAdminCoursePayload(form)),
+    });
+
+    if (result.course) {
+      replaceCourseInState(result.course);
+      openCourseDetail(result.course.id);
+      displayCourses(allCourses);
+    }
+    alert("Course updated successfully.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function deleteAdminCourse(courseId) {
+  if (!confirm("Delete this course?")) return;
+
+  try {
+    await apiRequest(`/api/admin/courses/${courseId}`, {
+      method: "DELETE",
+    });
+    allCourses = allCourses.filter((course) => String(course.id) !== String(courseId));
+    delete courseReviews[courseId];
+    closeCourseDetail();
+    displayCourses(allCourses);
+    alert("Course deleted successfully.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function setupAdminForms() {
+  const addForm = document.getElementById("adminAddCourseForm");
+  if (addForm) {
+    addForm.addEventListener("submit", submitAdminCourseCreate);
+  }
+
+  document.addEventListener("submit", (event) => {
+    if (event.target?.id === "adminEditCourseForm") {
+      submitAdminCourseEdit(event);
+    }
+  });
+}
+
 function buildNotificationItem(item) {
   const statusClass = item.isRead ? "" : "unread";
   const icon = item.category === "activity" ? "💬" : "🔔";
@@ -543,7 +753,9 @@ document.addEventListener("DOMContentLoaded", function () {
   renderDepartmentFilter("");
   displayCourses(allCourses);
   setupEventListeners();
+  setupAdminForms();
   checkUserLogin();
+  renderAdminControls();
   refreshNotifications();
   startNotificationPolling();
 });
@@ -1073,6 +1285,26 @@ function renderCourseCards(container, courses, emptyText) {
         ? `<div class="course-title-zh">${escapeHtml(course.titleZh)}</div>`
         : "";
 
+    // Admin action buttons (edit and delete) - only show for admin users
+    const adminActionsHtml = isCurrentUserAdmin() ? `
+      <div class="course-admin-actions" onclick="event.stopPropagation();">
+        <button class="admin-action-btn" onclick="event.stopPropagation(); editAdminCourse(${course.id})" title="Edit course" aria-label="Edit course">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button class="admin-action-btn admin-delete-btn" onclick="event.stopPropagation(); deleteAdminCourse(${course.id})" title="Delete course" aria-label="Delete course">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <line x1="10" y1="11" x2="10" y2="17"/>
+            <line x1="14" y1="11" x2="14" y2="17"/>
+          </svg>
+        </button>
+      </div>
+    ` : "";
+
     courseCard.innerHTML = `
             <div class="course-card-header">
                 <div class="course-card-tags">
@@ -1111,6 +1343,7 @@ function renderCourseCards(container, courses, emptyText) {
                   <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
                 </div>
             </div>
+            ${adminActionsHtml}
         `;
 
     container.appendChild(courseCard);
@@ -1674,6 +1907,8 @@ function updateAuthUI() {
   const userMenu = document.getElementById("userMenu");
   const userAvatar = document.getElementById("userAvatar");
 
+  renderAdminControls();
+
   userAvatar.className = `user-avatar ${getGenderClass(currentUser?.gender)}`;
   userAvatar.innerHTML = avatarIcon(currentUser);
 
@@ -1743,6 +1978,10 @@ function openCourseDetail(courseId) {
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
   
+  // Hide admin panels when viewing course detail
+  if (document.getElementById("adminAddCoursePanel")) document.getElementById("adminAddCoursePanel").style.display = "none";
+  if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
+  
   document.getElementById("coursesContainer").style.display = "none";
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
@@ -1772,10 +2011,19 @@ function closeCourseDetail() {
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
+  // Restore admin panels when returning to main page
+  if (document.getElementById("adminAddCoursePanel")) {
+    document.getElementById("adminAddCoursePanel").style.display = isCurrentUserAdmin() ? "block" : "none";
+  }
+  if (document.getElementById("adminEditCoursePanel")) {
+    document.getElementById("adminEditCoursePanel").style.display = "none";
+  }
+
   document.getElementById("coursesContainer").style.display = "";
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
   currentCourseId = null;
+  renderAdminCoursePanel(null);
 }
 
 function getReviewsForCourse(courseId) {
