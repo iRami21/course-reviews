@@ -11,7 +11,7 @@ from flask_login import (
 	logout_user,
 )
 from sqlalchemy import and_, func, inspect, or_, text
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import Course, CourseFavorite, Department, Instructor, Offer, Review, ReviewReaction, Section, Teach, User, db
@@ -143,11 +143,16 @@ def create_app():
 				None,
 			)
 
+		section_label = None
+		if review.section:
+			section_label = f"{review.section.roc_year} S{review.section.term}"
+
 		return {
 			"id": review.id,
 			"author": review.author.username if review.author else "Anonymous",
 			"rating": review.rating,
 			"date": review.created_at.strftime("%Y-%m-%d"),
+			"sectionLabel": section_label,
 			"language": review.language,
 			"text": review.text,
 			"likes": reaction_totals.get("❤️", 0),
@@ -168,6 +173,21 @@ def create_app():
 		if len(cleaned) == 1:
 			return f"{cleaned}%"
 		return f"%{cleaned}%"
+
+	def build_section_filter(year_tokens=None, semester_tokens=None):
+		year_values = [int(value) for value in (year_tokens or [])]
+		semester_values = [int(value) for value in (semester_tokens or [])]
+
+		if not year_values and not semester_values:
+			return None
+
+		conditions = []
+		if year_values:
+			conditions.append(Section.roc_year.in_(year_values))
+		if semester_values:
+			conditions.append(Section.term.in_(semester_values))
+
+		return Course.sections.any(and_(*conditions))
 
 	def course_query_with_details():
 		return Course.query.options(
@@ -225,27 +245,21 @@ def create_app():
 			.subquery()
 		)
 
-	def filter_by_latest_section(courses_query, year=None, semester=None):
-		latest = latest_section_subquery()
-		latest_section = aliased(Section)
-		courses_query = courses_query.join(latest, latest.c.course_id == Course.course_id)
-		courses_query = courses_query.join(
-			latest_section,
-			and_(
-				latest_section.course_id == Course.course_id,
-				(latest_section.roc_year * 10 + latest_section.term) == latest.c.latest_key,
-			),
-		)
+	def filter_by_offered_section(courses_query, year=None, semester=None):
+		section_filters = []
 		if year is not None:
-			courses_query = courses_query.filter(latest_section.roc_year == year)
+			section_filters.append(Section.roc_year == year)
 		if semester is not None:
-			courses_query = courses_query.filter(latest_section.term == semester)
-		return courses_query
+			section_filters.append(Section.term == semester)
+		if not section_filters:
+			return courses_query
+		return courses_query.filter(Course.sections.any(and_(*section_filters)))
 
 	def reviews_for_course(course_id):
 		return (
 			Review.query.options(
 				selectinload(Review.author),
+				selectinload(Review.section),
 				selectinload(Review.reactions),
 				selectinload(Review.replies).selectinload(Review.author),
 				selectinload(Review.replies).selectinload(Review.reactions),
@@ -263,6 +277,8 @@ def create_app():
 			tokens = [token for token in re.split(r"\s+", query) if token]
 			filters = []
 			text_terms = []
+			year_tokens = []
+			semester_tokens = []
 
 			for token in tokens:
 				lower = token.lower()
@@ -270,17 +286,21 @@ def create_app():
 					year = int(lower)
 					if len(lower) == 4:
 						year -= 1911
-					filters.append(Course.sections.any(Section.roc_year == year))
+					year_tokens.append(year)
 					continue
 
 				if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
-					filters.append(Course.sections.any(Section.term == 1))
+					semester_tokens.append(1)
 					continue
 				if lower in {"s2", "sem2", "semester2", "semester-2", "semester_2"}:
-					filters.append(Course.sections.any(Section.term == 2))
+					semester_tokens.append(2)
 					continue
 
 				text_terms.append(token)
+
+			section_filter = build_section_filter(year_tokens, semester_tokens)
+			if section_filter is not None:
+				filters.append(section_filter)
 
 			for term in text_terms:
 				pattern = build_search_pattern(term)
@@ -359,7 +379,7 @@ def create_app():
 			except ValueError:
 				return jsonify({"error": "Invalid semester."}), 400
 		if year_value is not None or semester_value is not None:
-			courses_query = filter_by_latest_section(
+			courses_query = filter_by_offered_section(
 				courses_query,
 				year=year_value,
 				semester=semester_value,

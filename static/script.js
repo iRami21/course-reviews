@@ -544,6 +544,7 @@ function renderCourseCards(container, courses, emptyText) {
                 <div class="course-card-tags">
                   <div class="course-code">${course.code}</div>
                   <div class="course-semester">${semesterText}</div>
+                  <div class="course-latest-offered">Latest offered: ${semesterText}</div>
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
@@ -1429,6 +1430,7 @@ async function loadReviews(courseId) {
                   <span class="review-author">${escapeHtml(review.author)}</span>
                   <span class="review-dot"></span>
                   <span class="review-date">${escapeHtml(review.date)}</span>
+                  ${review.sectionLabel ? `<span class="review-dot"></span><span class="review-section-label">Section: ${escapeHtml(review.sectionLabel)}</span>` : ""}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
