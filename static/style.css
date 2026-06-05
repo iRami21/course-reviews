@@ -1431,6 +1431,33 @@ body {
   box-shadow: 0 6px 20px rgba(217, 45, 80, 0.4);
 }
 
+.course-card.admin-course-card {
+  overflow: hidden;
+}
+
+.course-card.admin-course-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: rgba(43, 47, 68, 0);
+  backdrop-filter: blur(0);
+  transition: background-color 0.22s ease, backdrop-filter 0.22s ease;
+}
+
+.course-card.admin-course-card:hover::after {
+  background: rgba(43, 47, 68, 0.34);
+  backdrop-filter: blur(1px);
+}
+
+.course-card.admin-course-card:hover .course-title-section,
+.course-card.admin-course-card:hover .course-card-header,
+.course-card.admin-course-card:hover .course-divider,
+.course-card.admin-course-card:hover .course-footer {
+  filter: saturate(0.78);
+}
+
 /* Admin action buttons on course cards */
 .course-admin-actions {
   display: flex;
@@ -1438,7 +1465,16 @@ body {
   position: absolute;
   top: 12px;
   right: 12px;
-  z-index: 10;
+  z-index: 12;
+  opacity: 0.72;
+  transform: translateY(-2px) scale(0.96);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.course-card.admin-course-card:hover .course-admin-actions,
+.course-card.admin-course-card:focus-within .course-admin-actions {
+  opacity: 1;
+  transform: translateY(0) scale(1.08);
 }
 
 .admin-action-btn {
@@ -1449,26 +1485,29 @@ body {
   justify-content: center;
   border: none;
   border-radius: 8px;
-  background: rgba(0, 129, 41, 0.9);
+  background: rgba(79, 103, 177, 0.95);
   color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
   padding: 0;
+  box-shadow: 0 6px 14px rgba(16, 24, 40, 0.22);
 }
 
 .admin-action-btn:hover {
-  background: #4f67b1;
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.4);
+  background: #ffcf76;
+  color: #891d1a;
+  transform: scale(1.12);
+  box-shadow: 0 8px 18px rgba(255, 207, 118, 0.44);
 }
 
 .admin-action-btn.admin-delete-btn {
-  background: rgba(217, 45, 80, 0.9);
+  background: rgba(217, 45, 80, 0.95);
 }
 
 .admin-action-btn.admin-delete-btn:hover {
   background: #d92d50;
-  box-shadow: 0 4px 12px rgba(217, 45, 80, 0.4);
+  color: white;
+  box-shadow: 0 8px 18px rgba(217, 45, 80, 0.46);
 }
 
 .admin-action-btn svg {

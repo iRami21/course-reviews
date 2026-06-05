@@ -511,7 +511,7 @@ function renderAdminCoursePanel(course) {
         <p class="admin-hint">Changes update this course immediately.</p>
       </div>
     </div>
-    <form class="admin-course-form" id="adminEditCourseForm" data-course-id="${escapeHtml(course.id)}">
+    <form class="admin-course-form" id="adminEditCourseForm" data-course-id="${escapeHtml(course.id)}" onsubmit="submitAdminCourseEdit(event)">
       <div class="admin-form-row">
         <input type="text" name="code" placeholder="Course code" value="${escapeHtml(course.code || "")}" required />
         <input type="text" name="title" placeholder="Course title" value="${escapeHtml(course.title || "")}" required />
@@ -559,7 +559,7 @@ async function submitAdminCourseCreate(event) {
       displayCourses(allCourses);
     }
     event.currentTarget.reset();
-    alert("Course added successfully.");
+    alert("課程已成功新增。");
   } catch (error) {
     alert(error.message);
   }
@@ -567,8 +567,18 @@ async function submitAdminCourseCreate(event) {
 
 async function submitAdminCourseEdit(event) {
   event.preventDefault();
+  event.stopPropagation();
   const form = event.currentTarget;
   const courseId = form.dataset.courseId;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const originalButtonText = submitButton?.textContent || "Save Changes";
+
+  if (!form.reportValidity()) return;
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Saving...";
+  }
 
   try {
     const result = await apiRequest(`/api/admin/courses/${courseId}`, {
@@ -578,14 +588,28 @@ async function submitAdminCourseEdit(event) {
 
     if (result.course) {
       replaceCourseInState(result.course);
-      openCourseDetail(result.course.id);
       displayCourses(allCourses);
+      const panel = document.getElementById("adminEditCoursePanel");
+      if (panel) {
+        panel.style.display = "none";
+        panel.innerHTML = "";
+      }
+      openCourseDetail(result.course.id);
     }
-    alert("Course updated successfully.");
+    alert("課程已成功儲存。");
   } catch (error) {
-    alert(error.message);
+    alert(error.message || "課程儲存失敗，請再試一次。");
+  } finally {
+    const activeForm = document.getElementById("adminEditCourseForm");
+    const activeSubmitButton = activeForm?.querySelector('button[type="submit"]');
+    if (activeSubmitButton) {
+      activeSubmitButton.disabled = false;
+      activeSubmitButton.textContent = originalButtonText;
+    }
   }
 }
+
+window.submitAdminCourseEdit = submitAdminCourseEdit;
 
 async function deleteAdminCourse(courseId) {
   if (!confirm("Delete this course?")) return;
@@ -598,7 +622,7 @@ async function deleteAdminCourse(courseId) {
     delete courseReviews[courseId];
     closeCourseDetail();
     displayCourses(allCourses);
-    alert("Course deleted successfully.");
+    alert("課程已成功刪除。");
   } catch (error) {
     alert(error.message);
   }
@@ -1267,7 +1291,7 @@ function renderCourseCards(container, courses, emptyText) {
 
   courses.forEach((course) => {
     const courseCard = document.createElement("div");
-    courseCard.className = "course-card";
+    courseCard.className = `course-card ${isCurrentUserAdmin() ? "admin-course-card" : ""}`.trim();
     courseCard.onclick = () => openCourseDetail(course.id);
 
     const semesterText = `${course.year} S${course.semester}`;
