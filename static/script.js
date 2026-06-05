@@ -1,4 +1,4 @@
-// Global variables
+// Shared client-side state for courses, reviews, user session, and UI expansion.
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
@@ -39,7 +39,7 @@ const LIBERAL_ARTS_ORDER = [
 ];
 const ENGLISH_LEVEL_ORDER = ["英文初級", "英文中級", "英文中高級", "英文高級"];
 
-// Sample course data (will be replaced with API calls)
+// Demo data used only when the backend does not provide initial courses.
 const sampleCourses = [
   {
     id: 1,
@@ -220,7 +220,6 @@ const courseReviews =
     ? window.__INITIAL_REVIEWS__
     : sampleReviews;
 
-// Utility functions to generate SVG icons
 function starIcon(fillPercent = 100) {
   const fill = Math.max(0, Math.min(100, fillPercent));
   const id = `star-fill-${Math.round(fill)}-${Math.random().toString(36).slice(2)}`;
@@ -435,13 +434,11 @@ function renderAdminControls() {
     addPanel.style.display = isCurrentUserAdmin() ? "block" : "none";
   }
 
-  // Show/hide the "+" button in the page heading for admin users
   const addBtn = document.getElementById("adminAddCourseBtn");
   if (addBtn) {
     addBtn.style.display = isCurrentUserAdmin() ? "inline-flex" : "none";
   }
 
-  // Update user menu to show admin badge if user is admin
   const userMenu = document.getElementById("userMenu");
   if (userMenu && currentUser) {
     const existingBadge = userMenu.querySelector(".admin-badge");
@@ -473,26 +470,24 @@ function toggleAdminAddCourseForm() {
   }
 }
 
-// Edit admin course - shows edit panel in the All Courses page
 window.editAdminCourse = function(courseId) {
   const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!course || !isCurrentUserAdmin()) return;
 
-  // Make sure we're on the main page (not in course detail)
   if (document.body.classList.contains("detail-open")) {
     closeCourseDetail();
   }
 
-  // Show the admin edit panel
   const panel = document.getElementById("adminEditCoursePanel");
   if (panel) {
     panel.style.display = "block";
     renderAdminCoursePanel(course);
-    // Scroll to the panel
+
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 };
 
+// Renders the inline admin editor for the selected course.
 function renderAdminCoursePanel(course) {
   const panel = document.getElementById("adminEditCoursePanel");
   if (!panel) return;
@@ -706,7 +701,6 @@ async function refreshNotifications() {
   }
 }
 
-
 async function markAllAsRead() {
   if (!currentUser) return;
   try {
@@ -761,7 +755,7 @@ function toggleExpandedText(event, key) {
   loadReviews(currentCourseId);
 }
 
-// Initialize the page
+// Bootstraps initial data, event handlers, and session-dependent UI.
 document.addEventListener("DOMContentLoaded", function () {
   allCourses =
     window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
@@ -949,16 +943,13 @@ function restoreDepartmentDropdown() {
   bindDepartmentButton(button);
 }
 
-
-
-// 請將 setupEventListeners() 的前半段修改成這樣：
+// Wires persistent controls that are present in the initial HTML shell.
 function setupEventListeners() {
   const safeAddListener = (id, eventType, handler) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener(eventType, handler);
   };
 
-  // 1. 對接你 HTML 原有的 userAvatar 與 userDropdown (使用 hidden 屬性切換)
   const userAvatar = document.getElementById("userAvatar");
   if (userAvatar) {
     userAvatar.addEventListener("click", function (e) {
@@ -966,7 +957,7 @@ function setupEventListeners() {
       if (currentUser) {
         const menu = document.getElementById("userDropdown");
         if (menu) {
-          // 因為你的 HTML 是用 hidden 屬性，這裡直接切換 true/false 即可
+
           menu.hidden = !menu.hidden;
         }
       } else {
@@ -975,41 +966,35 @@ function setupEventListeners() {
     });
   }
 
-  // 點擊網頁任意地方，自動收起下拉選單
   document.addEventListener("click", function () {
     const menu = document.getElementById("userDropdown");
     if (menu) menu.hidden = true;
   });
 
-  // 2. 精準綁定你 HTML 裡面原本就有的選單按鈕 ID
   safeAddListener("profileMenuBtn", "click", openProfileModal);
   safeAddListener("favoritesMenuBtn", "click", showFavorites);
   safeAddListener("activityMenuBtn", "click", function () {
     showActivity();
   });
   safeAddListener("signOutMenuBtn", "click", logout);
-  
+
   safeAddListener("loginBtn", "click", openLoginModal);
   safeAddListener("logoutBtn", "click", logout);
 
-  // 表單與搜尋事件 (維持不變)
   safeAddListener("authForm", "submit", login);
   safeAddListener("avatarAnimal", "change", updateAvatarPreview);
   safeAddListener("gender", "change", updateAvatarPreview);
   safeAddListener("searchBox", "input", filterCourses);
 
-  // 收藏頁面過濾器 (維持不變)
   safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
   safeAddListener("favoriteRatingFilter", "change", renderFavorites);
   safeAddListener("favoriteSortFilter", "change", renderFavorites);
 
-  // ✅ 全新：補上個人資料 (Profile) 專屬的頭像切換事件
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
-  
+
   safeAddListener("searchBox", "input", filterCourses);
 
-  // 3. 橫向篩選按鈕列事件 (維持不變)
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
@@ -1027,44 +1012,40 @@ function setupEventListeners() {
     });
   });
 
-  // === 全新：熱門搜尋面板連動邏輯 ===
   const searchBox = document.getElementById("searchBox");
   const searchDropdown = document.getElementById("searchDropdownCard");
 
   if (searchBox && searchDropdown) {
-    // 1. 當點擊(聚焦)搜尋框時，展開熱門搜尋面板
+
     searchBox.addEventListener("focus", function() {
       searchDropdown.style.display = "block";
     });
 
-    // 2. 點擊網頁其他地方時，自動收起面板
     document.addEventListener("click", function(e) {
       if (!searchBox.contains(e.target) && !searchDropdown.contains(e.target)) {
         searchDropdown.style.display = "none";
       }
     });
 
-    // 3. 點擊熱門標籤時，自動填入搜尋框並立刻篩選！
     const trendingBtns = searchDropdown.querySelectorAll(".trending-tag-btn");
-    
+
     trendingBtns.forEach(btn => {
-      // 💡 關鍵修正：把 "click" 換成 "mousedown"
+
       btn.addEventListener("mousedown", function(e) {
-        e.preventDefault(); // 終極防護：防止搜尋框失去焦點，面板就不會提早關閉
-        
-        searchBox.value = this.textContent.trim(); // 把按鈕上的字精準塞進輸入框
-        searchDropdown.style.display = "none";     // 點完後乖乖把面板收起來
-        filterCourses();                           // 立刻觸發底下的課程卡片重新過濾！
+        e.preventDefault();
+
+        searchBox.value = this.textContent.trim();
+        searchDropdown.style.display = "none";
+        filterCourses();
       });
     });
   }
 
-  // === 全新：通知鈴鐺點擊邏輯 ===
   const notiBtn = document.getElementById("notificationBtn");
   const notiDropdown = document.getElementById("notificationDropdown");
 
   if (notiBtn && notiDropdown) {
-    // 點鈴鐺開關卡片
+
     notiBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       const isOpen = notiDropdown.style.display === "block";
@@ -1074,7 +1055,6 @@ function setupEventListeners() {
       }
     });
 
-    // 點擊網頁其他地方收起卡片
     document.addEventListener("click", function (e) {
       if (!notiBtn.contains(e.target) && !notiDropdown.contains(e.target)) {
         notiDropdown.style.display = "none";
@@ -1097,7 +1077,6 @@ function setupEventListeners() {
         notificationState.unreadCount = Math.max(0, notificationState.unreadCount - 1);
         updateNotificationBadge();
 
-        // 先從畫面上隱藏已讀通知
         notificationState.items.splice(index, 1);
         renderNotificationList();
       }
@@ -1131,7 +1110,6 @@ function setupEventListeners() {
     });
 }
 
-// Display courses
 function displayCourses(courses) {
   const container = document.getElementById("coursesContainer");
   renderCourseCards(container, courses, "No courses found.");
@@ -1280,6 +1258,7 @@ function goToCoursePage(page) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+// Renders course cards for browse/favorites without reloading the page.
 function renderCourseCards(container, courses, emptyText) {
 
   container.innerHTML = "";
@@ -1309,7 +1288,6 @@ function renderCourseCards(container, courses, emptyText) {
         ? `<div class="course-title-zh">${escapeHtml(course.titleZh)}</div>`
         : "";
 
-    // Admin action buttons (edit and delete) - only show for admin users
     const adminActionsHtml = isCurrentUserAdmin() ? `
       <div class="course-admin-actions" onclick="event.stopPropagation();">
         <button class="admin-action-btn" onclick="event.stopPropagation(); editAdminCourse(${course.id})" title="Edit course" aria-label="Edit course">
@@ -1344,7 +1322,7 @@ function renderCourseCards(container, courses, emptyText) {
                   ${heartIcon()}
                 </button>
             </div>
-            
+
             <div class="course-title-section">
                 <div class="course-title-copy">
                   <div class="course-title">${escapeHtml(displayTitle)}</div>
@@ -1353,9 +1331,9 @@ function renderCourseCards(container, courses, emptyText) {
                 </div>
                 <div class="course-rating-inline">${starIcon()}${course.rating.toFixed(1)}</div>
             </div>
-            
+
             <div class="course-divider"></div>
-            
+
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
                     <span class="stat-save-display">
@@ -1374,7 +1352,7 @@ function renderCourseCards(container, courses, emptyText) {
   });
 }
 
-// Filter courses based on search and filters
+// Applies current search, filter, and sort state by requesting paged results.
 function filterCourses() {
   fetchCoursesPage(1);
 }
@@ -1398,44 +1376,41 @@ function tagSearchButton(tag, className) {
   return `<button type="button" class="${className}" onclick="event.stopPropagation(); searchByTag(decodeURIComponent('${encodedTag}'))">${safeTag}</button>`;
 }
 
-// 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
 document.addEventListener("DOMContentLoaded", function() {
   const sortBtns = document.querySelectorAll('.sort-text-btn');
   sortBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
-      // 把所有按鈕的 active 拔掉
+
       sortBtns.forEach(b => b.classList.remove('active'));
-      // 幫目前點擊的按鈕加上 active
+
       e.target.classList.add('active');
-      // 觸發重新排序與渲染
+
       filterCourses();
     });
   });
 });
 
-// === 新版：主頁面課程排序邏輯 ===
 function sortCourses(courses, sortBy) {
   const sorted = [...courses];
 
   if (sortBy === "popular") {
-    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
+
     sorted.sort((a, b) => {
       const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
       const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
       return bPopularity - aPopularity;
     });
   } else if (sortBy === "latest") {
-    // Latest (最新開課): 依照年份與學期由新到舊排序
+
     sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
   } else if (sortBy === "rating") {
-    // Ratings (評分最高): 依照星星數由高到低排序
+
     sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }
 
   return sorted;
 }
 
-// Toggle follow
 async function toggleFollow(courseId) {
   if (!currentUser) {
     alert("Please login to save courses.");
@@ -1538,8 +1513,7 @@ function showFavorites() {
   }
 
   document.getElementById("pageHeading").style.display = "none";
-  
-  // 🔴 修正：在收藏頁面也把主頁的選單藏起來
+
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
@@ -1589,8 +1563,7 @@ function showBrowseCourses() {
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("pageHeading").style.display = "";
-  
-  // 🟢 修正：回到主頁時，再次把選單顯示出來
+
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "";
 
@@ -1718,51 +1691,45 @@ function syncUserContentProfile(previousUsername) {
   });
 }
 
-// === 新版：安全不當機的收藏頁面渲染邏輯 ===
 function renderFavorites() {
-  // 1. 抓出所有被使用者按愛心 (followed === true) 的課程
+
   let favorites = allCourses.filter(course => course.followed === true);
-  
-  // 2. 抓取目前亮起的純文字排序按鈕（Hottest / Latest / Ratings）
+
   const activeSortBtn = document.querySelector('.fav-sort-btn.active');
   const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : "popular";
 
-  // 3. 安全的排序邏輯
   if (sortBy === "popular") {
-    // Hottest: 依據愛心數量由多到少
+
     favorites.sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0));
   } else if (sortBy === "latest") {
-    // Latest: 依據年份與學期由新到舊
+
     favorites.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
   } else if (sortBy === "rating") {
-    // Ratings: 依據評分由高到低
+
     favorites.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }
 
-  // 
   const container = document.getElementById("favoritesContainer");
   if (container) {
     renderCourseCards(
-      container, 
-      favorites, 
+      container,
+      favorites,
       "No favorite courses yet"
     );
   }
 }
 
-// Login modal
 window.openLoginModal = function(showWelcome = true) {
   const modal = document.getElementById("loginModal");
   if (!modal) return;
 
   modal.style.display = "block";
   modal.classList.add("login-page-overlay");
-  // Add active class to trigger background overlay and logo shift
+
   setTimeout(() => {
     modal.classList.add("active");
   }, 10);
 
-  // Shift logo to the left
   const navbar = document.querySelector(".navbar");
   if (navbar) {
     navbar.classList.add("logo-shifted");
@@ -1784,8 +1751,7 @@ function closeLoginModal() {
   if (!modal) return;
   modal.style.display = "none";
   modal.classList.remove("login-page-overlay", "active");
-  
-  // Make sure navbar is not shifted
+
   const navbar = document.querySelector(".navbar");
   if (navbar) {
     navbar.classList.remove("logo-shifted");
@@ -1847,13 +1813,12 @@ function isValidEmail(email) {
 
 async function login(event) {
   event.preventDefault();
-  
+
   const username = document.getElementById("username").value;
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  
-  // 抓取目前的模式 (login 還是 register)
+
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -1892,7 +1857,7 @@ async function login(event) {
 
     currentUser = result.user;
     checkUserLogin();
-    // refresh courses so `followed` flags come from backend for this user
+
     try {
       await fetchCoursesPage(1);
     } catch (e) {
@@ -1909,7 +1874,7 @@ async function logout() {
   try {
     await apiRequest("/api/logout", { method: "POST" });
   } catch (error) {
-    // The UI should still return to the logged-out state if the session expired.
+
   }
   currentUser = null;
   updateAuthUI();
@@ -1971,7 +1936,7 @@ function updateAuthUI() {
   }
 }
 
-// Course detail page
+// Opens the single-page course detail view and hides browse-only controls.
 function openCourseDetail(courseId) {
   const course = allCourses.find((c) => c.id === courseId);
   if (!course) return;
@@ -2013,15 +1978,13 @@ function openCourseDetail(courseId) {
   const navLogoBtn = document.getElementById("navLogoBtn");
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Back to courses");
   document.getElementById("pageHeading").style.display = "none";
-  
-  // 🔴 修正：隱藏全新的排序與標籤面板
+
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
-  
-  // Hide admin panels when viewing course detail
+
   if (document.getElementById("adminAddCoursePanel")) document.getElementById("adminAddCoursePanel").style.display = "none";
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
-  
+
   document.getElementById("coursesContainer").style.display = "none";
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
@@ -2046,12 +2009,10 @@ function closeCourseDetail() {
   const navLogoBtn = document.getElementById("navLogoBtn");
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Course Review Platform");
   document.getElementById("pageHeading").style.display = "";
-  
-  // 🟢 修正：回到主頁時，把排序面板顯示回來，過濾面板維持收合
+
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
-  // Restore admin panels when returning to main page
   if (document.getElementById("adminAddCoursePanel")) {
     document.getElementById("adminAddCoursePanel").style.display = isCurrentUserAdmin() ? "block" : "none";
   }
@@ -2098,7 +2059,7 @@ function renderRatingBreakdown(reviews) {
   }
 }
 
-// Load reviews
+// Rebuilds the review list from local review state after edits or reactions.
 function loadReviews(courseId) {
   const reviews = getReviewsForCourse(courseId);
 
@@ -2126,7 +2087,6 @@ function loadReviews(courseId) {
         : "Reply";
     const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
-    // === 判斷這則評論是不是「我」發的 ===
     const isMyReview = currentUser && review.author === getDisplayName(currentUser);
     const myActionsHtml = isMyReview ? `
       <div class="my-review-actions">
@@ -2148,16 +2108,16 @@ function loadReviews(courseId) {
                   <span class="review-language" title="${escapeHtml(review.language)}" aria-label="${escapeHtml(review.language)}">${translateIcon()}</span>
                 </div>
             </div>
-            
+
             <div class="review-rating-line">
                 <span class="review-rating">${starsHtml}</span>
                 <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
-            
+
             <div id="text-display-${review.id}">
               ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
             </div>
-            
+
             <div id="edit-form-${review.id}" style="display: none; margin: 10px 0;">
               <textarea id="edit-input-${review.id}" class="edit-textarea">${escapeHtml(review.text)}</textarea>
               <div style="display: flex; gap: 8px; margin-top: 8px;">
@@ -2165,7 +2125,7 @@ function loadReviews(courseId) {
                 <button type="button" class="btn-secondary" onclick="cancelEdit('${review.id}')" style="padding: 4px 12px; font-size: 0.85rem;">Cancel</button>
               </div>
             </div>
-            
+
             <div class="review-actions">
               ${renderReactionControl(review, review.id)}
 
@@ -2227,13 +2187,13 @@ function updateStudentReviewStats(reviews = []) {
   `;
 }
 
+// Renders the flat reply list for a review; nested replies are intentionally unsupported.
 function renderReplies(replies = [], reviewId) {
   return replies
     .map((reply) => {
-      // === 判斷這則「回覆」是不是「我」發的 ===
+
       const isMyReply = currentUser && reply.author === getDisplayName(currentUser);
-      
-      // 【關鍵修正】把 onclick 改成 editReply 和 deleteReply，並且傳入正確的 reviewId 和 reply.id！
+
       const myReplyActionsHtml = isMyReply ? `
         <div class="my-review-actions" style="margin-left: auto;">
           <button type="button" class="icon-btn-small" onclick="editReply('${reviewId}', '${reply.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
@@ -2251,11 +2211,11 @@ function renderReplies(replies = [], reviewId) {
                 <span style="margin-left: 8px;">${escapeHtml(reply.date)}</span>
                 ${myReplyActionsHtml}
               </div>
-              
+
               <div id="text-display-${reply.id}">
                 ${renderExpandableText(reply.text, `reply-${reviewId}-${reply.id}`, "reply-text")}
               </div>
-              
+
               <div id="edit-form-${reply.id}" style="display: none; margin: 10px 0;">
                 <textarea id="edit-input-${reply.id}" class="edit-textarea">${escapeHtml(reply.text)}</textarea>
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
@@ -2664,7 +2624,6 @@ async function submitReply(reviewId) {
   }
 }
 
-// Review form modal
 function openReviewForm() {
   if (!currentUser) {
     alert("Please login to submit a review.");
@@ -2685,7 +2644,6 @@ function closeReviewModal() {
   updateStarDisplay();
 }
 
-// Set rating
 function setRating(rating) {
   selectedRating = rating;
   document.getElementById("ratingInput").value = rating;
@@ -2707,7 +2665,6 @@ function updateStarDisplay(displayRating = selectedRating) {
   });
 }
 
-// Submit review
 async function submitReview(event) {
   event.preventDefault();
 
@@ -2754,7 +2711,6 @@ async function submitReview(event) {
   }
 }
 
-// Close modals when clicking outside
 window.onclick = function (event) {
   const loginModal = document.getElementById("loginModal");
   const profileModal = document.getElementById("profileModal");
@@ -2780,7 +2736,7 @@ window.switchAuthTab = function (mode) {
     tabLogin.classList.add("active");
     tabRegister.classList.remove("active");
     submitButton.dataset.mode = "login";
-    submitButton.textContent = "Login"; // 按鈕文字變 Login
+    submitButton.textContent = "Login";
     registerFields.style.display = "none";
     registerOnlyFields.forEach((field) => {
       field.style.display = "none";
@@ -2790,7 +2746,7 @@ window.switchAuthTab = function (mode) {
     tabRegister.classList.add("active");
     tabLogin.classList.remove("active");
     submitButton.dataset.mode = "register";
-    submitButton.textContent = "Create Account"; // 按鈕文字變註冊
+    submitButton.textContent = "Create Account";
     registerFields.style.display = "grid";
     registerOnlyFields.forEach((field) => {
       field.style.display = "block";
@@ -2814,49 +2770,44 @@ window.showAuthFields = function() {
   if (auth) auth.style.display = "block";
 };
 
-// 控制 Filter 面板的開關
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 };
 
-// 綁定「標籤」的點擊事件
 document.addEventListener("DOMContentLoaded", function() {
   const filterOptions = document.querySelectorAll('.filter-options');
-  
+
   filterOptions.forEach(group => {
     const pills = group.querySelectorAll('.filter-pill');
     pills.forEach(pill => {
       pill.addEventListener('click', (e) => {
-        // 把同一個 row 裡面的標籤全部取消 active
+
         pills.forEach(p => p.classList.remove('active'));
-        // 幫剛點擊的標籤加上 active
+
         e.target.classList.add('active');
-        // 觸發重新篩選
+
         filterCourses();
       });
     });
   });
 });
 
-// === 強效修正：確保頭像點擊絕對能開關選單 ===
 document.addEventListener("DOMContentLoaded", function() {
   const userAvatar = document.getElementById("userAvatar");
-  
+
   if (userAvatar) {
-    // 移除舊的監聽，重新綁定一個最直接、不會壞的點擊事件
+
     userAvatar.onclick = function(e) {
-      e.stopPropagation(); // 阻止事件擴散
-      
-      // 如果還沒登入，就打開歡迎/登入視窗
+      e.stopPropagation();
+
       if (!currentUser) {
         if (typeof window.openLoginModal === "function") {
           window.openLoginModal();
         }
         return;
       }
-      
-      // 如果已經登入，就精準開關我們的 Google 風格卡片
+
       const menuCard = document.getElementById("avatarMenuCard");
       if (menuCard) {
         const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
@@ -2868,15 +2819,13 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 });
 
-// === 控制 Filter 面板的開關與一鍵重置 ===
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
   const courseDetailPage = document.getElementById("courseDetailPage");
   const favoritesPage = document.getElementById("favoritesPage");
-  
+
   let wasOnOtherPage = false;
 
-  // 1. 如果在其他頁面，先回到主頁
   if (courseDetailPage && courseDetailPage.style.display === "block") {
     if (typeof closeCourseDetail === "function") closeCourseDetail();
     wasOnOtherPage = true;
@@ -2888,55 +2837,49 @@ window.toggleFilterPanel = function() {
 
   if (panel) {
     if (wasOnOtherPage) {
-      // 從別頁回來，強制展開面板
+
       panel.style.display = 'block';
     } else {
-      // 在主頁點擊漏斗：判斷現在是開還是關
+
       const isCurrentlyOpen = panel.style.display !== 'none';
-      
+
       if (isCurrentlyOpen) {
-        // 【核心新增】如果面板要「關閉」，就一併把條件重置、讓課程全部跑出來！
+
         panel.style.display = 'none';
         resetAllFilters();
       } else {
-        // 如果面板是關的，就單純打開它
+
         panel.style.display = 'block';
       }
     }
   }
 };
 
-// === 專屬的標籤重置小幫手 ===
 window.resetAllFilters = function() {
   renderDepartmentFilter("");
   renderDepartmentSubFilter("");
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
-  
+
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
-    
+
     const buttons = row.querySelectorAll('.filter-tag-btn');
-    // 把這一行所有按鈕的 active 藍色/橘色底拔掉
+
     buttons.forEach(b => b.classList.remove('active'));
-    
-    // 找出代表「全部 (All)」的按鈕（它的 data-value 是空的 ""），幫它點亮
+
     const allBtn = Array.from(buttons).find(b => b.dataset.value === "");
     if (allBtn) {
       allBtn.classList.add('active');
     }
   });
 
-  // 清空搜尋框（如果有的話）
   const searchBox = document.getElementById("searchBox");
   if (searchBox) searchBox.value = "";
 
-  // 重新跑一次篩選函數，讓所有被隱藏的課程卡片瞬間回來！
   if (typeof filterCourses === "function") filterCourses();
 };
 
-
-// === 刪除評論邏輯 ===
 window.deleteReview = async function(reviewId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
@@ -2959,19 +2902,16 @@ window.deleteReview = async function(reviewId) {
   }
 };
 
-// === 開啟編輯模式 ===
 window.editReview = function(reviewId) {
   document.getElementById(`text-display-${reviewId}`).style.display = 'none';
   document.getElementById(`edit-form-${reviewId}`).style.display = 'block';
 };
 
-// === 取消編輯模式 ===
 window.cancelEdit = function(reviewId) {
   document.getElementById(`text-display-${reviewId}`).style.display = 'block';
   document.getElementById(`edit-form-${reviewId}`).style.display = 'none';
 };
 
-// === 儲存修改的內容 ===
 window.saveEdit = async function(reviewId) {
   const newText = document.getElementById(`edit-input-${reviewId}`).value.trim();
 
@@ -2996,39 +2936,33 @@ window.saveEdit = async function(reviewId) {
   }
 };
 
-// === 刪除子回覆邏輯 ===
 window.deleteReply = function(reviewId, replyId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return;
 
-  // 找出該則回覆在陣列中的位置並刪除
   const index = review.replies.findIndex(r => r.id === replyId);
   if (index !== -1) {
     review.replies.splice(index, 1);
-    
-    // 重新渲染畫面
+
     loadReviews(currentCourseId);
   }
 };
 
-// === 開啟子回覆編輯模式 ===
 window.editReply = function(reviewId, replyId) {
   document.getElementById(`text-display-${replyId}`).style.display = 'none';
   document.getElementById(`edit-form-${replyId}`).style.display = 'block';
 };
 
-// === 取消子回覆編輯模式 ===
 window.cancelEditReply = function(replyId) {
   document.getElementById(`text-display-${replyId}`).style.display = 'block';
   document.getElementById(`edit-form-${replyId}`).style.display = 'none';
 };
 
-// === 儲存子回覆修改的內容 ===
 window.saveEditReply = function(reviewId, replyId) {
   const newText = document.getElementById(`edit-input-${replyId}`).value.trim();
-  
+
   if (!newText) {
     alert("回覆內容不能為空喔！");
     return;
@@ -3037,56 +2971,51 @@ window.saveEditReply = function(reviewId, replyId) {
   const reply = findReplyById(reviewId, replyId);
   if (reply) {
     reply.text = newText;
-    // 更新完畢後，重新渲染
+
     loadReviews(currentCourseId);
   }
 };
 
-// === 自動生成熱門搜尋標籤 ===
+// Builds search suggestions from the most active courses in the current dataset.
 function generateDynamicTrending() {
   const trendingContainer = document.querySelector(".trending-tags");
   if (!trendingContainer) return;
 
-  // 1. 把所有課程拿來排序，依據「收藏數 + 評論數」由高到低排
   const sortedCourses = [...allCourses].sort((a, b) => {
     const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
     const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
     return bPopularity - aPopularity;
   });
 
-  // 2. 抓出前 5 名最紅的課程，提取它們的「系所」或「課程名稱」或「教授」當關鍵字
-  const topKeywords = new Set(); // 用 Set 避免重複的字
+  const topKeywords = new Set();
   sortedCourses.forEach(course => {
     if (topKeywords.size < 5) {
-      // 這裡可以自己決定要放什麼，例如放課程名稱
-      topKeywords.add(course.title); 
+
+      topKeywords.add(course.title);
     }
   });
 
-  // 3. 把算出來的關鍵字畫成按鈕，塞進 HTML 裡
-  trendingContainer.innerHTML = Array.from(topKeywords).map(keyword => 
+  trendingContainer.innerHTML = Array.from(topKeywords).map(keyword =>
     `<button type="button" class="trending-tag-btn">${escapeHtml(keyword)}</button>`
   ).join("");
 
-  // 4. 重新綁定「點擊自動搜尋」的防失焦事件
   const newBtns = trendingContainer.querySelectorAll(".trending-tag-btn");
   const searchBox = document.getElementById("searchBox");
   const searchDropdown = document.getElementById("searchDropdownCard");
-  
+
   newBtns.forEach(btn => {
     btn.addEventListener("mousedown", function(e) {
-      e.preventDefault(); 
-      searchBox.value = this.textContent.trim(); 
-      searchDropdown.style.display = "none";     
-      filterCourses();                           
+      e.preventDefault();
+      searchBox.value = this.textContent.trim();
+      searchDropdown.style.display = "none";
+      filterCourses();
     });
   });
 }
 
-// 確保在網頁載入時執行這支自動生成函數
 document.addEventListener("DOMContentLoaded", function() {
-  // 等假資料都載入後，呼叫生成函數
-  setTimeout(generateDynamicTrending, 100); 
+
+  setTimeout(generateDynamicTrending, 100);
 });
 
 function updateBackToTopButton() {
@@ -3109,17 +3038,11 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("scroll", updateBackToTopButton, { passive: true });
 });
 
-/* ============================================================
-   SCHEDULE SIDEBAR — Weekly timetable (Mon–Sat, periods 1–14)
-   Multi-semester: each semester keeps its own independent list.
-   ============================================================ */
- 
-// --- State ---
-// scheduleData: { "113-1": { courses: ["1","3"], colors: {"1":1,"3":2} }, ... }
+
+
 let scheduleData = {};
-let activeScheduleSemester = null; // e.g. "113-1"
- 
-// Helpers to get/set active semester's data
+let activeScheduleSemester = null;
+
 function getActiveSemData() {
   if (!activeScheduleSemester) return { courses: [], colors: {} };
   if (!scheduleData[activeScheduleSemester]) {
@@ -3127,19 +3050,17 @@ function getActiveSemData() {
   }
   return scheduleData[activeScheduleSemester];
 }
- 
-// Legacy aliases so existing code still works
+
 Object.defineProperty(window, 'myScheduleCourses', {
   get() { return getActiveSemData().courses; },
   set(v) { getActiveSemData().courses = v; },
   configurable: true,
 });
- 
+
 function getScheduleColorMap() { return getActiveSemData().colors; }
- 
+
 const SCHEDULE_COLORS = [1,2,3,4,5,6,7,8];
- 
-// Period definitions: label + time range
+
 const SCHEDULE_PERIODS = [
   { p: 1,  label: "1",  time: "08:10–09:00" },
   { p: 2,  label: "2",  time: "09:10–10:00" },
@@ -3156,9 +3077,8 @@ const SCHEDULE_PERIODS = [
   { p: 13, label: "C",  time: "20:15–21:05" },
   { p: 14, label: "D",  time: "21:10–22:00" },
 ];
-const SCHEDULE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // day index 1–6
- 
-// --- Toggle sidebar open/close ---
+const SCHEDULE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 window.toggleScheduleSidebar = function () {
   const sidebar = document.getElementById("scheduleSidebar");
   const overlay = document.getElementById("scheduleOverlay");
@@ -3168,7 +3088,7 @@ window.toggleScheduleSidebar = function () {
   document.body.classList.toggle("schedule-open", !isOpen);
   if (overlay) overlay.style.display = !isOpen ? "block" : "none";
 };
- 
+
 window.closeScheduleSidebar = function () {
   const sidebar = document.getElementById("scheduleSidebar");
   const overlay = document.getElementById("scheduleOverlay");
@@ -3176,26 +3096,24 @@ window.closeScheduleSidebar = function () {
   document.body.classList.remove("schedule-open");
   if (overlay) overlay.style.display = "none";
 };
- 
-// --- Collect all available semesters from allCourses ---
+
 function getAvailableSemesters() {
   const seen = new Set();
   allCourses.forEach(c => {
     if (c.year && c.semester) seen.add(`${c.year}-${c.semester}`);
   });
-  // Sort descending (newest first)
+
   return [...seen].sort((a, b) => {
     const [ay, as_] = a.split("-").map(Number);
     const [by, bs] = b.split("-").map(Number);
     return (by - ay) || (bs - as_);
   });
 }
- 
-// --- Switch active semester tab ---
+
 window.switchScheduleSemester = function(semKey) {
   activeScheduleSemester = semKey;
   if (!scheduleData[semKey]) scheduleData[semKey] = { courses: [], colors: {} };
-  // Update tab UI
+
   document.querySelectorAll(".sched-sem-tab").forEach(t => {
     t.classList.toggle("active", t.dataset.sem === semKey);
   });
@@ -3203,37 +3121,33 @@ window.switchScheduleSemester = function(semKey) {
   updateAllAddButtons();
   updateScheduleBadge();
 };
- 
-// --- Add a course to the active semester's schedule ---
+
 window.addToSchedule = function (courseId) {
   if (!activeScheduleSemester) {
-    // Auto-pick the semester that matches this course, or first available
+
     const course = allCourses.find(c => String(c.id) === String(courseId));
     const key = course ? `${course.year}-${course.semester}` : getAvailableSemesters()[0];
     if (key) window.switchScheduleSemester(key);
     else { showConflictToast("No semester available."); return; }
   }
- 
+
   const semData = getActiveSemData();
   const course = allCourses.find(c => String(c.id) === String(courseId));
   if (!course) return;
- 
-  // Toggle off if already in schedule
+
   if (semData.courses.includes(String(courseId))) {
     removeFromSchedule(courseId);
     return;
   }
- 
-  // Warn if course belongs to a different semester
+
   const courseSemKey = `${course.year}-${course.semester}`;
   if (courseSemKey !== activeScheduleSemester) {
     if (!confirm(`This course is from ${courseSemKey}, but your active schedule is ${activeScheduleSemester}.\nSwitch to ${courseSemKey} and add?`)) return;
     window.switchScheduleSemester(courseSemKey);
   }
- 
+
   const freshSemData = getActiveSemData();
- 
-  // Conflict check
+
   if (course.schedule && course.schedule.length > 0) {
     const conflictCourses = freshSemData.courses
       .map(id => allCourses.find(c => String(c.id) === String(id)))
@@ -3247,23 +3161,20 @@ window.addToSchedule = function (courseId) {
       return;
     }
   }
- 
-  // Assign color
+
   const usedColors = Object.values(freshSemData.colors);
   const freeColor = SCHEDULE_COLORS.find(c => !usedColors.includes(c)) || 1;
   freshSemData.colors[String(courseId)] = freeColor;
   freshSemData.courses.push(String(courseId));
- 
+
   renderScheduleSidebar();
   updateAllAddButtons();
   updateScheduleBadge();
- 
-  // Open sidebar
+
   const sidebar = document.getElementById("scheduleSidebar");
   if (sidebar && !sidebar.classList.contains("open")) toggleScheduleSidebar();
 };
- 
-// --- Remove from active semester ---
+
 window.removeFromSchedule = function (courseId) {
   const semData = getActiveSemData();
   semData.courses = semData.courses.filter(id => String(id) !== String(courseId));
@@ -3272,8 +3183,7 @@ window.removeFromSchedule = function (courseId) {
   updateAllAddButtons();
   updateScheduleBadge();
 };
- 
-// --- Clear active semester ---
+
 window.clearSchedule = function () {
   const semData = getActiveSemData();
   if (semData.courses.length === 0) return;
@@ -3284,23 +3194,21 @@ window.clearSchedule = function () {
   updateAllAddButtons();
   updateScheduleBadge();
 };
- 
-// --- Render the full sidebar content ---
+
+// Rebuilds the schedule sidebar, timetable grid, and course chips.
 function renderScheduleSidebar() {
   renderScheduleSemesterTabs();
   renderScheduleGrid();
   renderScheduleCourseList();
   renderScheduleCredits();
 }
- 
-// --- Build the timetable grid ---
+
 function renderScheduleGrid() {
   const grid = document.getElementById("scheduleGrid");
   if (!grid) return;
- 
+
   const semData = getActiveSemData();
- 
-  // Build a lookup: "day-period" → courseId
+
   const slotMap = {};
   semData.courses.forEach(courseId => {
     const course = allCourses.find(c => String(c.id) === String(courseId));
@@ -3310,28 +3218,24 @@ function renderScheduleGrid() {
       slotMap[key] = courseId;
     });
   });
- 
+
   let html = "";
- 
-  // Top-left corner cell
+
   html += `<div class="sched-header-cell period-col" style="font-size:0.6rem;">P\\D</div>`;
- 
-  // Day header cells
+
   SCHEDULE_DAYS.forEach(day => {
     html += `<div class="sched-header-cell">${escapeHtml(day)}</div>`;
   });
- 
-  // Period rows (1-indexed days: Mon=1, Tue=2, … Sat=6)
+
   SCHEDULE_PERIODS.forEach(({ p, label, time }) => {
-    // Period label cell
+
     html += `
       <div class="sched-period-cell">
         <span>${escapeHtml(label)}</span>
         <span class="sched-period-time">${escapeHtml(time.split("–")[0])}</span>
       </div>
     `;
- 
-    // Day cells for this period
+
     for (let dayIndex = 1; dayIndex <= 6; dayIndex++) {
       const key = `${dayIndex}-${p}`;
       const courseId = slotMap[key];
@@ -3352,17 +3256,16 @@ function renderScheduleGrid() {
       }
     }
   });
- 
+
   grid.innerHTML = html;
 }
- 
-// --- Course list chips below grid ---
+
 function renderScheduleCourseList() {
   const list = document.getElementById("scheduleList");
   if (!list) return;
- 
+
   const semData = getActiveSemData();
- 
+
   if (semData.courses.length === 0) {
     list.innerHTML = `
       <div class="schedule-empty-state">
@@ -3373,7 +3276,7 @@ function renderScheduleCourseList() {
     `;
     return;
   }
- 
+
   let html = `<h4>Added Courses (${semData.courses.length})</h4>`;
   semData.courses.forEach(courseId => {
     const course = allCourses.find(c => String(c.id) === String(courseId));
@@ -3389,7 +3292,7 @@ function renderScheduleCourseList() {
     const slots = course.schedule && course.schedule.length > 0
       ? course.schedule.map(s => `${SCHEDULE_DAYS[s.day - 1] || "?"}${s.period}`).join(", ")
       : "No time data";
- 
+
     html += `
       <div class="schedule-course-chip" style="background:${bg};">
         <div class="chip-title">
@@ -3403,8 +3306,7 @@ function renderScheduleCourseList() {
   });
   list.innerHTML = html;
 }
- 
-// --- Credits bar ---
+
 function renderScheduleCredits() {
   const bar = document.getElementById("scheduleCreditsBar");
   if (!bar) return;
@@ -3415,8 +3317,7 @@ function renderScheduleCredits() {
   }, 0);
   bar.textContent = `📚 ${semData.courses.length} course${semData.courses.length !== 1 ? "s" : ""} · ${total} credits`;
 }
- 
-// --- Badge on toggle button (total across ALL semesters) ---
+
 function updateScheduleBadge() {
   const badge = document.querySelector("#scheduleToggleBtn .schedule-badge");
   if (!badge) return;
@@ -3424,8 +3325,7 @@ function updateScheduleBadge() {
   badge.textContent = n;
   badge.style.display = n > 0 ? "flex" : "none";
 }
- 
-// --- Update all "Add to Schedule" buttons across the page ---
+
 function updateAllAddButtons() {
   const semData = getActiveSemData();
   document.querySelectorAll("[data-schedule-id]").forEach(btn => {
@@ -3435,8 +3335,7 @@ function updateAllAddButtons() {
     btn.textContent = inSchedule ? "✓ In Schedule" : "+ Schedule";
   });
 }
- 
-// --- Conflict toast ---
+
 function showConflictToast(msg) {
   let toast = document.getElementById("scheduleConflictToast");
   if (!toast) {
@@ -3449,24 +3348,22 @@ function showConflictToast(msg) {
   clearTimeout(toast._timeout);
   toast._timeout = setTimeout(() => { toast.style.display = "none"; }, 3500);
 }
- 
-// --- Render semester tabs ---
+
 function renderScheduleSemesterTabs() {
   const tabBar = document.getElementById("scheduleTabBar");
   if (!tabBar) return;
- 
+
   const semesters = getAvailableSemesters();
   if (semesters.length === 0) {
     tabBar.innerHTML = `<span style="font-size:0.75rem;opacity:0.7;padding:4px 8px;">No semesters found</span>`;
     return;
   }
- 
-  // If no active semester yet, pick first
+
   if (!activeScheduleSemester || !semesters.includes(activeScheduleSemester)) {
     activeScheduleSemester = semesters[0];
     if (!scheduleData[activeScheduleSemester]) scheduleData[activeScheduleSemester] = { courses: [], colors: {} };
   }
- 
+
   tabBar.innerHTML = semesters.map(sem => {
     const count = scheduleData[sem]?.courses?.length || 0;
     const [year, s] = sem.split("-");
@@ -3481,13 +3378,12 @@ function renderScheduleSemesterTabs() {
     `;
   }).join("");
 }
- 
-// --- Inject HTML for the sidebar and toggle button into the page ---
+
+// Injects schedule UI once because it is shared across browse/detail states.
 function injectScheduleSidebarHTML() {
-  // Avoid double injection
+
   if (document.getElementById("scheduleSidebar")) return;
- 
-  // Toggle button (fixed to right edge)
+
   const toggleBtn = document.createElement("button");
   toggleBtn.id = "scheduleToggleBtn";
   toggleBtn.setAttribute("aria-label", "Toggle schedule sidebar");
@@ -3498,14 +3394,12 @@ function injectScheduleSidebarHTML() {
   `;
   toggleBtn.addEventListener("click", toggleScheduleSidebar);
   document.body.appendChild(toggleBtn);
- 
-  // Overlay (mobile dim)
+
   const overlay = document.createElement("div");
   overlay.id = "scheduleOverlay";
   overlay.addEventListener("click", closeScheduleSidebar);
   document.body.appendChild(overlay);
- 
-  // Sidebar panel
+
   const sidebar = document.createElement("aside");
   sidebar.id = "scheduleSidebar";
   sidebar.className = "schedule-sidebar";
@@ -3526,19 +3420,14 @@ function injectScheduleSidebarHTML() {
   `;
   document.body.appendChild(sidebar);
 }
- 
-// "+ Schedule" button is now embedded directly in renderCourseCards HTML template above.
- 
-// Add sample schedule data to sampleCourses so the grid is populated in demo mode
-// (Day: 1=Mon … 6=Sat, Period: 1–14)
+
 sampleCourses.forEach(c => {
   if (c.id === 1 && !c.schedule) c.schedule = [{ day: 1, period: 2 }, { day: 1, period: 3 }, { day: 3, period: 2 }, { day: 3, period: 3 }];
   if (c.id === 2 && !c.schedule) c.schedule = [{ day: 2, period: 1 }, { day: 2, period: 2 }, { day: 5, period: 1 }, { day: 5, period: 2 }];
   if (c.id === 3 && !c.schedule) c.schedule = [{ day: 2, period: 5 }, { day: 4, period: 5 }];
   if (c.id === 4 && !c.schedule) c.schedule = [{ day: 1, period: 6 }, { day: 1, period: 7 }, { day: 4, period: 6 }, { day: 4, period: 7 }];
 });
- 
-// --- Bootstrap on DOM ready ---
+
 document.addEventListener("DOMContentLoaded", function () {
   injectScheduleSidebarHTML();
   renderScheduleSidebar();

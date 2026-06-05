@@ -10,7 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single+Ink:wght@100..900&family=Cause:wght@100..900&family=Chewy&family=Comic+Relief:wght@400;700&family=Delicious+Handrawn&family=Grandstander:ital,wght@0,100..900;1,100..900&family=Jersey+10&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Rampart+One&family=Roboto:ital,wght@0,100..900;1,100..900&family=Sniglet:wght@400;800&family=Space+Mono&display=swap" rel="stylesheet">
   </head>
   <body>
-    <!-- Navigation Bar -->
+    
+    <!-- Persistent top navigation for search, filters, notifications, and account actions. -->
     <nav class="navbar" id="navBlock" style="display: none;">
       <div class="nav-container">
         <div class="nav-logo">
@@ -86,7 +87,8 @@
         </div>
     </nav>
 
-    <!-- Login Modal -->
+    
+    <!-- Welcome/auth overlay shown before entering the course browser. -->
     <div id="loginModal" class="modal login-page-overlay" style="display: block">
       
       <div id="welcomeStartSection" class="welcome-shell">
@@ -214,7 +216,8 @@
     </div>
 
 
-    <!-- Main Content -->
+    
+    <!-- Main course browser, filters, favorites, and detail view. -->
     <main class="main-content" id="mainContentBlock" style="display: none;">
       <section class="page-heading" id="pageHeading">
           <div>
@@ -264,10 +267,11 @@
         </form>
       </section>
 
-      <!-- Admin Edit Course Panel (shown when editing a course) -->
+      
+      <!-- Admin edit panel is rendered dynamically when a course card is edited. -->
       <section class="admin-edit-course-section" id="adminEditCoursePanel" style="display: none;"></section>
 
-      <!-- Filters -->
+      
       <div class="quick-sort-menu" id="quickSortMenu">
         <button type="button" class="sort-text-btn active" data-sort="popular">Hottest</button>
         <button type="button" class="sort-text-btn" data-sort="latest">Latest</button>
@@ -317,9 +321,9 @@
         
       </div>
 
-      <!-- Courses Grid -->
+      
       <div class="courses-container" id="coursesContainer">
-        <!-- Courses will be loaded here by JavaScript -->
+        
       </div>
       <nav
         class="pagination-bar"
@@ -365,7 +369,7 @@
         <div class="notification-empty" id="activityEmpty" style="display: flex !important; justify-content: center;">No activity yet.</div>
       </section>
 
-      <!-- Course Detail Page -->
+      
       <section id="courseDetailPage" class="course-detail-page" style="display: none">
         <button class="back-button" onclick="closeCourseDetail()">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -488,7 +492,7 @@
             </div>
           </form>
           <div class="reviews-list" id="reviewsList">
-            <!-- Reviews will be loaded here -->
+            
           </div>
         </section>
       </section>
