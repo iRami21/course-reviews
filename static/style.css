@@ -2269,12 +2269,28 @@ button {
 }
 
 .pagination-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 90;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
   gap: 0.55rem;
-  margin: 2rem 0 0.5rem;
+  width: auto;
+  max-width: calc(100vw - 2rem);
+  padding: 0;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+body:not(.detail-open) .main-content:has(#coursesPagination:not(:empty)) {
+  padding-bottom: 5.5rem;
+}
+
+.pagination-bar:empty {
+  display: none;
 }
 
 .pagination-btn {
@@ -2292,7 +2308,7 @@ button {
   font-family: "Comic Relief", system-ui;
   font-size: 1rem;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.1);
+  box-shadow: 0 8px 18px rgba(79, 103, 177, 0.18);
   transition:
     background-color 0.2s ease,
     color 0.2s ease,
@@ -2318,19 +2334,29 @@ button {
   min-width: 4.5rem;
 }
 
-.pagination-ellipsis,
-.pagination-summary {
+.pagination-ellipsis {
   color: #6b7280;
   font-family: "Sniglet", system-ui;
   font-weight: 800;
 }
 
-.pagination-summary {
-  flex-basis: 100%;
-  margin-top: 0.25rem;
-  text-align: center;
-  font-family: "Comic Relief", system-ui !important;
-  font-weight: 800 !important;
+@media (max-width: 640px) {
+  .pagination-bar {
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 1rem);
+    gap: 0.35rem;
+  }
+
+  .pagination-btn {
+    min-width: 2.15rem;
+    min-height: 2.15rem;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.9rem;
+  }
+
+  .pagination-step {
+    min-width: 3.65rem;
+  }
 }
 
 .page-kicker {

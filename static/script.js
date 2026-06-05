@@ -1269,9 +1269,6 @@ function renderCoursePagination() {
     >
       Next
     </button>
-    <span class="pagination-summary">
-      Page ${currentPage} of ${totalPages}
-    </span>
   `;
 }
 
