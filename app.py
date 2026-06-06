@@ -148,6 +148,15 @@ def clean_professor_name(professor):
     return ",".join(visible_names)
 
 
+def split_professor_names(professor):
+    names = [
+        name.strip()
+        for name in re.split(r"[,，、/]+", professor or "")
+        if name.strip()
+    ]
+    return [name for name in dict.fromkeys(names) if name not in HIDDEN_PROFESSOR_NAMES]
+
+
 def classify_department(department):
     dept = department or ""
     if dept.startswith("校際"):
@@ -569,8 +578,8 @@ def create_app():
             "reactionSummary": summarize_reactions(review.reactions),
             "parentId": getattr(review, 'parent_id', None),
             "replies": [
-                serialize_review(reply, current_user_id=current_user_id)
-                for reply in sorted(review.replies, key=lambda item: item.created_at or review.created_at)
+                serialize_reply(reply, current_user_id=current_user_id)
+                for reply in sorted(review.review_replies, key=lambda item: item.created_at or review.created_at)
             ],
         }
 

@@ -664,7 +664,7 @@ function renderNotificationList() {
   const items = notificationState.items || [];
   const filteredItems = notificationState.activeTab === "activity"
     ? items.filter((item) => item.category === "activity")
-    : items.filter((item) => item.category !== "activity" && !item.isRead);
+    : items.filter((item) => !item.isRead);
 
   list.innerHTML = filteredItems.length ? filteredItems.map(buildNotificationItem).join("") : "";
   empty.textContent = notificationState.activeTab === "activity"
@@ -1443,7 +1443,7 @@ async function toggleFollow(courseId) {
     return;
   }
 
-  const course = allCourses.find((c) => c.id === courseId);
+  const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!course) return;
 
   try {
@@ -1475,7 +1475,7 @@ async function toggleFollow(courseId) {
 
 function syncDetailFollowButton(courseId) {
   const detailFollowBtn = document.getElementById("detailFollowBtn");
-  const course = allCourses.find((c) => c.id === courseId);
+  const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!detailFollowBtn || !course) return;
 
   detailFollowBtn.className = `course-follow-btn detail-follow-btn ${course.followed ? "followed" : ""}`;
@@ -1504,7 +1504,7 @@ function renderDetailTags(course) {
 }
 
 function getCourseLikeTotal(courseId) {
-  const course = allCourses.find((c) => c.id === courseId);
+  const course = allCourses.find((c) => String(c.id) === String(courseId));
   return course?.saveCount || 0;
 }
 
@@ -1598,6 +1598,18 @@ function showBrowseCourses() {
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
   filterCourses();
+}
+
+function showHomePage() {
+  document.body.classList.remove("detail-open");
+  currentCourseId = null;
+  showBrowseCourses();
+  const dropdown = document.getElementById("notificationDropdown");
+  if (dropdown) dropdown.style.display = "none";
+  const userDropdown = document.getElementById("userDropdown");
+  if (userDropdown) userDropdown.hidden = true;
+  const avatarMenu = document.getElementById("avatarMenuCard");
+  if (avatarMenu) avatarMenu.style.display = "none";
 }
 
 function toggleUserMenu(event) {
@@ -1891,13 +1903,14 @@ async function login(event) {
     });
 
     currentUser = result.user;
-    checkUserLogin();
+    await checkUserLogin();
     // refresh courses so `followed` flags come from backend for this user
     try {
       await fetchCoursesPage(1);
     } catch (e) {
       console.warn('Failed to refresh courses after login', e);
     }
+    showHomePage();
     document.getElementById("authForm").reset();
     switchAuthTab("login");
   } catch (error) {
@@ -1973,7 +1986,7 @@ function updateAuthUI() {
 
 // Course detail page
 function openCourseDetail(courseId) {
-  const course = allCourses.find((c) => c.id === courseId);
+  const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!course) return;
 
   currentCourseId = courseId;
@@ -2287,7 +2300,7 @@ function toggleRepliesGroup(reviewId, parentReplyId) {
 
 function findReviewById(reviewId) {
   const reviews = getReviewsForCourse(currentCourseId);
-  return reviews.find((review) => review.id === reviewId);
+  return reviews.find((review) => String(review.id) === String(reviewId));
 }
 
 function toggleReviewLike(reviewId) {
@@ -2308,7 +2321,7 @@ function toggleReviewLike(reviewId) {
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
-  return review.replies.find((reply) => reply.id === replyId) || null;
+  return review.replies.find((reply) => String(reply.id) === String(replyId)) || null;
 }
 
 function findReactionTarget(reviewId, replyId = null) {
@@ -2357,42 +2370,39 @@ function handleReplyKeydown(event, reviewId) {
   submitReply(reviewId);
 }
 
-function submitReply(reviewId) {
+async function submitReply(reviewId) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
     return;
   }
 
-  const review = findReviewById(reviewId);
   const inputId = `replyInput-${reviewId}`;
   const input = document.getElementById(inputId);
-  if (!review || !input) return;
+  if (!input) return;
 
   const text = input.value.trim();
   if (!text) return;
 
-  if (!review.replies) {
-    review.replies = [];
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+
+    if (result.review) {
+      replaceReviewInState(result.review);
+    }
+    if (result.reply) {
+      replaceReplyInState(reviewId, result.reply);
+    }
+
+    input.value = "";
+    expandedReplyGroups.add(`${reviewId}:root`);
+    loadReviews(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
-
-  review.replies.push({
-    id: `reply-${Date.now()}`,
-    author: getDisplayName(currentUser),
-    avatar: {
-      avatarAnimal: currentUser.avatarAnimal,
-      gender: currentUser.gender,
-    },
-    date: new Date().toISOString().slice(0, 10),
-    text: text,
-    likes: 0,
-    liked: false,
-    reaction: "",
-    replies: [],
-  });
-
-  expandedReplyGroups.add(`${reviewId}:root`);
-  loadReviews(currentCourseId);
 }
 
 const DEFAULT_REACTION = "❤️";
@@ -2545,21 +2555,20 @@ async function applyReaction(reviewId, reaction = "❤️", replyId = null) {
 async function handleQuickLike(event, reviewId, replyId = null) {
   event.stopPropagation();
 
-  // 切換 palette 顯示（點擊主按鈕開/關選單）
-  const container = event.currentTarget.closest(".reaction-container");
-  if (container) {
-    const isOpen = container.classList.toggle("open");
-    if (isOpen) {
-      // 點其他地方關閉
-      const closeHandler = (e) => {
-        if (!container.contains(e.target)) {
-          container.classList.remove("open");
-          document.removeEventListener("click", closeHandler);
-        }
-      };
-      document.addEventListener("click", closeHandler);
-    }
-    return; // 只開關選單，不直接送出 reaction
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
+    return;
+  }
+
+  const target = findReactionTarget(String(reviewId), replyId ? String(replyId) : null);
+  const shouldClear = target?.liked && (target.reaction || "\u2764\uFE0F") === "\u2764\uFE0F";
+
+  try {
+    await persistReaction(reviewId, shouldClear ? "" : "\u2764\uFE0F", replyId);
+    loadReviews(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
 }
 
@@ -2579,40 +2588,6 @@ function selectReviewEmoji(
   const replyId = hasReplyId ? replyIdOrReaction : null;
   const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
   applyReaction(reviewId, reaction, replyId);
-}
-
-async function submitReply(reviewId) {
-  if (!currentUser) {
-    alert("Please login to reply.");
-    openLoginModal();
-    return;
-  }
-
-  const inputId = `replyInput-${reviewId}`;
-  const input = document.getElementById(inputId);
-  if (!input) return;
-
-  const text = input.value.trim();
-  if (!text) return;
-
-  try {
-    const result = await apiRequest(`/api/reviews/${reviewId}/reply`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    });
-
-    if (result.review) {
-      replaceReviewInState(result.review);
-    } else if (result.reply) {
-      replaceReplyInState(reviewId, result.reply);
-    }
-
-    input.value = "";
-    expandedReplyGroups.add(`${reviewId}:root`);
-    loadReviews(currentCourseId);
-  } catch (error) {
-    alert(error.message);
-  }
 }
 
 // Review form modal
@@ -2673,7 +2648,7 @@ async function submitReview(event) {
   }
 
   const reviewText = document.getElementById("reviewText").value;
-  const course = allCourses.find((c) => c.id === currentCourseId);
+  const course = allCourses.find((c) => String(c.id) === String(currentCourseId));
 
   try {
     const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
@@ -2952,18 +2927,23 @@ window.deleteReply = async function(reviewId, replyId) {
   if (!confirm("Are you sure you want to delete this reply? This action cannot be undone.")) return;
 
   try {
-    await apiRequest(`/api/replies/${replyId}`, {
+    const result = await apiRequest(`/api/replies/${replyId}`, {
       method: "DELETE",
     });
 
-    const review = findReviewById(reviewId);
-    if (review && review.replies) {
-      const index = review.replies.findIndex(r => String(r.id) === String(replyId));
-      if (index !== -1) review.replies.splice(index, 1);
+    if (result.review) {
+      replaceReviewInState(result.review);
+    } else {
+      // fallback：直接更新本地狀態
+      const review = findReviewById(reviewId);
+      if (review && review.replies) {
+        const index = review.replies.findIndex(r => String(r.id) === String(replyId));
+        if (index !== -1) review.replies.splice(index, 1);
+      }
     }
     loadReviews(currentCourseId);
   } catch (error) {
-    // 後端尚未有 DELETE /api/replies/:id route，fallback 到純前端移除
+    // 後端失敗時 fallback 到前端移除
     const review = findReviewById(reviewId);
     if (review && review.replies) {
       const index = review.replies.findIndex(r => String(r.id) === String(replyId));
@@ -3004,14 +2984,16 @@ window.saveEditReply = async function(reviewId, replyId) {
 
     if (result.review) {
       replaceReviewInState(result.review);
+    }
+    if (result.reply) {
+      replaceReplyInState(reviewId, result.reply);
     } else {
-      // fallback：直接更新本地狀態
       const reply = findReplyById(reviewId, replyId);
       if (reply) reply.text = newText;
     }
     loadReviews(currentCourseId);
   } catch (error) {
-    // 後端尚未有 PATCH /api/replies/:id route，fallback 到純前端更新
+    // fallback：純前端更新
     const reply = findReplyById(reviewId, replyId);
     if (reply) {
       reply.text = newText;
@@ -3512,10 +3494,10 @@ function injectScheduleSidebarHTML() {
 // Add sample schedule data to sampleCourses so the grid is populated in demo mode
 // (Day: 1=Mon … 6=Sat, Period: 1–14)
 sampleCourses.forEach(c => {
-  if (c.id === 1 && !c.schedule) c.schedule = [{ day: 1, period: 2 }, { day: 1, period: 3 }, { day: 3, period: 2 }, { day: 3, period: 3 }];
-  if (c.id === 2 && !c.schedule) c.schedule = [{ day: 2, period: 1 }, { day: 2, period: 2 }, { day: 5, period: 1 }, { day: 5, period: 2 }];
-  if (c.id === 3 && !c.schedule) c.schedule = [{ day: 2, period: 5 }, { day: 4, period: 5 }];
-  if (c.id === 4 && !c.schedule) c.schedule = [{ day: 1, period: 6 }, { day: 1, period: 7 }, { day: 4, period: 6 }, { day: 4, period: 7 }];
+  if (String(c.id) === "1" && !c.schedule) c.schedule = [{ day: 1, period: 2 }, { day: 1, period: 3 }, { day: 3, period: 2 }, { day: 3, period: 3 }];
+  if (String(c.id) === "2" && !c.schedule) c.schedule = [{ day: 2, period: 1 }, { day: 2, period: 2 }, { day: 5, period: 1 }, { day: 5, period: 2 }];
+  if (String(c.id) === "3" && !c.schedule) c.schedule = [{ day: 2, period: 5 }, { day: 4, period: 5 }];
+  if (String(c.id) === "4" && !c.schedule) c.schedule = [{ day: 1, period: 6 }, { day: 1, period: 7 }, { day: 4, period: 6 }, { day: 4, period: 7 }];
 });
  
 // --- Bootstrap on DOM ready ---
