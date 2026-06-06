@@ -10,11 +10,12 @@ from flask_login import (
     login_user,
     logout_user,
 )
-from sqlalchemy import and_, func, or_, text
+from sqlalchemy import and_, func, inspect, or_, text
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Favorite, Notification, Review, ReviewReaction, ReviewReply, User, db
+from models import Course, Department, Favorite, Instructor, Notification, Offer, Review, ReviewReaction, ReviewReply, Section, Teach, User, db
 
 
 DEPARTMENT_CATEGORY_ORDER = [
@@ -234,31 +235,31 @@ def create_app():
         }
 
     def ensure_app_schema():
-        user_columns = get_table_columns("users")
+        user_columns = get_table_columns("User")
         if "role" not in user_columns:
             db.session.execute(
-                text("ALTER TABLE users ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
+                text("ALTER TABLE \"User\" ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
             )
 
-        review_columns = get_table_columns("reviews")
+        review_columns = get_table_columns("Review")
         if "is_visible" not in review_columns:
             db.session.execute(
-                text("ALTER TABLE reviews ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+                text("ALTER TABLE \"Review\" ADD COLUMN is_visible BOOLEAN DEFAULT 1")
             )
 
         db.session.commit()
 
     def ensure_course_schema():
-        columns = get_table_columns("courses")
+        columns = get_table_columns("Course")
         if "grade" not in columns:
-            db.session.execute(text("ALTER TABLE courses ADD COLUMN grade VARCHAR(16)"))
+            db.session.execute(text("ALTER TABLE \"Course\" ADD COLUMN grade VARCHAR(16)"))
         if "requirement" not in columns:
             db.session.execute(
-                text("ALTER TABLE courses ADD COLUMN requirement VARCHAR(16)")
+                text("ALTER TABLE \"Course\" ADD COLUMN requirement VARCHAR(16)")
             )
         if "english_taught" not in columns:
             db.session.execute(
-                text("ALTER TABLE courses ADD COLUMN english_taught BOOLEAN DEFAULT 0")
+                text("ALTER TABLE \"Course\" ADD COLUMN english_taught BOOLEAN DEFAULT 0")
             )
         db.session.commit()
 
@@ -341,10 +342,12 @@ def create_app():
 
     def get_department_groups():
         rows = (
-            db.session.query(Course.department, func.count(Course.id).label("total"))
-            .filter(Course.department.isnot(None), Course.department != "")
-            .group_by(Course.department)
-            .order_by(func.count(Course.id).desc(), Course.department.asc())
+            db.session.query(Department.name, func.count(Course.course_id).label("total"))
+            .join(Offer, Offer.dept_id == Department.dept_id)
+            .join(Course, Course.course_id == Offer.course_id)
+            .filter(Department.name.isnot(None), Department.name != "")
+            .group_by(Department.name)
+            .order_by(func.count(Course.course_id).desc(), Department.name.asc())
             .all()
         )
         groups = {category: [] for category in DEPARTMENT_CATEGORY_ORDER}
@@ -385,11 +388,15 @@ def create_app():
         ]
 
     def get_sport_activity_options():
+        # 運動課程透過 Offers->Department 篩選，courseName 即為中文名稱
+        sport_depts = ["運動健康(必)", "運動進階(選)"]
         rows = (
-            db.session.query(Course.title_zh, func.count(Course.id).label("total"))
-            .filter(Course.department.in_(["運動健康(必)", "運動進階(選)"]))
-            .group_by(Course.title_zh)
-            .order_by(func.count(Course.id).desc(), Course.title_zh.asc())
+            db.session.query(Course.name, func.count(Course.course_id).label("total"))
+            .join(Offer, Offer.course_id == Course.course_id)
+            .join(Department, Department.dept_id == Offer.dept_id)
+            .filter(Department.name.in_(sport_depts))
+            .group_by(Course.name)
+            .order_by(func.count(Course.course_id).desc(), Course.name.asc())
             .all()
         )
         activities = {}
@@ -422,44 +429,44 @@ def create_app():
 
 
     def favorite_counts_for_courses(course_ids=None):
-        query = db.session.query(CourseFavorite.course_id, func.count(CourseFavorite.favorite_id))
+        query = db.session.query(Favorite.course_id, func.count(Favorite.id))
         if course_ids:
-            query = query.filter(CourseFavorite.course_id.in_(course_ids))
-        rows = query.group_by(CourseFavorite.course_id).all()
+            query = query.filter(Favorite.course_id.in_(course_ids))
+        rows = query.group_by(Favorite.course_id).all()
         return {course_id: count for course_id, count in rows}
 
     def user_favorite_course_ids(course_ids=None):
         if not current_user.is_authenticated:
             return set()
-        query = db.session.query(CourseFavorite.course_id).filter(
-            CourseFavorite.user_id == current_user.id
+        query = db.session.query(Favorite.course_id).filter(
+            Favorite.user_id == current_user.id
         )
         if course_ids:
-            query = query.filter(CourseFavorite.course_id.in_(course_ids))
+            query = query.filter(Favorite.course_id.in_(course_ids))
         return {course_id for (course_id,) in query.all()}
 
     def serialize_course(course, review_stats=None, favorite_counts=None, favorite_course_ids=None):
         review_count = 0
         average_rating = 0
         if review_stats is not None:
-            review_count, average_rating = review_stats.get(course.id, (0, 0))
+            review_count, average_rating = review_stats.get(course.course_id, (0, 0))
         else:
-            reviews = reviews_for_course(course.id).all()
+            reviews = reviews_for_course(course.course_id).all()
             ratings = [review.rating for review in reviews if review.rating]
             review_count = len(reviews)
             average_rating = sum(ratings) / len(ratings) if ratings else 0
 
         if favorite_counts is not None:
-            save_count = favorite_counts.get(course.id, 0)
+            save_count = favorite_counts.get(course.course_id, 0)
         else:
-            save_count = CourseFavorite.query.filter_by(course_id=course.id).count()
+            save_count = Favorite.query.filter_by(course_id=course.course_id).count()
 
         if favorite_course_ids is not None:
-            followed = course.id in favorite_course_ids
+            followed = course.course_id in favorite_course_ids
         else:
             followed = (
                 current_user.is_authenticated
-                and CourseFavorite.query.filter_by(course_id=course.id, user_id=current_user.id).first() is not None
+                and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None
             )
 
         # 💡 完美保留你原本寫的：把丟給前端的文字做清洗與格式化，這樣你的前端排版才不會壞掉！
@@ -468,7 +475,7 @@ def create_app():
 
 
         return {
-            "id": course.id,
+            "id": course.course_id,
             "code": course.code,
             "title": course.title,
             "titleZh": course.title_zh or "",
@@ -496,15 +503,15 @@ def create_app():
                 ]
                 if tag
             ],
-            "description": course.description or "No description available.",
+            "description": getattr(course, "description", None) or "No description available.",
         }
 
     def summarize_reactions(reactions):
         counts = {}
         for reaction in reactions or []:
-            if not reaction.reaction:
+            if not reaction.emoji:
                 continue
-            counts[reaction.reaction] = counts.get(reaction.reaction, 0) + 1
+            counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
         return [
             {"reaction": reaction, "count": count}
             for reaction, count in sorted(
@@ -555,6 +562,20 @@ def create_app():
     # =========================================================================
     # 🔽 以下完整保留後端同學寫的效能優化與子查詢函式，確保後端運算不崩潰
     # =========================================================================
+
+    def serialize_reply(reply):
+        author = reply.author
+        return {
+            "id": str(reply.id),
+            "author": author.username if author else "Anonymous",
+            "avatar": {
+                "avatarAnimal": author.avatar_animal if author else "question",
+                "gender": author.gender if author else "undisclosed",
+            },
+            "text": reply.text,
+            "date": reply.created_at.strftime("%Y-%m-%d") if reply.created_at else "",
+            "reviewId": str(reply.review_id),
+        }
 
     def build_search_pattern(term):
         cleaned = term.strip()
@@ -618,10 +639,10 @@ def create_app():
     def favorite_stats_subquery():
         return (
             db.session.query(
-                CourseFavorite.course_id.label("course_id"),
-                func.count(CourseFavorite.favorite_id).label("save_count"),
+                Favorite.course_id.label("course_id"),
+                func.count(Favorite.id).label("save_count"),
             )
-            .group_by(CourseFavorite.course_id)
+            .group_by(Favorite.course_id)
             .subquery()
         )
 
@@ -704,12 +725,15 @@ def create_app():
         min_rating_raw = str(request.args.get("min_rating", "")).strip()
         sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
 
+        from models import Section
         avg_rating = func.coalesce(func.avg(Review.rating), 0)
-        review_count = func.count(Review.id)
-        courses_query = Course.query.outerjoin(
-            Review,
-            and_(Review.course_id == Course.id, Review.is_visible.is_(True)),
-        ).group_by(Course.id)
+        review_count = func.count(Review.review_id)
+        courses_query = (
+            Course.query
+            .outerjoin(Section, Section.course_id == Course.course_id)
+            .outerjoin(Review, Review.section_id == Section.section_id)
+            .group_by(Course.course_id)
+        )
 
         filters = []
         if query_text:
@@ -727,58 +751,71 @@ def create_app():
                 for token in tokens:
                     lower = token.lower()
                     if lower.isdigit():
-                        search_filters.append(Course.year == int(lower))
+                        search_filters.append(
+                            Course.sections.any(Section.roc_year == int(lower))
+                        )
                         continue
-
                     if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
-                        search_filters.append(Course.semester == 1)
+                        search_filters.append(Course.sections.any(Section.term == 1))
                         continue
                     if lower in {"s2", "sem2", "semester2", "semester-2", "semester_2"}:
-                        search_filters.append(Course.semester == 2)
+                        search_filters.append(Course.sections.any(Section.term == 2))
                         continue
-
                     text_terms.append(token)
 
                 for term in text_terms:
                     pattern = f"%{term}%"
                     search_filters.append(
                         or_(
-                            Course.title.ilike(pattern),
-                            Course.title_zh.ilike(pattern),
+                            Course.name.ilike(pattern),
                             Course.code.ilike(pattern),
-                            Course.department.ilike(pattern),
-                            Course.professor.ilike(pattern),
                             Course.requirement.ilike(pattern),
+                            Course.offers.any(
+                                Offer.department.has(Department.name.ilike(pattern))
+                            ),
+                            Course.sections.any(
+                                Section.teaches.any(
+                                    Teach.instructor.has(Instructor.name.ilike(pattern))
+                                )
+                            ),
                         )
                     )
 
             if search_filters:
                 filters.extend(search_filters)
+
         if year:
-            filters.append(Course.year == int(year))
+            filters.append(Course.sections.any(Section.roc_year == int(year)))
         if department_category:
             category_departments = get_departments_by_category(department_category)
             if category_departments:
-                filters.append(Course.department.in_(category_departments))
+                filters.append(
+                    Course.offers.any(
+                        Offer.department.has(Department.name.in_(category_departments))
+                    )
+                )
             else:
-                filters.append(Course.department == "__NO_SUCH_DEPARTMENT__")
+                filters.append(Course.course_id == -1)
         if department_group:
             group_departments = get_departments_by_group(department_group)
             if group_departments:
-                filters.append(Course.department.in_(group_departments))
+                filters.append(
+                    Course.offers.any(
+                        Offer.department.has(Department.name.in_(group_departments))
+                    )
+                )
             else:
-                filters.append(Course.department == "__NO_SUCH_DEPARTMENT__")
+                filters.append(Course.course_id == -1)
         if department:
-            filters.append(Course.department == department)
-        if sport_activity:
             filters.append(
-                or_(
-                    Course.title_zh.ilike(f"%：{sport_activity}"),
-                    Course.title_zh.ilike(f"%:{sport_activity}"),
+                Course.offers.any(
+                    Offer.department.has(Department.name == department)
                 )
             )
+        if sport_activity:
+            filters.append(Course.name.ilike(f"%{sport_activity}%"))
         if semester:
-            filters.append(Course.semester == int(semester))
+            filters.append(Course.sections.any(Section.term == int(semester)))
         if filters:
             courses_query = courses_query.filter(and_(*filters))
         if min_rating_raw:
@@ -786,8 +823,7 @@ def create_app():
 
         if sort_by == "latest":
             courses_query = courses_query.order_by(
-                Course.year.desc(),
-                Course.semester.desc(),
+                func.max(Section.roc_year * 10 + Section.term).desc(),
                 Course.code.asc(),
             )
         elif sort_by == "rating":
@@ -801,15 +837,14 @@ def create_app():
         courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
 
         reviews_by_course = {}
-        course_ids = [course.id for course in courses_list]
+        course_ids = [course.course_id for course in courses_list]
         favorite_counts = {}
         favorite_ids = set()
         if course_ids:
             for review in (
-                Review.query.filter(
-                    Review.course_id.in_(course_ids),
-                    Review.is_visible.is_(True),
-                )
+                Review.query
+                .join(Section, Review.section_id == Section.section_id)
+                .filter(Section.course_id.in_(course_ids), Review.parent_id.is_(None))
                 .order_by(Review.created_at.desc())
                 .all()
             ):
@@ -840,7 +875,7 @@ def create_app():
 
         return {
             "courses": [
-                serialize_course(course, favorite_counts, favorite_ids)
+                serialize_course(course, favorite_counts=favorite_counts, favorite_course_ids=favorite_ids)
                 for course in courses_list
             ],
             "reviews": reviews_by_course,
@@ -852,37 +887,6 @@ def create_app():
             },
         }
 
-    @app.route("/api/courses")
-    def api_courses():
-        return jsonify(get_courses_payload())
-
-    @app.route("/api/courses/<int:course_id>/favorite", methods=["POST"])
-    @login_required
-    def api_toggle_favorite(course_id):
-        course = Course.query.get_or_404(course_id)
-        favorite = Favorite.query.filter_by(
-            user_id=current_user.id,
-            course_id=course.id,
-        ).first()
-
-        if favorite:
-            db.session.delete(favorite)
-            followed = False
-        else:
-            db.session.add(Favorite(user_id=current_user.id, course_id=course.id))
-            followed = True
-
-        db.session.commit()
-        save_count = Favorite.query.filter_by(course_id=course.id).count()
-        return jsonify({
-            "followed": followed,
-            "saveCount": save_count,
-            "course": serialize_course(
-                course,
-                {course.id: save_count},
-                {course.id} if followed else set(),
-            ),
-        })
     @app.route("/courses")
     def courses():
         query = request.args.get("q", "").strip()
@@ -901,7 +905,7 @@ def create_app():
                     year_val = int(lower)
                     if len(lower) == 4:
                         year_val -= 1911
-                    search_filters.append(Course.year == year_val)
+                    filters.append(Course.sections.any(Section.roc_year == year_val))
                     continue
 
                 if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
@@ -940,7 +944,7 @@ def create_app():
                 courses_query = courses_query.filter(and_(*filters))
 
         courses_list = courses_query.order_by(Course.code).limit(300).all()
-        favorite_counts = favorite_counts_for_courses([course.id for course in courses_list])
+        favorite_counts = favorite_counts_for_courses([course.course_id for course in courses_list])
         return render_template(
             "courses.html",
             courses=courses_list,
@@ -950,132 +954,10 @@ def create_app():
 
     @app.route("/api/courses")
     def api_courses():
-        query = request.args.get("q", "").strip()
-        department = request.args.get("department", "").strip()
-        year = request.args.get("year", "").strip()
-        semester = request.args.get("semester", "").strip()
-        sort_by = request.args.get("sort", "popular").strip()
-        min_rating_raw = request.args.get("min_rating", "").strip()
-        page = max(request.args.get("page", 1, type=int), 1)
-        per_page = request.args.get("per_page", 20, type=int)
-        per_page = min(max(per_page, 1), 50)
-
-        courses_query = course_query_with_details()
-        if query:
-            pattern = build_search_pattern(query)
-            if pattern is not None:
-                courses_query = courses_query.filter(
-                    or_(
-                        Course.name.ilike(pattern),
-                        Course.code.ilike(pattern),
-                        Course.offers.any(Offer.department.has(Department.name.ilike(pattern))),
-                        Course.sections.any(
-                            Section.teaches.any(
-                                Teach.instructor.has(Instructor.name.ilike(pattern))
-                            )
-                        ),
-                    )
-                )
-
-        if department:
-            courses_query = courses_query.filter(
-                Course.offers.any(Offer.department.has(Department.name == department))
-            )
-        year_value = None
-        semester_value = None
-        if year:
-            try:
-                year_value = int(year)
-            except ValueError:
-                return jsonify({"error": "Invalid year."}), 400
-        if semester:
-            try:
-                semester_value = int(semester)
-            except ValueError:
-                return jsonify({"error": "Invalid semester."}), 400
-        if year_value is not None or semester_value is not None:
-            courses_query = filter_by_offered_section(
-                courses_query,
-                year=year_value,
-                semester=semester_value,
-            )
-
-        stats = review_stats_subquery()
-        if min_rating_raw:
-            try:
-                min_rating = float(min_rating_raw)
-            except ValueError:
-                return jsonify({"error": "Invalid minimum rating."}), 400
-            courses_query = courses_query.outerjoin(stats, stats.c.course_id == Course.course_id)
-            courses_query = courses_query.filter(
-                func.coalesce(stats.c.average_rating, 0) >= min_rating
-            )
-
-        total = courses_query.order_by(None).count()
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        page = min(page, total_pages)
-
-        if sort_by in {"popular", "rating"} and min_rating_raw:
-            sort_stats = stats
-        elif sort_by in {"popular", "rating"}:
-            sort_stats = review_stats_subquery()
-            courses_query = courses_query.outerjoin(
-                sort_stats,
-                sort_stats.c.course_id == Course.course_id,
-            )
-        else:
-            sort_stats = None
-
-        if sort_by == "latest":
-            latest = latest_section_subquery()
-            courses_query = courses_query.outerjoin(latest, latest.c.course_id == Course.course_id)
-            courses_query = courses_query.order_by(
-                func.coalesce(latest.c.latest_key, 0).desc(),
-                Course.code,
-            )
-        elif sort_by == "rating":
-            courses_query = courses_query.order_by(
-                func.coalesce(sort_stats.c.average_rating, 0).desc(),
-                Course.code,
-            )
-        elif sort_by == "popular":
-            favorite_stats = favorite_stats_subquery()
-            courses_query = courses_query.outerjoin(
-                favorite_stats,
-                favorite_stats.c.course_id == Course.course_id,
-            )
-            courses_query = courses_query.order_by(
-                func.coalesce(favorite_stats.c.save_count, 0).desc(),
-                func.coalesce(sort_stats.c.review_count, 0).desc(),
-                Course.code,
-            )
-        else:
-            courses_query = courses_query.order_by(Course.code)
-
-        courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
-        course_ids = [course.id for course in courses_list]
-        review_stats = course_review_stats(course_ids)
-        favorite_counts = favorite_counts_for_courses(course_ids)
-        favorite_course_ids = user_favorite_course_ids(course_ids)
-        return jsonify(
-            {
-                "courses": [
-                    serialize_course(
-                        course,
-                        review_stats=review_stats,
-                        favorite_counts=favorite_counts,
-                        favorite_course_ids=favorite_course_ids,
-                    )
-                    for course in courses_list
-                ],
-                "pagination": {
-                    "page": page,
-                    "perPage": per_page,
-                    "total": total,
-                    "totalPages": total_pages,
-                },
-            }
-        )
+        try:
+            return jsonify(get_courses_payload())
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
 
     @app.route("/api/courses/<int:course_id>/favorite", methods=["POST"])
     @login_required
@@ -1083,8 +965,8 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         payload = request.get_json(silent=True) or {}
         wanted = payload.get("followed")
-        existing = CourseFavorite.query.filter_by(
-            course_id=course.id,
+        existing = Favorite.query.filter_by(
+            course_id=course.course_id,
             user_id=current_user.id,
         ).first()
 
@@ -1094,15 +976,15 @@ def create_app():
             should_follow = bool(wanted)
 
         if should_follow and existing is None:
-            db.session.add(CourseFavorite(course_id=course.id, user_id=current_user.id))
+            db.session.add(Favorite(course_id=course.course_id, user_id=current_user.id))
         elif not should_follow and existing is not None:
             db.session.delete(existing)
 
         db.session.commit()
-        save_count = CourseFavorite.query.filter_by(course_id=course.id).count()
+        save_count = Favorite.query.filter_by(course_id=course.course_id).count()
         return jsonify(
             {
-                "courseId": course.id,
+                "courseId": course.course_id,
                 "followed": should_follow,
                 "saveCount": save_count,
             }
@@ -1166,7 +1048,7 @@ def create_app():
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
-                "courseId": course.id,
+                "courseId": course.course_id,
                 "reviewCount": len(reviews),
                 "averageRating": round(float(average_rating), 1),
                 "reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
@@ -1209,7 +1091,7 @@ def create_app():
             parent_review = Review.query.get(parent_id)
             if parent_review is None:
                 return jsonify({"error": "Parent review not found."}), 404
-            if parent_review.course_id != course.id:
+            if parent_review.course_id != course.course_id:
                 return jsonify({"error": "Parent review does not belong to this course."}), 400
             section_id = parent_review.section_id
 
@@ -1232,7 +1114,7 @@ def create_app():
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
-                "courseId": course.id,
+                "courseId": course.course_id,
                 "reviewCount": len(reviews),
                 "averageRating": round(float(average_rating), 1),
                 "review": serialize_review(review, current_user_id=current_user_id),
@@ -1242,11 +1124,11 @@ def create_app():
 
     @app.route("/api/courses/<int:course_id>/reviews/<int:review_id>", methods=["PATCH"])
     @login_required
-    def api_update_review(course_id, review_id):
+    def api_update_course_review(course_id, review_id):
         course = Course.query.get_or_404(course_id)
         review = (
             Review.query.join(Section)
-            .filter(Review.review_id == review_id, Section.course_id == course.id)
+            .filter(Review.review_id == review_id, Section.course_id == course.course_id)
             .first_or_404()
         )
         if review.user_id != current_user.id:
@@ -1269,7 +1151,7 @@ def create_app():
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
-                "courseId": course.id,
+                "courseId": course.course_id,
                 "reviewCount": len(reviews),
                 "averageRating": round(float(average_rating), 1),
                 "review": serialize_review(review, current_user_id=current_user_id),
@@ -1279,11 +1161,11 @@ def create_app():
 
     @app.route("/api/courses/<int:course_id>/reviews/<int:review_id>", methods=["DELETE"])
     @login_required
-    def api_delete_review(course_id, review_id):
+    def api_delete_course_review(course_id, review_id):
         course = Course.query.get_or_404(course_id)
         review = (
             Review.query.join(Section)
-            .filter(Review.review_id == review_id, Section.course_id == course.id)
+            .filter(Review.review_id == review_id, Section.course_id == course.course_id)
             .first_or_404()
         )
         if review.user_id != current_user.id:
@@ -1301,7 +1183,7 @@ def create_app():
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
-                "courseId": course.id,
+                "courseId": course.course_id,
                 "reviewCount": len(reviews),
                 "averageRating": round(float(average_rating), 1),
                 "review": serialize_review(review, current_user_id=current_user_id),
@@ -1315,13 +1197,13 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         review = (
             Review.query.join(Section)
-            .filter(Review.review_id == review_id, Section.course_id == course.id)
+            .filter(Review.review_id == review_id, Section.course_id == course.course_id)
             .first_or_404()
         )
         payload = request.get_json(silent=True) or {}
         reaction = str(payload.get("reaction", "")).strip()
         remove = bool(payload.get("remove"))
-        allowed_reactions = {"❤️", "😮", "👍", "🔥"}
+        allowed_reactions = {"❤️", "🙂", "😮", "😭", "👍", "🔥"}
 
         if reaction not in allowed_reactions and not remove:
             return jsonify({"error": "Unsupported reaction."}), 400
@@ -1379,7 +1261,7 @@ def create_app():
         section = course.latest_section
         if not section:
             flash("This course has no section to review.")
-            return redirect(url_for("course_detail", course_id=course.id))
+            return redirect(url_for("course_detail", course_id=course.course_id))
 
         rating_raw = request.form.get("rating", "").strip()
         comment = request.form.get("comment", "").strip()
@@ -1389,15 +1271,15 @@ def create_app():
             rating = int(rating_raw)
         except ValueError:
             flash("Rating must be a number between 1 and 5.")
-            return redirect(url_for("course_detail", course_id=course.id))
+            return redirect(url_for("course_detail", course_id=course.course_id))
 
         if rating < 1 or rating > 5:
             flash("Rating must be between 1 and 5.")
-            return redirect(url_for("course_detail", course_id=course.id))
+            return redirect(url_for("course_detail", course_id=course.course_id))
 
         if not comment:
             flash("Review text is required.")
-            return redirect(url_for("course_detail", course_id=course.id))
+            return redirect(url_for("course_detail", course_id=course.course_id))
 
         review = Review(
             section_id=section.section_id,
@@ -1408,7 +1290,7 @@ def create_app():
         db.session.add(review)
         db.session.commit()
         flash("Review submitted.")
-        return redirect(url_for("course_detail", course_id=course.id))
+        return redirect(url_for("course_detail", course_id=course.course_id))
 
     @app.route("/api/courses/<int:course_id>/review", methods=["POST"])
     @login_required
@@ -1417,6 +1299,9 @@ def create_app():
         data = request.get_json(silent=True) or request.form
         comment = str(data.get("comment", data.get("text", ""))).strip()
         language = str(data.get("language", "English")).strip() or "English"
+        section = course.latest_section
+        if not section:
+            return jsonify({"error": "This course has no section to review."}), 400
 
         try:
             rating = int(data.get("rating", ""))
@@ -1427,10 +1312,9 @@ def create_app():
             return jsonify({"error": "Rating must be between 1 and 5."}), 400
 
         review = Review(
-            course_id=course.id,
+            section_id=section.section_id,
             user_id=current_user.id,
             rating=rating,
-            language=language,
             text=comment,
         )
         db.session.add(review)
@@ -1519,12 +1403,12 @@ def create_app():
     def save_reaction(user_id, reaction, review_id=None, reply_id=None):
         if not review_id and not reply_id:
             return None
+        if reply_id:
+            return None
 
         query = ReviewReaction.query.filter_by(user_id=user_id)
         if review_id:
-            query = query.filter_by(review_id=review_id, reply_id=None)
-        else:
-            query = query.filter_by(review_id=None, reply_id=reply_id)
+            query = query.filter_by(review_id=review_id)
 
         existing = query.first()
         reaction_value = str(reaction or "").strip()
@@ -1534,14 +1418,13 @@ def create_app():
             return None
 
         if existing:
-            existing.reaction = reaction_value
+            existing.emoji = reaction_value
             return existing
 
         new_reaction = ReviewReaction(
             user_id=user_id,
             review_id=review_id,
-            reply_id=reply_id,
-            reaction=reaction_value,
+            emoji=reaction_value,
         )
         db.session.add(new_reaction)
         return new_reaction
@@ -1992,7 +1875,7 @@ def create_app():
 
         db.session.commit()
         flash("Course updated successfully.")
-        return redirect(url_for("course_detail", course_id=course.id))
+        return redirect(url_for("course_detail", course_id=course.course_id))
 
     @app.route("/admin/courses/<int:course_id>/delete", methods=["POST"])
     @login_required

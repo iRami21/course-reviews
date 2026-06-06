@@ -13,7 +13,6 @@ let currentPagination = {
   totalPages: 1,
 };
 let selectedRating = 0;
-const COURSES_PER_PAGE = 20;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
@@ -774,9 +773,12 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
+  departmentGroups = window.__DEPARTMENT_GROUPS__ || {};
+  sportActivityOptions = window.__SPORT_ACTIVITY_OPTIONS__ || [];
   displayCourses([], "Loading courses...");
   loadCoursesFromApi({ page: 1 });
   loadFilterOptions();
+  renderCategoryFilter();
   setupEventListeners();
   setupAdminForms();
   checkUserLogin();
@@ -833,23 +835,65 @@ function getDepartmentCategory(department) {
   )?.[0] || "";
 }
 
+// ── Category filter (top row) ─────────────────────────────────────────────
+function renderCategoryFilter() {
+  const row = document.getElementById("deptCategoryFilterRow");
+  if (!row) return;
+
+  const categories = Object.keys(departmentGroups);
+
+  // Build buttons
+  row.innerHTML =
+    `<span class="filter-label">Category │</span>` +
+    `<button type="button" class="filter-tag-btn active" data-value="">All</button>` +
+    categories
+      .map(
+        (cat) =>
+          `<button type="button" class="filter-tag-btn" data-value="${escapeHtml(cat)}">${escapeHtml(cat)}</button>`
+      )
+      .join("");
+
+  // Bind events
+  row.querySelectorAll(".filter-tag-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      row.querySelectorAll(".filter-tag-btn").forEach((b) => b.classList.remove("active"));
+      this.classList.add("active");
+      renderDepartmentFilter(this.dataset.value || "");
+      loadCoursesFromApi({ page: 1 });
+    });
+  });
+}
+
+// ── Department filter (second row) ───────────────────────────────────────
 function renderDepartmentFilter(category) {
   const row = document.getElementById("deptFilterRow");
   if (!row) return;
 
-  const departments = getDepartmentFilterOptions(category);
-  const options = departments
-    .map((option) => (
-      `<button type="button" class="filter-tag-btn" data-value="${escapeHtml(option.value || "")}" data-group="${escapeHtml(option.group || "")}" data-label="${escapeHtml(option.label)}">${escapeHtml(option.label)}</button>`
-    ))
-    .join("");
+  const options = getDepartmentFilterOptions(category);
 
-  row.innerHTML = `
-    <span class="filter-label">Department │</span>
-    <button type="button" class="filter-tag-btn active" data-value="">All</button>
-    ${options}
-  `;
+  // Hide dept row when no category is selected or there are no options
+  if (!category || options.length === 0) {
+    row.style.display = "none";
+    row.innerHTML = `<span class="filter-label">Department │</span>
+      <button type="button" class="filter-tag-btn active" data-value="">All</button>`;
+    return;
+  }
 
+  row.innerHTML =
+    `<span class="filter-label">Department │</span>` +
+    `<button type="button" class="filter-tag-btn active" data-value="">All</button>` +
+    options
+      .map(
+        (opt) =>
+          `<button type="button" class="filter-tag-btn"
+            data-value="${escapeHtml(opt.value || "")}"
+            data-group="${escapeHtml(opt.group || "")}"
+            data-label="${escapeHtml(opt.label)}"
+          >${escapeHtml(opt.label)}</button>`
+      )
+      .join("");
+
+  row.style.display = "";
   attachDepartmentButtonEvents(row);
 }
 
@@ -865,14 +909,61 @@ function bindDepartmentButton(button) {
   button.dataset.bound = "true";
   button.addEventListener("click", function () {
     const row = this.closest("#deptFilterRow");
-    restoreDepartmentDropdown();
+
+    // If clicking "All", restore any open subfilter select first
+    restoreDepartmentSubfilter(row);
     row.querySelectorAll(".filter-tag-btn").forEach((item) => item.classList.remove("active"));
     this.classList.add("active");
+
+    // Group button → replace itself with a <select> dropdown
     if (this.dataset.group) {
       renderDepartmentSubFilter(this.dataset.group, this);
     }
+
     loadCoursesFromApi({ page: 1 });
   });
+}
+
+// Render a <select> in place of a group button
+function renderDepartmentSubFilter(groupName, targetButton) {
+  if (!groupName || !targetButton) return;
+
+  const subOptions =
+    groupName === "運動健康"
+      ? sportActivityOptions
+      : getDepartmentsForGroup(groupName);
+
+  const optionsHtml = subOptions
+    .map((val) => `<option value="${escapeHtml(val)}">${escapeHtml(val)}</option>`)
+    .join("");
+
+  const select = document.createElement("select");
+  select.className = "department-subfilter-select";
+  select.id = "deptSubFilterSelect";
+  select.dataset.group = groupName;
+  select.dataset.label = targetButton.dataset.label || groupName;
+  select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${optionsHtml}`;
+  select.value = "";
+  select.addEventListener("change", () => loadCoursesFromApi({ page: 1 }));
+
+  targetButton.replaceWith(select);
+  select.focus();
+}
+
+// Restore the <select> back to a plain button
+function restoreDepartmentSubfilter(row) {
+  const select = row ? row.querySelector("#deptSubFilterSelect") : document.getElementById("deptSubFilterSelect");
+  if (!select) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filter-tag-btn";
+  button.dataset.value = "";
+  button.dataset.group = select.dataset.group || "";
+  button.dataset.label = select.dataset.label || select.dataset.group || "";
+  button.textContent = button.dataset.label;
+  select.replaceWith(button);
+  bindDepartmentButton(button);
 }
 
 function getDepartmentFilterOptions(category) {
@@ -913,62 +1004,26 @@ function getDepartmentFilterOptions(category) {
   }));
 }
 
-function renderDepartmentSubFilter(groupName, targetButton) {
-  if (!groupName || !targetButton) return;
-  const subfilterOptions = groupName === "運動健康"
-    ? sportActivityOptions
-    : getDepartmentsForGroup(groupName);
-
-  const options = subfilterOptions
-    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
-    .join("");
-
-  const select = document.createElement("select");
-  select.className = "department-subfilter-select";
-  select.id = "deptSubFilterSelect";
-  select.dataset.group = groupName;
-  select.dataset.label = targetButton.dataset.label || groupName;
-  select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${options}`;
-  select.value = "";
-  select.addEventListener("change", () => loadCoursesFromApi({ page: 1 }));
-  targetButton.replaceWith(select);
-  select.focus();
-}
-
-function restoreDepartmentDropdown() {
-  const select = document.getElementById("deptSubFilterSelect");
-  if (!select) return;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "filter-tag-btn";
-  button.dataset.value = "";
-  button.dataset.group = select.dataset.group || "";
-  button.dataset.label = select.dataset.label || select.dataset.group || "";
-  button.textContent = button.dataset.label;
-  select.replaceWith(button);
-  bindDepartmentButton(button);
 function getCourseRequestParams(page = 1) {
   const params = new URLSearchParams();
   const searchBox = document.getElementById("searchBox");
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
   const sortActiveBtn = document.querySelector(".sort-text-btn.active");
 
-  // --- 💡 這裡是你需要修改的部分 ----------------------------------
-  // 1. 同時抓取作用中的按鈕，以及你產生的下拉選單
-  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const deptSelect = document.getElementById("deptSubFilterSelect");
-
-  // 2. 判斷：如果目前畫面上有下拉選單，就拿選單的值；如果沒有，就拿按鈕的值
-  const department = deptSelect ? deptSelect.value : (deptActiveBtn ? deptActiveBtn.dataset.value : "");
-  // -----------------------------------------------------------
-
   const searchTerm = searchBox ? searchBox.value.trim() : "";
   const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
-  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+  const departmentCategory = deptCategoryActiveBtn ? deptCategoryActiveBtn.dataset.value : "";
+  const departmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
+  const selectedSubDept = deptSubFilterSelect?.value || "";
+  const department = departmentGroup && departmentGroup !== "運動健康"
+    ? selectedSubDept
+    : deptActiveBtn?.dataset.value || "";
+  const sportActivity = departmentGroup === "運動健康" ? selectedSubDept : "";
   const minRating = ratingActiveBtn ? ratingActiveBtn.dataset.value : "";
   const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
   const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
@@ -978,47 +1033,17 @@ function getCourseRequestParams(page = 1) {
   params.set("sort", sortBy);
   if (searchTerm) params.set("q", searchTerm);
   if (year) params.set("year", year);
+  if (departmentCategory) params.set("department_category", departmentCategory);
+  if (departmentGroup) params.set("department_group", departmentGroup);
   if (department) params.set("department", department);
+  if (sportActivity) params.set("sport_activity", sportActivity);
   if (minRating) params.set("min_rating", minRating);
   if (semester) params.set("semester", semester);
   return params;
 }
 
 async function loadCoursesFromApi({ page = 1 } = {}) {
-  const requestToken = ++courseRequestToken;
-  displayCourses([], "Loading courses...", {
-    pagination: {
-      page,
-      perPage: COURSES_PER_PAGE,
-      total: 0,
-      totalPages: 1,
-    },
-  });
-
-  try {
-    const response = await fetch(`/api/courses?${getCourseRequestParams(page).toString()}`);
-    if (!response.ok) {
-      throw new Error(`Course API returned ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (!Array.isArray(data.courses)) {
-      throw new Error("Course API returned invalid data.");
-    }
-    if (requestToken !== courseRequestToken) return;
-
-    allCourses = data.courses;
-    displayCourses(data.courses, "No courses found.", {
-      pagination: data.pagination,
-    });
-    if (typeof generateDynamicTrending === "function") {
-      generateDynamicTrending();
-    }
-  } catch (error) {
-    if (requestToken !== courseRequestToken) return;
-    console.warn("Unable to load courses from the API.", error);
-    displayCourses([], "Unable to load courses.");
-  }
+  return fetchCoursesPage(page);
 }
 
 async function loadFilterOptions() {
@@ -1027,6 +1052,11 @@ async function loadFilterOptions() {
     if (!response.ok) return;
 
     const options = await response.json();
+    // Update departmentGroups if the API returns them
+    if (options.department_groups) {
+      departmentGroups = options.department_groups;
+      renderCategoryFilter();
+    }
     renderFilterRow("yearFilterRow", "Year", options.years || [], (year) => String(year));
     renderFilterRow(
       "semesterFilterRow",
@@ -1034,12 +1064,7 @@ async function loadFilterOptions() {
       options.semesters || [],
       (term) => (Number(term) === 3 ? "Summer Vacation" : `S${term}`),
     );
-    renderDepartmentFilterRow(
-      "deptFilterRow",
-      "Department",
-      options.departments || [],
-      (department) => String(department),
-    );
+    renderDepartmentFilter("");
   } catch (error) {
     console.warn("Using static filter options because the filter API is unavailable.", error);
   }
@@ -1070,55 +1095,19 @@ function renderDepartmentFilterRow(rowId, label, values, getLabel) {
   const row = document.getElementById(rowId);
   if (!row) return;
 
-  const visibleCount = 5;
-  const visibleValues = values.slice(0, visibleCount);
-  const tuckedValues = values.slice(visibleCount);
-
-  row.classList.add("department-filter-row");
   row.innerHTML = "";
-
-  const mainGroup = document.createElement("div");
-  mainGroup.className = "department-filter-main";
-  row.appendChild(mainGroup);
 
   const labelEl = document.createElement("span");
   labelEl.className = "filter-label";
   labelEl.textContent = `${label} \u2502`;
-  mainGroup.appendChild(labelEl);
+  row.appendChild(labelEl);
 
   const allButton = createFilterButton("All", "");
   allButton.classList.add("active");
-  mainGroup.appendChild(allButton);
+  row.appendChild(allButton);
 
-  visibleValues.forEach((value) => {
-    mainGroup.appendChild(createFilterButton(getLabel(value), value));
-  });
-
-  if (!tuckedValues.length) return;
-
-  const toggleButton = document.createElement("button");
-  toggleButton.type = "button";
-  toggleButton.className = "filter-more-btn";
-  toggleButton.setAttribute("aria-expanded", "false");
-  toggleButton.textContent = `More departments (${tuckedValues.length})`;
-  mainGroup.appendChild(toggleButton);
-
-  const drawer = document.createElement("div");
-  drawer.className = "department-filter-drawer";
-  drawer.hidden = true;
-  row.appendChild(drawer);
-
-  tuckedValues.forEach((value) => {
-    drawer.appendChild(createFilterButton(getLabel(value), value));
-  });
-
-  toggleButton.addEventListener("click", function () {
-    const isOpen = !drawer.hidden;
-    drawer.hidden = isOpen;
-    toggleButton.setAttribute("aria-expanded", String(!isOpen));
-    toggleButton.textContent = isOpen
-      ? `More departments (${tuckedValues.length})`
-      : "Hide departments";
+  values.forEach((value) => {
+    row.appendChild(createFilterButton(getLabel(value), value));
   });
 }
 
@@ -1203,9 +1192,8 @@ function setupEventListeners() {
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
 
-  // 3. 橫向篩選按鈕列事件 (維持不變)
-// 💡 關鍵：保留後端留下的靜態欄位，並強制把被他刪掉的 'deptCategoryFilterRow'（大類別）加回來！
-const filterRows = ['deptCategoryFilterRow', 'ratingFilterRow'];
+  // 3. 橫向篩選按鈕列事件（year/rating 等靜態列；category 由 renderCategoryFilter 動態處理）
+const filterRows = ['ratingFilterRow'];
 
 filterRows.forEach(rowId => {
   const row = document.getElementById(rowId);
@@ -1337,7 +1325,13 @@ filterRows.forEach(rowId => {
 // Display courses
 function displayCourses(courses, emptyText = "No courses found.", options = {}) {
   const container = document.getElementById("coursesContainer");
-  renderCourseCards(container, courses, "No courses found.");
+  if (options.pagination) {
+    coursePagination = {
+      ...coursePagination,
+      ...options.pagination,
+    };
+  }
+  renderCourseCards(container, courses, emptyText);
   renderCoursePagination();
 }
 
@@ -1346,16 +1340,11 @@ function getActiveCourseFilters() {
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
   const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
   const sortActiveBtn = document.querySelector("#quickSortMenu .sort-text-btn.active");
-  const selectedDepartmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
-  const selectedSubDepartment = deptSubFilterSelect?.value || "";
-  const selectedSportActivity = selectedDepartmentGroup === "運動健康" ? selectedSubDepartment : "";
-  const selectedDepartment = selectedDepartmentGroup && selectedDepartmentGroup !== "運動健康"
-    ? selectedSubDepartment
-    : deptActiveBtn?.dataset.value || "";
+  const selectedDepartmentGroup = deptActiveBtn?.dataset.group || "";
+  const selectedDepartment = selectedDepartmentGroup ? "" : (deptActiveBtn?.dataset.value || "");
 
   return {
     q: searchTerm,
@@ -1363,7 +1352,7 @@ function getActiveCourseFilters() {
     department_category: deptCategoryActiveBtn?.dataset.value || "",
     department_group: selectedDepartmentGroup,
     department: selectedDepartment,
-    sport_activity: selectedSportActivity,
+    sport_activity: "",
     min_rating: ratingActiveBtn?.dataset.value || "",
     semester: semActiveBtn?.dataset.value || "",
     sort: sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular",
@@ -1384,7 +1373,11 @@ function buildCoursePageUrl(page = 1) {
 }
 
 async function fetchCoursesPage(page = 1) {
-  if (isLoadingCourses) return;
+  const requestToken = ++courseRequestToken;
+  if (isLoadingCourses) {
+    pendingCourseFetchPage = page;
+    return;
+  }
   isLoadingCourses = true;
   const container = document.getElementById("coursesContainer");
   if (container) {
@@ -1393,6 +1386,7 @@ async function fetchCoursesPage(page = 1) {
 
   try {
     const data = await apiRequest(buildCoursePageUrl(page));
+    if (requestToken !== courseRequestToken) return;
     allCourses = data.courses || [];
     Object.keys(courseReviews).forEach((courseId) => {
       if (!allCourses.some((course) => String(course.id) === String(courseId))) {
@@ -1405,12 +1399,21 @@ async function fetchCoursesPage(page = 1) {
       ...(data.pagination || {}),
     };
     displayCourses(allCourses);
+    if (typeof generateDynamicTrending === "function") {
+      generateDynamicTrending();
+    }
   } catch (error) {
+    if (requestToken !== courseRequestToken) return;
     if (container) {
       container.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
     }
   } finally {
     isLoadingCourses = false;
+    if (pendingCourseFetchPage !== null) {
+      const nextPage = pendingCourseFetchPage;
+      pendingCourseFetchPage = null;
+      fetchCoursesPage(nextPage);
+    }
   }
 }
 
@@ -1606,7 +1609,6 @@ function queueCourseSearch() {
   searchDebounceTimer = window.setTimeout(() => {
     filterCourses();
   }, 250);
-}
 }
 
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
@@ -2675,47 +2677,6 @@ function handleReplyKeydown(event, reviewId) {
   submitReply(reviewId);
 }
 
-async function submitReply(reviewId) {
-  if (!currentUser) {
-    alert("Please login to reply.");
-    openLoginModal();
-    return;
-  }
-
-  const inputId = `replyInput-${reviewId}`;
-  const input = document.getElementById(inputId);
-  if (!input) return;
-
-  const text = input.value.trim();
-  if (!text) return;
-
-  try {
-    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        comment: text,
-        parentId: Number(reviewId),
-      }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Failed to submit reply.");
-      return;
-    }
-
-    input.value = "";
-    expandedReplyGroups.add(`${reviewId}:root`);
-    await loadReviews(currentCourseId);
-  } catch (error) {
-    alert("Unable to submit reply.");
-  }
-}
-
 const DEFAULT_REACTION = "❤️";
 const REACTION_OPTIONS = [
   "❤️",
@@ -2829,19 +2790,19 @@ function replaceReplyInState(reviewId, reply) {
 }
 
 async function persistReaction(reviewId, reaction, replyId = null) {
-  const endpoint = replyId
-    ? `/api/replies/${replyId}/reaction`
-    : `/api/reviews/${reviewId}/reaction`;
+  const targetId = replyId || reviewId;
+  const endpoint = `/api/courses/${currentCourseId}/reviews/${targetId}/reactions`;
   const result = await apiRequest(endpoint, {
     method: "POST",
-    body: JSON.stringify({ reaction }),
+    body: JSON.stringify({ reaction, remove: !reaction }),
   });
 
   if (result.review) {
-    replaceReviewInState(result.review);
-  }
-  if (result.reply) {
-    replaceReplyInState(reviewId, result.reply);
+    if (replyId) {
+      replaceReplyInState(reviewId, result.review);
+    } else {
+      replaceReviewInState(result.review);
+    }
   }
 }
 
@@ -2912,15 +2873,22 @@ async function submitReply(reviewId) {
   if (!text) return;
 
   try {
-    const result = await apiRequest(`/api/reviews/${reviewId}/reply`, {
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        comment: text,
+        parentId: Number(reviewId),
+      }),
     });
 
-    if (result.review) {
-      replaceReviewInState(result.review);
-    } else if (result.reply) {
-      replaceReplyInState(reviewId, result.reply);
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Failed to submit reply.");
+      return;
     }
 
     input.value = "";
@@ -3143,7 +3111,6 @@ window.toggleFilterPanel = function() {
 window.resetAllFilters = function() {
 
   renderDepartmentFilter("");
-  renderDepartmentSubFilter("");
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
 
   filterRows.forEach(rowId => {

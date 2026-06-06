@@ -44,7 +44,7 @@
                 <svg viewBox="0 0 448 512" width="20" height="20" fill="currentColor">
                   <path d="M224 0c-17.7 0-32 14.3-32 32V51.2C119 66 64 130.6 64 208v11.3c0 8.5-2.4 16.8-6.9 24L11.5 321.4c-9.2 14.6-9.8 33-1.6 48.2s24.6 24.4 41.8 24.4H402.1c17.2 0 33.6-9.2 41.8-24.4s7.7-33.6-1.6-48.2L390.9 243.3c-4.5-7.1-6.9-15.5-6.9-24V208c0-77.4-55-142-128-156.8V32c0-17.7-14.3-32-32-32zm48 448H176c0 26.5 21.5 48 48 48s48-21.5 48-48z"/>
                 </svg>
-                <span class="notification-badge" id="notiBadge">2</span>
+                <span class="notification-badge" id="notiBadge" style="display: none;"></span>
               </button>
 
               <div class="notification-dropdown-card" id="notificationDropdown" style="display: none;">
@@ -52,23 +52,8 @@
                   <button type="button" class="mark-read-btn" onclick="markAllAsRead()">Mark all as read</button>
                 </div>
                 
-                <div class="notification-list">
-                  <div class="notification-item unread">
-                    <div class="noti-icon">📚</div>
-                    <div class="noti-content">
-                      <p>There is 1 new review on your saved course.</p>
-                      <span class="noti-time">10 minutes ago</span>
-                    </div>
-                  </div>
-                  
-                  <div class="notification-item unread">
-                    <div class="noti-icon">💬</div>
-                    <div class="noti-content">
-                      <p>Someone replied to your review.</p>
-                      <span class="noti-time">2 hours ago</span>
-                    </div>
-                  </div>
-                </div>
+                <div class="notification-list" id="notificationList"></div>
+                <div class="notification-empty" id="notificationEmpty" style="display: flex !important; justify-content: center !important;">No notifications yet.</div>
               </div>
             </div>
 
@@ -309,6 +294,9 @@
         <div class="filter-row" id="semesterFilterRow">
           <span class="filter-label">Semester │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="1">S1</button>
+          <button type="button" class="filter-tag-btn" data-value="2">S2</button>
+          <button type="button" class="filter-tag-btn" data-value="3">Summer Vacation</button>
         </div>
 
         <div class="filter-row" id="ratingFilterRow">
