@@ -2,16 +2,6 @@
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
-let currentFilteredCourses = [];
-let currentPage = 1;
-let courseRequestToken = 0;
-let searchDebounceTimer = null;
-let currentPagination = {
-  page: 1,
-  perPage: 20,
-  total: 0,
-  totalPages: 1,
-};
 let selectedRating = 0;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
@@ -225,8 +215,10 @@ const sampleReviews = {
   ],
 };
 
-// FIX: 不再 fallback 到假資料，空物件就是空物件
-const courseReviews = window.__INITIAL_REVIEWS__ || {};
+const courseReviews =
+  window.__INITIAL_REVIEWS__ && Object.keys(window.__INITIAL_REVIEWS__).length
+    ? window.__INITIAL_REVIEWS__
+    : sampleReviews;
 
 // Utility functions to generate SVG icons
 function starIcon(fillPercent = 100) {
@@ -325,7 +317,7 @@ function getDisplayName(user) {
 
 function translateIcon() {
   return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="m5 8 6 6"></path>
       <path d="m4 14 6-6 2-3"></path>
       <path d="M2 5h12"></path>
@@ -771,12 +763,19 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
+  allCourses =
+    window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
+      ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
+      : JSON.parse(JSON.stringify(sampleCourses));
+  coursePagination = {
+    ...coursePagination,
+    ...(window.__COURSE_PAGINATION__ || {}),
+  };
+  currentUser = window.__CURRENT_USER__ || null;
   departmentGroups = window.__DEPARTMENT_GROUPS__ || {};
   sportActivityOptions = window.__SPORT_ACTIVITY_OPTIONS__ || [];
-  displayCourses([], "Loading courses...");
-  loadCoursesFromApi({ page: 1 });
-  loadFilterOptions();
-  renderCategoryFilter();
+  renderDepartmentFilter("");
+  displayCourses(allCourses);
   setupEventListeners();
   setupAdminForms();
   checkUserLogin();
@@ -833,65 +832,23 @@ function getDepartmentCategory(department) {
   )?.[0] || "";
 }
 
-// ── Category filter (top row) ─────────────────────────────────────────────
-function renderCategoryFilter() {
-  const row = document.getElementById("deptCategoryFilterRow");
-  if (!row) return;
-
-  const categories = Object.keys(departmentGroups);
-
-  // Build buttons
-  row.innerHTML =
-    `<span class="filter-label">Category │</span>` +
-    `<button type="button" class="filter-tag-btn active" data-value="">All</button>` +
-    categories
-      .map(
-        (cat) =>
-          `<button type="button" class="filter-tag-btn" data-value="${escapeHtml(cat)}">${escapeHtml(cat)}</button>`
-      )
-      .join("");
-
-  // Bind events
-  row.querySelectorAll(".filter-tag-btn").forEach((btn) => {
-    btn.addEventListener("click", function () {
-      row.querySelectorAll(".filter-tag-btn").forEach((b) => b.classList.remove("active"));
-      this.classList.add("active");
-      renderDepartmentFilter(this.dataset.value || "");
-      loadCoursesFromApi({ page: 1 });
-    });
-  });
-}
-
-// ── Department filter (second row) ───────────────────────────────────────
 function renderDepartmentFilter(category) {
   const row = document.getElementById("deptFilterRow");
   if (!row) return;
 
-  const options = getDepartmentFilterOptions(category);
+  const departments = getDepartmentFilterOptions(category);
+  const options = departments
+    .map((option) => (
+      `<button type="button" class="filter-tag-btn" data-value="${escapeHtml(option.value || "")}" data-group="${escapeHtml(option.group || "")}" data-label="${escapeHtml(option.label)}">${escapeHtml(option.label)}</button>`
+    ))
+    .join("");
 
-  // Hide dept row when no category is selected or there are no options
-  if (!category || options.length === 0) {
-    row.style.display = "none";
-    row.innerHTML = `<span class="filter-label">Department │</span>
-      <button type="button" class="filter-tag-btn active" data-value="">All</button>`;
-    return;
-  }
+  row.innerHTML = `
+    <span class="filter-label">Department │</span>
+    <button type="button" class="filter-tag-btn active" data-value="">All</button>
+    ${options}
+  `;
 
-  row.innerHTML =
-    `<span class="filter-label">Department │</span>` +
-    `<button type="button" class="filter-tag-btn active" data-value="">All</button>` +
-    options
-      .map(
-        (opt) =>
-          `<button type="button" class="filter-tag-btn"
-            data-value="${escapeHtml(opt.value || "")}"
-            data-group="${escapeHtml(opt.group || "")}"
-            data-label="${escapeHtml(opt.label)}"
-          >${escapeHtml(opt.label)}</button>`
-      )
-      .join("");
-
-  row.style.display = "";
   attachDepartmentButtonEvents(row);
 }
 
@@ -907,61 +864,14 @@ function bindDepartmentButton(button) {
   button.dataset.bound = "true";
   button.addEventListener("click", function () {
     const row = this.closest("#deptFilterRow");
-
-    // If clicking "All", restore any open subfilter select first
-    restoreDepartmentSubfilter(row);
+    restoreDepartmentDropdown();
     row.querySelectorAll(".filter-tag-btn").forEach((item) => item.classList.remove("active"));
     this.classList.add("active");
-
-    // Group button → replace itself with a <select> dropdown
     if (this.dataset.group) {
       renderDepartmentSubFilter(this.dataset.group, this);
     }
-
-    loadCoursesFromApi({ page: 1 });
+    filterCourses();
   });
-}
-
-// Render a <select> in place of a group button
-function renderDepartmentSubFilter(groupName, targetButton) {
-  if (!groupName || !targetButton) return;
-
-  const subOptions =
-    groupName === "運動健康"
-      ? sportActivityOptions
-      : getDepartmentsForGroup(groupName);
-
-  const optionsHtml = subOptions
-    .map((val) => `<option value="${escapeHtml(val)}">${escapeHtml(val)}</option>`)
-    .join("");
-
-  const select = document.createElement("select");
-  select.className = "department-subfilter-select";
-  select.id = "deptSubFilterSelect";
-  select.dataset.group = groupName;
-  select.dataset.label = targetButton.dataset.label || groupName;
-  select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${optionsHtml}`;
-  select.value = "";
-  select.addEventListener("change", () => loadCoursesFromApi({ page: 1 }));
-
-  targetButton.replaceWith(select);
-  select.focus();
-}
-
-// Restore the <select> back to a plain button
-function restoreDepartmentSubfilter(row) {
-  const select = row ? row.querySelector("#deptSubFilterSelect") : document.getElementById("deptSubFilterSelect");
-  if (!select) return;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "filter-tag-btn";
-  button.dataset.value = "";
-  button.dataset.group = select.dataset.group || "";
-  button.dataset.label = select.dataset.label || select.dataset.group || "";
-  button.textContent = button.dataset.label;
-  select.replaceWith(button);
-  bindDepartmentButton(button);
 }
 
 function getDepartmentFilterOptions(category) {
@@ -1002,139 +912,41 @@ function getDepartmentFilterOptions(category) {
   }));
 }
 
-function getCourseRequestParams(page = 1) {
-  const params = new URLSearchParams();
-  const searchBox = document.getElementById("searchBox");
-  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
-  const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
-  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
-  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
-  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
-  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
-  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+function renderDepartmentSubFilter(groupName, targetButton) {
+  if (!groupName || !targetButton) return;
+  const subfilterOptions = groupName === "運動健康"
+    ? sportActivityOptions
+    : getDepartmentsForGroup(groupName);
 
-  const searchTerm = searchBox ? searchBox.value.trim() : "";
-  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
-  const departmentCategory = deptCategoryActiveBtn ? deptCategoryActiveBtn.dataset.value : "";
-  const departmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
-  const selectedSubDept = deptSubFilterSelect?.value || "";
-  const department = departmentGroup && departmentGroup !== "運動健康"
-    ? selectedSubDept
-    : deptActiveBtn?.dataset.value || "";
-  const sportActivity = departmentGroup === "運動健康" ? selectedSubDept : "";
-  const minRating = ratingActiveBtn ? ratingActiveBtn.dataset.value : "";
-  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
-  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
+  const options = subfilterOptions
+    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
+    .join("");
 
-  params.set("page", String(page));
-  params.set("per_page", String(COURSES_PER_PAGE));
-  params.set("sort", sortBy);
-  if (searchTerm) params.set("q", searchTerm);
-  if (year) params.set("year", year);
-  if (departmentCategory) params.set("department_category", departmentCategory);
-  if (departmentGroup) params.set("department_group", departmentGroup);
-  if (department) params.set("department", department);
-  if (sportActivity) params.set("sport_activity", sportActivity);
-  if (minRating) params.set("min_rating", minRating);
-  if (semester) params.set("semester", semester);
-  return params;
+  const select = document.createElement("select");
+  select.className = "department-subfilter-select";
+  select.id = "deptSubFilterSelect";
+  select.dataset.group = groupName;
+  select.dataset.label = targetButton.dataset.label || groupName;
+  select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${options}`;
+  select.value = "";
+  select.addEventListener("change", filterCourses);
+  targetButton.replaceWith(select);
+  select.focus();
 }
 
-async function loadCoursesFromApi({ page = 1 } = {}) {
-  return fetchCoursesPage(page);
-}
+function restoreDepartmentDropdown() {
+  const select = document.getElementById("deptSubFilterSelect");
+  if (!select) return;
 
-async function loadFilterOptions() {
-  try {
-    const response = await fetch("/api/filter-options");
-    if (!response.ok) return;
-
-    const options = await response.json();
-    // Update departmentGroups if the API returns them
-    if (options.department_groups) {
-      departmentGroups = options.department_groups;
-      renderCategoryFilter();
-    }
-    renderFilterRow("yearFilterRow", "Year", options.years || [], (year) => String(year));
-    renderFilterRow(
-      "semesterFilterRow",
-      "Semester",
-      options.semesters || [],
-      (term) => (Number(term) === 3 ? "Summer Vacation" : `S${term}`),
-    );
-    renderDepartmentFilter("");
-  } catch (error) {
-    console.warn("Using static filter options because the filter API is unavailable.", error);
-  }
-}
-
-function renderFilterRow(rowId, label, values, getLabel) {
-  const row = document.getElementById(rowId);
-  if (!row) return;
-
-  row.innerHTML = "";
-
-  const labelEl = document.createElement("span");
-  labelEl.className = "filter-label";
-  labelEl.textContent = `${label} \u2502`;
-  row.appendChild(labelEl);
-
-  const allButton = createFilterButton("All", "");
-  allButton.classList.add("active");
-  row.appendChild(allButton);
-
-  values.forEach((value) => {
-    const button = createFilterButton(getLabel(value), value);
-    row.appendChild(button);
-  });
-}
-
-function renderDepartmentFilterRow(rowId, label, values, getLabel) {
-  const row = document.getElementById(rowId);
-  if (!row) return;
-
-  row.innerHTML = "";
-
-  const labelEl = document.createElement("span");
-  labelEl.className = "filter-label";
-  labelEl.textContent = `${label} \u2502`;
-  row.appendChild(labelEl);
-
-  const allButton = createFilterButton("All", "");
-  allButton.classList.add("active");
-  row.appendChild(allButton);
-
-  values.forEach((value) => {
-    row.appendChild(createFilterButton(getLabel(value), value));
-  });
-}
-
-function createFilterButton(label, value) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "filter-tag-btn";
-  button.dataset.value = String(value);
-  button.textContent = label;
-  button.addEventListener("click", function () {
-    activateFilterButton(button);
-  });
-  return button;
-}
-
-function activateFilterButton(button) {
-  const row = button.closest(".filter-row");
-  if (!row) return;
-
-  const buttons = row.querySelectorAll(".filter-tag-btn");
-  const allButton = row.querySelector('.filter-tag-btn[data-value=""]');
-  const shouldResetToAll = button.classList.contains("active") && button.dataset.value !== "";
-  const nextActiveButton = shouldResetToAll && allButton ? allButton : button;
-
-  buttons.forEach((btn) => {
-    btn.classList.remove("active");
-  });
-  nextActiveButton.classList.add("active");
-  filterCourses();
+  button.dataset.value = "";
+  button.dataset.group = select.dataset.group || "";
+  button.dataset.label = select.dataset.label || select.dataset.group || "";
+  button.textContent = button.dataset.label;
+  select.replaceWith(button);
+  bindDepartmentButton(button);
 }
 
 
@@ -1184,37 +996,36 @@ function setupEventListeners() {
   safeAddListener("authForm", "submit", login);
   safeAddListener("avatarAnimal", "change", updateAvatarPreview);
   safeAddListener("gender", "change", updateAvatarPreview);
-  safeAddListener("searchBox", "input", queueCourseSearch);
+  safeAddListener("searchBox", "input", filterCourses);
+
+  // 收藏頁面過濾器 (維持不變)
+  safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
+  safeAddListener("favoriteRatingFilter", "change", renderFavorites);
+  safeAddListener("favoriteSortFilter", "change", renderFavorites);
 
   // ✅ 全新：補上個人資料 (Profile) 專屬的頭像切換事件
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
+  
+  safeAddListener("searchBox", "input", filterCourses);
 
-  // 3. 橫向篩選按鈕列事件（year/rating 等靜態列；category 由 renderCategoryFilter 動態處理）
-const filterRows = ['ratingFilterRow'];
-
-filterRows.forEach(rowId => {
-  const row = document.getElementById(rowId);
-  if (!row) return;
-  const buttons = row.querySelectorAll('.filter-tag-btn');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', function () {
-      
-      // 1. 💡 如果點的是大類別（如：通識），先觸發你的設計，讓下方生出對應的系所按鈕
-      if (rowId === "deptCategoryFilterRow") {
-        renderDepartmentFilter(this.dataset.value || "");
-      }
-
-      // 2. 執行後端寫的按鈕切換（內部包含處理 active 樣式與防呆機制）
-      activateFilterButton(this);
-
-      // 3. 既然篩選條件變了，就叫後端 API 重新向資料庫抓第一頁的資料
-      if (typeof loadCoursesFromApi === "function") {
-        loadCoursesFromApi({ page: 1 });
-      }
+  // 3. 橫向篩選按鈕列事件 (維持不變)
+  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
+  filterRows.forEach(rowId => {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const buttons = row.querySelectorAll('.filter-tag-btn');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', function () {
+        buttons.forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        if (rowId === "deptCategoryFilterRow") {
+          renderDepartmentFilter(this.dataset.value || "");
+        }
+        filterCourses();
+      });
     });
   });
-});
 
   // === 全新：熱門搜尋面板連動邏輯 ===
   const searchBox = document.getElementById("searchBox");
@@ -1321,15 +1132,9 @@ filterRows.forEach(rowId => {
 }
 
 // Display courses
-function displayCourses(courses, emptyText = "No courses found.", options = {}) {
+function displayCourses(courses) {
   const container = document.getElementById("coursesContainer");
-  if (options.pagination) {
-    coursePagination = {
-      ...coursePagination,
-      ...options.pagination,
-    };
-  }
-  renderCourseCards(container, courses, emptyText);
+  renderCourseCards(container, courses, "No courses found.");
   renderCoursePagination();
 }
 
@@ -1338,11 +1143,16 @@ function getActiveCourseFilters() {
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
   const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
   const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
   const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
   const sortActiveBtn = document.querySelector("#quickSortMenu .sort-text-btn.active");
-  const selectedDepartmentGroup = deptActiveBtn?.dataset.group || "";
-  const selectedDepartment = selectedDepartmentGroup ? "" : (deptActiveBtn?.dataset.value || "");
+  const selectedDepartmentGroup = deptSubFilterSelect?.dataset.group || deptActiveBtn?.dataset.group || "";
+  const selectedSubDepartment = deptSubFilterSelect?.value || "";
+  const selectedSportActivity = selectedDepartmentGroup === "運動健康" ? selectedSubDepartment : "";
+  const selectedDepartment = selectedDepartmentGroup && selectedDepartmentGroup !== "運動健康"
+    ? selectedSubDepartment
+    : deptActiveBtn?.dataset.value || "";
 
   return {
     q: searchTerm,
@@ -1350,7 +1160,7 @@ function getActiveCourseFilters() {
     department_category: deptCategoryActiveBtn?.dataset.value || "",
     department_group: selectedDepartmentGroup,
     department: selectedDepartment,
-    sport_activity: "",
+    sport_activity: selectedSportActivity,
     min_rating: ratingActiveBtn?.dataset.value || "",
     semester: semActiveBtn?.dataset.value || "",
     sort: sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular",
@@ -1371,11 +1181,7 @@ function buildCoursePageUrl(page = 1) {
 }
 
 async function fetchCoursesPage(page = 1) {
-  const requestToken = ++courseRequestToken;
-  if (isLoadingCourses) {
-    pendingCourseFetchPage = page;
-    return;
-  }
+  if (isLoadingCourses) return;
   isLoadingCourses = true;
   const container = document.getElementById("coursesContainer");
   if (container) {
@@ -1384,7 +1190,6 @@ async function fetchCoursesPage(page = 1) {
 
   try {
     const data = await apiRequest(buildCoursePageUrl(page));
-    if (requestToken !== courseRequestToken) return;
     allCourses = data.courses || [];
     Object.keys(courseReviews).forEach((courseId) => {
       if (!allCourses.some((course) => String(course.id) === String(courseId))) {
@@ -1397,21 +1202,12 @@ async function fetchCoursesPage(page = 1) {
       ...(data.pagination || {}),
     };
     displayCourses(allCourses);
-    if (typeof generateDynamicTrending === "function") {
-      generateDynamicTrending();
-    }
   } catch (error) {
-    if (requestToken !== courseRequestToken) return;
     if (container) {
       container.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
     }
   } finally {
     isLoadingCourses = false;
-    if (pendingCourseFetchPage !== null) {
-      const nextPage = pendingCourseFetchPage;
-      pendingCourseFetchPage = null;
-      fetchCoursesPage(nextPage);
-    }
   }
 }
 
@@ -1538,8 +1334,6 @@ function renderCourseCards(container, courses, emptyText) {
                 <div class="course-card-tags">
                   ${tagSearchButton(course.code, "course-code course-tag-btn")}
                   ${tagSearchButton(semesterText, "course-semester course-tag-btn")}
-                  <div class="course-latest-offered">Latest offered: ${semesterText}</div>
-
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
@@ -1564,7 +1358,9 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
-                    <span class="stat-save-display">${heartIcon()} <span id="save-count-${course.id}">${course.saveCount || 0}</span></span>
+                    <span class="stat-save-display">
+                        ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
+                    </span>
                     <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
@@ -1602,13 +1398,6 @@ function tagSearchButton(tag, className) {
   return `<button type="button" class="${className}" onclick="event.stopPropagation(); searchByTag(decodeURIComponent('${encodedTag}'))">${safeTag}</button>`;
 }
 
-function queueCourseSearch() {
-  window.clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = window.setTimeout(() => {
-    filterCourses();
-  }, 250);
-}
-
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
 document.addEventListener("DOMContentLoaded", function() {
   const sortBtns = document.querySelectorAll('.sort-text-btn');
@@ -1623,6 +1412,28 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 });
+
+// === 新版：主頁面課程排序邏輯 ===
+function sortCourses(courses, sortBy) {
+  const sorted = [...courses];
+
+  if (sortBy === "popular") {
+    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
+    sorted.sort((a, b) => {
+      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
+      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+      return bPopularity - aPopularity;
+    });
+  } else if (sortBy === "latest") {
+    // Latest (最新開課): 依照年份與學期由新到舊排序
+    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
+  } else if (sortBy === "rating") {
+    // Ratings (評分最高): 依照星星數由高到低排序
+    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }
+
+  return sorted;
+}
 
 // Toggle follow
 async function toggleFollow(courseId) {
@@ -1662,11 +1473,6 @@ async function toggleFollow(courseId) {
   }
 }
 
-function getCourseSaveTotal(courseId) {
-  const course = allCourses.find((entry) => entry.id === courseId);
-  return course ? Number(course.saveCount || 0) : 0;
-}
-
 function syncDetailFollowButton(courseId) {
   const detailFollowBtn = document.getElementById("detailFollowBtn");
   const course = allCourses.find((c) => c.id === courseId);
@@ -1697,12 +1503,12 @@ function renderDetailTags(course) {
     .join("");
 }
 
-function getCourseCommentTotal(courseId) {
-  const course = allCourses.find((entry) => entry.id === courseId);
-  if (course && Number.isFinite(Number(course.reviewCount))) {
-    return Number(course.reviewCount);
-  }
+function getCourseLikeTotal(courseId) {
+  const course = allCourses.find((c) => c.id === courseId);
+  return course?.saveCount || 0;
+}
 
+function getCourseCommentTotal(courseId) {
   const reviews = getReviewsForCourse(courseId);
   return reviews.reduce(
     (total, review) => total + 1 + (review.replies || []).length,
@@ -1716,7 +1522,7 @@ function updateDetailSocialStats(courseId) {
 
   stats.innerHTML = `
     <span class="detail-social-stat stat-save-display">
-      ${heartIcon()} <span>${getCourseSaveTotal(courseId)}</span>
+      ${heartIcon()} <span>${getCourseLikeTotal(courseId)}</span>
     </span>
     <span class="detail-social-stat stat-comment">
       ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
@@ -2041,12 +1847,13 @@ function isValidEmail(email) {
 
 async function login(event) {
   event.preventDefault();
-
-  const username = document.getElementById("username").value.trim();
-  const email = document.getElementById("email").value.trim();
+  
+  const username = document.getElementById("username").value;
+  const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-
+  
+  // 抓取目前的模式 (login 還是 register)
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -2076,103 +1883,55 @@ async function login(event) {
         }
       : {
           identifier: username,
-password,
+          password: password,
         };
-
-    const response = await fetch(endpoint, {
+    const result = await apiRequest(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Authentication failed.");
-      return;
-    }
-
-    currentUser = data.user;
-    // 💡 收下後端寫的本地儲存功能，重整網頁才不會被登出
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    
-    await checkUserLogin();
-    
-    // 💡 結合你的核心功能：登入後用你寫的函式更新第一頁的課程與收藏愛心
+    currentUser = result.user;
+    checkUserLogin();
+    // refresh courses so `followed` flags come from backend for this user
     try {
       await fetchCoursesPage(1);
     } catch (e) {
       console.warn('Failed to refresh courses after login', e);
     }
-
     document.getElementById("authForm").reset();
     switchAuthTab("login");
   } catch (error) {
-    alert(error.message || "Unable to complete authentication.");}}
+    alert(error.message);
+  }
+}
 
 async function logout() {
-
-try {
-    // 💡 採用後端的標準安全登出，確保伺服器端的 Session/Cookie 能被正確清除
-    await fetch("/api/logout", {
-      method: "POST",
-      credentials: "same-origin",
-    });
+  try {
+    await apiRequest("/api/logout", { method: "POST" });
   } catch (error) {
-    // UI should still return to the logged-out state if the session expired.
+    // The UI should still return to the logged-out state if the session expired.
   }
-
   currentUser = null;
-  localStorage.removeItem("currentUser"); // 💡 補上這行，確保登出時完全清除瀏覽器的記憶！
   updateAuthUI();
-document.getElementById("navBlock").style.display = "none";
+  document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  
-  // 💡 採用後端寫法：確保登出後，新版彈窗會正確切換到「歡迎畫面」，並清空輸入框
-  document.getElementById("loginModal").style.display = "block";
-  document.getElementById("loginModal").classList.add("login-page-overlay");
-  document.getElementById("welcomeStartSection").style.display = "block";
-  document.getElementById("authCoreSection").style.display = "none";
-  document.getElementById("authForm").reset();
-
-  // 💡 完美保留你的功能：登出後立刻重刷課程列表，把卡片上的愛心全部拔掉
-  fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));}
+  openLoginModal(true);
+  fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));
+}
 
 async function checkUserLogin() {
   try {
-
-  // 1. 採用後端寫法：帶上憑證去跟伺服器檢查 Session
-    const response = await fetch("/api/session", {
-      credentials: "same-origin",
-    });
-    const data = await response.json();
-
-    if (response.ok && data.authenticated && data.user) {
-      currentUser = data.user;
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-    } else {
-      // 💡 保留你原本的彈性：如果 API 沒查到，先看看有沒有 window 的全域變數，都沒有才正式登出
-      currentUser = window.__CURRENT_USER__ || null;
-      if (!currentUser) localStorage.removeItem("currentUser");
-    }
+    const session = await apiRequest("/api/session");
+    currentUser = session.authenticated ? session.user : currentUser;
   } catch (error) {
-    currentUser = window.__CURRENT_USER__ || null;
-    if (!currentUser) localStorage.removeItem("currentUser");
+    currentUser = window.__CURRENT_USER__ || currentUser;
   }
 
-  // 2. 💡 介面連動：如果確認有登入，就把主畫面打開，並完美關閉新版彈窗與遮罩
+  document.getElementById("navBlock").style.display = "block";
+  document.getElementById("mainContentBlock").style.display = "block";
+
   if (currentUser) {
-    document.getElementById("navBlock").style.display = "block";
-    document.getElementById("mainContentBlock").style.display = "block";
-    
-    if (typeof closeLoginModal === "function") {
-      closeLoginModal();
-    } else {
-      document.getElementById("loginModal").style.display = "none";
-    }
-    document.getElementById("loginModal").classList.remove("login-page-overlay");
+    closeLoginModal();
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
@@ -2264,7 +2023,7 @@ function openCourseDetail(courseId) {
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
   
   document.getElementById("coursesContainer").style.display = "none";
-const pagination = document.getElementById("coursesPagination");
+  const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2301,12 +2060,8 @@ function closeCourseDetail() {
   }
 
   document.getElementById("coursesContainer").style.display = "";
-// 1. 💡 關鍵：把你在前面關卡隱藏的分頁列重新還原顯示！
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
-
-  // 2. 💡 呼叫你寫的渲染機制（傳入 allCourses），確保卡片和分頁大腦同步刷新
-  displayCourses(allCourses);
   currentCourseId = null;
   renderAdminCoursePanel(null);
 }
@@ -2316,9 +2071,9 @@ function getReviewsForCourse(courseId) {
 }
 
 function getAverageRating(reviews, fallbackRating) {
-  const rated = reviews.filter((r) => r.rating != null);
-  if (rated.length === 0) return fallbackRating ?? 0;
-  return rated.reduce((sum, r) => sum + r.rating, 0) / rated.length;
+  if (reviews.length === 0) return fallbackRating;
+  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+  return total / reviews.length;
 }
 
 function renderRatingBreakdown(reviews) {
@@ -2343,159 +2098,50 @@ function renderRatingBreakdown(reviews) {
   }
 }
 
-// FIX: 補上後端 allowed_reactions 對應的常數，原本漏掉定義
-const REVIEW_REACTIONS = ["❤️", "🙂", "😮", "😭", "👍", "🔥"];
+// Load reviews
+function loadReviews(courseId) {
+  const reviews = getReviewsForCourse(courseId);
 
-function renderReactionButtons(review) {
-  const counts = review.reactionCounts || {};
-  const selectedReaction = review.reaction || "";
+  const reviewsList = document.getElementById("reviewsList");
+  reviewsList.innerHTML = "";
+  updateStudentReviewStats(reviews);
+  updateDetailSocialStats(courseId);
 
-  return `
-    <div class="review-reaction-bar" aria-label="Review reactions">
-      ${REVIEW_REACTIONS.map((emoji) => {
-        const count = Number(counts[emoji] || 0);
-        const selected = selectedReaction === emoji;
-        return `
-          <button
-            type="button"
-            class="review-reaction-btn ${selected ? "selected" : ""}"
-            onclick="reactToReview('${review.id}', '${emoji}')"
-            aria-pressed="${selected ? "true" : "false"}"
-            title="React ${emoji}"
-          >
-            <span class="review-reaction-emoji">${emoji}</span>
-            <span class="review-reaction-count">${count}</span>
-          </button>
-        `;
-      }).join("")}
-    </div>
-  `;
-}
-
-async function reactToReview(reviewId, reaction) {
-  if (!currentUser) {
-    alert("Please login to react.");
-    openLoginModal();
+  if (reviews.length === 0) {
+    reviewsList.innerHTML =
+      '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
     return;
   }
-  if (!currentCourseId) return;
 
-  try {
-    const response = await fetch(
-      `/api/courses/${currentCourseId}/reviews/${reviewId}/reactions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({ reaction }),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Unable to update reaction.");
-      return;
-    }
+  reviews.forEach((review) => {
+    const reviewItem = document.createElement("div");
+    reviewItem.className = "review-item";
 
-    applyReviewReactionUpdate(reviewId, data.review);
-    await loadReviews(currentCourseId);
-  } catch (error) {
-    alert("Unable to update reaction.");
-  }
-}
+    const starsHtml = generateStars(review.rating);
+    const replies = review.replies || [];
+    const totalReplies = replies.length;
+    const replyCountText =
+      totalReplies > 0
+        ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
+        : "Reply";
+    const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
-function applyReviewReactionUpdate(reviewId, updatedReview) {
-  if (!updatedReview || !currentCourseId) return;
-  const reviews = getReviewsForCourse(currentCourseId);
-  const reviewIdNumber = Number(reviewId);
+    // === 判斷這則評論是不是「我」發的 ===
+    const isMyReview = currentUser && review.author === getDisplayName(currentUser);
+    const myActionsHtml = isMyReview ? `
+      <div class="my-review-actions">
+        <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
+        <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
+      </div>
+    ` : "";
 
-  for (const review of reviews) {
-    if (Number(review.id) === reviewIdNumber) {
-      Object.assign(review, updatedReview);
-      return;
-    }
-    const reply = (review.replies || []).find((item) => Number(item.id) === reviewIdNumber);
-    if (reply) {
-      Object.assign(reply, updatedReview);
-      return;
-    }
-  }
-}
-
-// Load reviews
-async function loadReviews(courseId) {
-  const reviewsList = document.getElementById("reviewsList");
-  if (!reviewsList) return;
-
-  try {
-    const response = await fetch(`/api/courses/${courseId}/reviews`, {
-      credentials: "same-origin",
-    });
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      const detail = errData.error || errData.trace || "";
-      console.error("Review API error:", response.status, detail);
-      throw new Error(`Review API ${response.status}: ${detail || "unknown error"}`);
-    }
-
-    const data = await response.json();
-    const reviews = data.reviews || [];
-    courseReviews[courseId] = reviews;
-
-    const course = allCourses.find((entry) => entry.id === courseId);
-    if (course) {
-      course.rating = data.averageRating ?? course.rating;
-      course.reviewCount = data.reviewCount ?? course.reviewCount;
-    }
-
-    reviewsList.innerHTML = "";
-    updateStudentReviewStats(reviews);
-    updateDetailSocialStats(courseId);
-
-    if (data.averageRating !== undefined) {
-      document.getElementById("detailRatingValue").textContent = Number(data.averageRating).toFixed(1);
-      document.getElementById("detailStars").innerHTML = generateStars(data.averageRating);
-      document.getElementById("detailReviewCount").textContent = `Based on ${data.reviewCount} review${data.reviewCount !== 1 ? "s" : ""}`;
-    }
-
-    renderRatingBreakdown(reviews);
-
-    if (reviews.length === 0) {
-      reviewsList.innerHTML =
-        '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
-      return;
-    }
-
-    reviews.forEach((review) => {
-      const reviewItem = document.createElement("div");
-      reviewItem.className = "review-item";
-
-      const starsHtml = generateStars(review.rating ?? 0);
-      const replies = review.replies || [];
-      const totalReplies = replies.length;
-      const replyCountText =
-        totalReplies > 0
-          ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
-          : "Reply";
-      const showReplies = expandedReplyGroups.has(`${review.id}:root`);
-
-      const isMyReview = currentUser && review.author === getDisplayName(currentUser);
-      const myActionsHtml = isMyReview ? `
-        <div class="my-review-actions">
-          <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
-          <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
-        </div>
-      ` : "";
-
-      reviewItem.innerHTML = `
+    reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
                   <span class="review-avatar ${getGenderClass(review.avatar?.gender)}">${avatarIcon(review.avatar || getDefaultProfile(review.author))}</span>
                   <span class="review-author">${escapeHtml(review.author)}</span>
                   <span class="review-dot"></span>
                   <span class="review-date">${escapeHtml(review.date)}</span>
-                  ${review.sectionLabel ? `<span class="review-dot"></span><span class="review-section-label">Section: ${escapeHtml(review.sectionLabel)}</span>` : ""}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
@@ -2505,7 +2151,7 @@ async function loadReviews(courseId) {
             
             <div class="review-rating-line">
                 <span class="review-rating">${starsHtml}</span>
-                ${review.rating != null ? `<span class="review-score">${Number(review.rating).toFixed(1)}</span>` : ""}
+                <span class="review-score">${review.rating.toFixed(1)}</span>
             </div>
             
             <div id="text-display-${review.id}">
@@ -2521,7 +2167,8 @@ async function loadReviews(courseId) {
             </div>
             
             <div class="review-actions">
-              ${renderReactionButtons(review)}
+              ${renderReactionControl(review, review.id)}
+
               <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
                 ${commentIcon()}
               </button>
@@ -2549,13 +2196,8 @@ async function loadReviews(courseId) {
             ${showReplies ? `<div class="review-replies">${renderReplies(replies, review.id)}</div>` : ""}
         `;
 
-      reviewsList.appendChild(reviewItem);
-    });
-  } catch (error) {
-    console.error("loadReviews failed:", error);
-    reviewsList.innerHTML =
-      `<p class="empty-reviews">Unable to load reviews right now. (${error.message})</p>`;
-  }
+    reviewsList.appendChild(reviewItem);
+  });
 }
 
 function updateStudentReviewStats(reviews = []) {
@@ -2623,7 +2265,7 @@ function renderReplies(replies = [], reviewId) {
               </div>
 
               <div class="reply-actions">
-                ${renderReactionButtons(reply)}
+                ${renderReactionControl(reply, reviewId, reply.id)}
               </div>
             </div>
           </div>
@@ -2648,10 +2290,44 @@ function findReviewById(reviewId) {
   return reviews.find((review) => review.id === reviewId);
 }
 
+function toggleReviewLike(reviewId) {
+  if (!currentUser) {
+    alert("Please login to like reviews.");
+    openLoginModal();
+    return;
+  }
+
+  const review = findReviewById(reviewId);
+  if (!review) return;
+
+  review.liked = !review.liked;
+  review.likes += review.liked ? 1 : -1;
+  loadReviews(currentCourseId);
+}
+
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
   return review.replies.find((reply) => reply.id === replyId) || null;
+}
+
+function findReactionTarget(reviewId, replyId = null) {
+  return replyId ? findReplyById(reviewId, replyId) : findReviewById(reviewId);
+}
+
+function toggleReplyLike(reviewId, replyId) {
+  if (!currentUser) {
+    alert("Please login to like replies.");
+    openLoginModal();
+    return;
+  }
+
+  const reply = findReplyById(reviewId, replyId);
+  if (!reply) return;
+
+  reply.liked = !reply.liked;
+  reply.likes += reply.liked ? 1 : -1;
+  loadReviews(currentCourseId);
 }
 
 function toggleReplyForm(reviewId) {
@@ -2679,6 +2355,44 @@ function handleReplyKeydown(event, reviewId) {
 
   event.preventDefault();
   submitReply(reviewId);
+}
+
+function submitReply(reviewId) {
+  if (!currentUser) {
+    alert("Please login to reply.");
+    openLoginModal();
+    return;
+  }
+
+  const review = findReviewById(reviewId);
+  const inputId = `replyInput-${reviewId}`;
+  const input = document.getElementById(inputId);
+  if (!review || !input) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (!review.replies) {
+    review.replies = [];
+  }
+
+  review.replies.push({
+    id: `reply-${Date.now()}`,
+    author: getDisplayName(currentUser),
+    avatar: {
+      avatarAnimal: currentUser.avatarAnimal,
+      gender: currentUser.gender,
+    },
+    date: new Date().toISOString().slice(0, 10),
+    text: text,
+    likes: 0,
+    liked: false,
+    reaction: "",
+    replies: [],
+  });
+
+  expandedReplyGroups.add(`${reviewId}:root`);
+  loadReviews(currentCourseId);
 }
 
 const DEFAULT_REACTION = "❤️";
@@ -2794,19 +2508,19 @@ function replaceReplyInState(reviewId, reply) {
 }
 
 async function persistReaction(reviewId, reaction, replyId = null) {
-  const targetId = replyId || reviewId;
-  const endpoint = `/api/courses/${currentCourseId}/reviews/${targetId}/reactions`;
+  const endpoint = replyId
+    ? `/api/replies/${replyId}/reaction`
+    : `/api/reviews/${reviewId}/reaction`;
   const result = await apiRequest(endpoint, {
     method: "POST",
-    body: JSON.stringify({ reaction, remove: !reaction }),
+    body: JSON.stringify({ reaction }),
   });
 
   if (result.review) {
-    if (replyId) {
-      replaceReplyInState(reviewId, result.review);
-    } else {
-      replaceReviewInState(result.review);
-    }
+    replaceReviewInState(result.review);
+  }
+  if (result.reply) {
+    replaceReplyInState(reviewId, result.reply);
   }
 }
 
@@ -2831,20 +2545,21 @@ async function applyReaction(reviewId, reaction = "❤️", replyId = null) {
 async function handleQuickLike(event, reviewId, replyId = null) {
   event.stopPropagation();
 
-  if (!currentUser) {
-    alert("Please login to react.");
-    openLoginModal();
-    return;
-  }
-
-  const target = findReactionTarget(String(reviewId), replyId ? String(replyId) : null);
-  const shouldClear = target?.liked && (target.reaction || "\u2764\uFE0F") === "\u2764\uFE0F";
-
-  try {
-    await persistReaction(reviewId, shouldClear ? "" : "\u2764\uFE0F", replyId);
-    loadReviews(currentCourseId);
-  } catch (error) {
-    alert(error.message);
+  // 切換 palette 顯示（點擊主按鈕開/關選單）
+  const container = event.currentTarget.closest(".reaction-container");
+  if (container) {
+    const isOpen = container.classList.toggle("open");
+    if (isOpen) {
+      // 點其他地方關閉
+      const closeHandler = (e) => {
+        if (!container.contains(e.target)) {
+          container.classList.remove("open");
+          document.removeEventListener("click", closeHandler);
+        }
+      };
+      document.addEventListener("click", closeHandler);
+    }
+    return; // 只開關選單，不直接送出 reaction
   }
 }
 
@@ -2855,6 +2570,10 @@ function selectReviewEmoji(
   maybeReaction = null,
 ) {
   event.stopPropagation();
+
+  // 關閉 palette
+  const container = event.currentTarget.closest(".reaction-container");
+  if (container) container.classList.remove("open");
 
   const hasReplyId = maybeReaction !== null;
   const replyId = hasReplyId ? replyIdOrReaction : null;
@@ -2877,22 +2596,15 @@ async function submitReply(reviewId) {
   if (!text) return;
 
   try {
-    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
+    const result = await apiRequest(`/api/reviews/${reviewId}/reply`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        comment: text,
-        parentId: Number(reviewId),
-      }),
+      body: JSON.stringify({ text }),
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Failed to submit reply.");
-      return;
+    if (result.review) {
+      replaceReviewInState(result.review);
+    } else if (result.reply) {
+      replaceReplyInState(reviewId, result.reply);
     }
 
     input.value = "";
@@ -2952,7 +2664,6 @@ async function submitReview(event) {
 
   if (!currentUser) {
     alert("Please login to submit a review.");
-    openLoginModal();
     return;
   }
 
@@ -2961,57 +2672,38 @@ async function submitReview(event) {
     return;
   }
 
-// 1. 💡 採用後端的防呆機制，避免使用者送出空白評論
-  const reviewText = document.getElementById("reviewText").value.trim();
-  if (!reviewText) {
-    alert("Please write a review.");
-    return;
-  }
+  const reviewText = document.getElementById("reviewText").value;
+  const course = allCourses.find((c) => c.id === currentCourseId);
 
   try {
-    // 2. 💡 必須配合後端新規格：改成複數 /reviews，且內文欄位名稱改為 comment
-    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
+    const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
       body: JSON.stringify({
         rating: selectedRating,
-        comment: reviewText, 
+        text: reviewText,
+        language: "English",
       }),
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Failed to submit review.");
-      return;
+    if (!courseReviews[currentCourseId]) {
+      courseReviews[currentCourseId] = [];
     }
+    courseReviews[currentCourseId].unshift(result.review);
 
-    // 3. 同步更新前端的評論資料與平均分數
-    courseReviews[currentCourseId] = data.reviews || [];
-    const course = allCourses.find((entry) => entry.id === currentCourseId);
-    if (course) {
-      course.rating = data.averageRating;
-      course.reviewCount = data.reviewCount;
+    if (course && result.course) {
+      Object.assign(course, result.course);
     }
 
     alert("Review submitted successfully!");
     closeReviewModal();
 
-    // 4. 💡 採用後端的無閃爍局部刷新，若函式不存在則執行你原本的重開視窗防呆
-    if (typeof loadReviews === "function") {
-      await loadReviews(currentCourseId);
-      if (typeof updateDetailSocialStats === "function") updateDetailSocialStats(currentCourseId);
-      if (typeof renderRatingBreakdown === "function") renderRatingBreakdown(courseReviews[currentCourseId] || []);
-    } else if (typeof openCourseDetail === "function" && currentCourseId) {
+    if (currentCourseId) {
       openCourseDetail(currentCourseId);
     }
   } catch (error) {
-    alert("Unable to submit review.");
+    alert(error.message);
   }
 }
-
 
 // Close modals when clicking outside
 window.onclick = function (event) {
@@ -3073,6 +2765,60 @@ window.showAuthFields = function() {
   if (auth) auth.style.display = "block";
 };
 
+// 控制 Filter 面板的開關
+window.toggleFilterPanel = function() {
+  const panel = document.getElementById('filterPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+};
+
+// 綁定「標籤」的點擊事件
+document.addEventListener("DOMContentLoaded", function() {
+  const filterOptions = document.querySelectorAll('.filter-options');
+  
+  filterOptions.forEach(group => {
+    const pills = group.querySelectorAll('.filter-pill');
+    pills.forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        // 把同一個 row 裡面的標籤全部取消 active
+        pills.forEach(p => p.classList.remove('active'));
+        // 幫剛點擊的標籤加上 active
+        e.target.classList.add('active');
+        // 觸發重新篩選
+        filterCourses();
+      });
+    });
+  });
+});
+
+// === 強效修正：確保頭像點擊絕對能開關選單 ===
+document.addEventListener("DOMContentLoaded", function() {
+  const userAvatar = document.getElementById("userAvatar");
+  
+  if (userAvatar) {
+    // 移除舊的監聽，重新綁定一個最直接、不會壞的點擊事件
+    userAvatar.onclick = function(e) {
+      e.stopPropagation(); // 阻止事件擴散
+      
+      // 如果還沒登入，就打開歡迎/登入視窗
+      if (!currentUser) {
+        if (typeof window.openLoginModal === "function") {
+          window.openLoginModal();
+        }
+        return;
+      }
+      
+      // 如果已經登入，就精準開關我們的 Google 風格卡片
+      const menuCard = document.getElementById("avatarMenuCard");
+      if (menuCard) {
+        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
+        menuCard.style.display = isHidden ? "block" : "none";
+      } else {
+        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
+      }
+    };
+  }
+});
+
 // === 控制 Filter 面板的開關與一鍵重置 ===
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
@@ -3113,10 +2859,10 @@ window.toggleFilterPanel = function() {
 
 // === 專屬的標籤重置小幫手 ===
 window.resetAllFilters = function() {
-
   renderDepartmentFilter("");
+  renderDepartmentSubFilter("");
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
-
+  
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
@@ -3141,48 +2887,26 @@ window.resetAllFilters = function() {
 };
 
 
-async function submitReviewAction(reviewId, method, payload) {
-  if (!currentCourseId) return null;
-
-  const response = await fetch(`/api/courses/${currentCourseId}/reviews/${reviewId}`, {
-    method,
-    headers: method === "DELETE" ? undefined : {
-      "Content-Type": "application/json",
-    },
-    credentials: "same-origin",
-    body: method === "DELETE" ? undefined : JSON.stringify(payload),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    alert(data.error || "Action failed.");
-    return null;
-  }
-
-  return data;
-}
-
 // === 刪除評論邏輯 ===
 window.deleteReview = async function(reviewId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-// 1. 💡 採用後端封裝好的核心功能，確保安全帶上憑證發送 DELETE 請求
-  const data = await submitReviewAction(reviewId, "DELETE");
-  if (!data) return;
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}`, {
+      method: "DELETE",
+    });
 
-  // 2. 💡 重新載入該課程的最新評論列表
-  if (typeof loadReviews === "function") {
-    await loadReviews(currentCourseId);
-  }
+    const reviews = courseReviews[currentCourseId];
+    if (reviews) {
+      const index = reviews.findIndex((review) => String(review.id) === String(reviewId));
+      if (index !== -1) reviews.splice(index, 1);
+    }
+    if (result.course) replaceCourseInState(result.course);
 
-  // 3. 💡 保留你的前端資料連動：如果後端有回傳最新的課程評分狀態，就同步更新它
-  if (data && data.course && typeof replaceCourseInState === "function") {
-    replaceCourseInState(data.course);
-  }
-  
-  // 4. 💡 重新刷新你設計的精美評分摘要面板
-  if (typeof refreshDetailRatingSummary === "function") {
+    loadReviews(currentCourseId);
     refreshDetailRatingSummary(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
 };
 
@@ -3207,28 +2931,19 @@ window.saveEdit = async function(reviewId) {
     return;
   }
 
-// 1. 💡 採用後端封裝好的核心功能，安全發送 PATCH 請求更新修改文字
-  const data = await submitReviewAction(reviewId, "PATCH", { text: newText });
-  if (!data) return;
+  try {
+    const result = await apiRequest(`/api/reviews/${reviewId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text: newText }),
+    });
 
-  // 2. 💡 重新載入最新評論列表，確保畫面文字是最新的
-  if (typeof loadReviews === "function") {
-    await loadReviews(currentCourseId);
-  }
+    if (result.review) replaceReviewInState(result.review);
+    if (result.course) replaceCourseInState(result.course);
 
-  // 3. 💡 保留你的前端狀態連動：如果後端有回傳更新後的評論與課程狀態，同步塞回變數中
-  if (data) {
-    if (data.review && typeof replaceReviewInState === "function") {
-      replaceReviewInState(data.review);
-    }
-    if (data.course && typeof replaceCourseInState === "function") {
-      replaceCourseInState(data.course);
-    }
-  }
-
-  // 4. 💡 重新刷新你設計的精美評分摘要面板
-  if (typeof refreshDetailRatingSummary === "function") {
+    loadReviews(currentCourseId);
     refreshDetailRatingSummary(currentCourseId);
+  } catch (error) {
+    alert(error.message);
   }
 };
 
@@ -3236,22 +2951,27 @@ window.saveEdit = async function(reviewId) {
 window.deleteReply = async function(reviewId, replyId) {
   if (!confirm("Are you sure you want to delete this reply? This action cannot be undone.")) return;
 
-  // FIX: reply 沒有 /api/courses/{id}/reviews/{id} 路由，應打 review 的 DELETE
-  // 後端目前沒有獨立的 reply DELETE endpoint，改用 review 的父層刪除流程
-  // 先用 PATCH 清空內容作為軟刪除的替代方案，或直接呼叫父層 review reload
   try {
-    const response = await fetch(`/api/courses/${currentCourseId}/reviews/${replyId}`, {
+    await apiRequest(`/api/replies/${replyId}`, {
       method: "DELETE",
-      credentials: "same-origin",
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      alert(data.error || "Failed to delete reply.");
-      return;
+
+    const review = findReviewById(reviewId);
+    if (review && review.replies) {
+      const index = review.replies.findIndex(r => String(r.id) === String(replyId));
+      if (index !== -1) review.replies.splice(index, 1);
     }
-    await loadReviews(currentCourseId);
+    loadReviews(currentCourseId);
   } catch (error) {
-    alert("Unable to delete reply.");
+    // 後端尚未有 DELETE /api/replies/:id route，fallback 到純前端移除
+    const review = findReviewById(reviewId);
+    if (review && review.replies) {
+      const index = review.replies.findIndex(r => String(r.id) === String(replyId));
+      if (index !== -1) {
+        review.replies.splice(index, 1);
+        loadReviews(currentCourseId);
+      }
+    }
   }
 };
 
@@ -3276,12 +2996,30 @@ window.saveEditReply = async function(reviewId, replyId) {
     return;
   }
 
-  // FIX: reply 的 PATCH 應打 /api/courses/{courseId}/reviews/{replyId}
-  // replyId 在後端 Review 表裡是一個 parent_id != null 的 review，因此路由相同
-  const data = await submitReviewAction(replyId, "PATCH", { text: newText });
-  if (!data) return;
+  try {
+    const result = await apiRequest(`/api/replies/${replyId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text: newText }),
+    });
 
-  await loadReviews(currentCourseId);
+    if (result.review) {
+      replaceReviewInState(result.review);
+    } else {
+      // fallback：直接更新本地狀態
+      const reply = findReplyById(reviewId, replyId);
+      if (reply) reply.text = newText;
+    }
+    loadReviews(currentCourseId);
+  } catch (error) {
+    // 後端尚未有 PATCH /api/replies/:id route，fallback 到純前端更新
+    const reply = findReplyById(reviewId, replyId);
+    if (reply) {
+      reply.text = newText;
+      loadReviews(currentCourseId);
+    } else {
+      alert(error.message);
+    }
+  }
 };
 
 // === 自動生成熱門搜尋標籤 ===
@@ -3330,7 +3068,6 @@ document.addEventListener("DOMContentLoaded", function() {
   // 等假資料都載入後，呼叫生成函數
   setTimeout(generateDynamicTrending, 100); 
 });
-
 
 function updateBackToTopButton() {
   const button = document.getElementById("backToTopBtn");

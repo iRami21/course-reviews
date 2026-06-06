@@ -317,6 +317,8 @@ class ReviewReply(db.Model):
     )
     text = db.Column("replyContent", db.Text, nullable=False)
     created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
+    reaction_counts = db.Column("reactionCounts", db.Text, nullable=False, default="{}")
+    user_reactions = db.Column("userReactions", db.Text, nullable=False, default="{}")
 
     review = db.relationship("Review", back_populates="review_replies")
     author = db.relationship("User")

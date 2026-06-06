@@ -319,6 +319,21 @@ def create_app():
             review.reaction_counts = json.dumps({})
         db.session.commit()
 
+        # Ensure ReviewReply has reaction columns
+        try:
+            reply_columns = {column["name"] for column in inspector.get_columns("ReviewReply")}
+        except Exception:
+            reply_columns = set()
+        if "reactionCounts" not in reply_columns:
+            db.session.execute(
+                text("ALTER TABLE ReviewReply ADD COLUMN reactionCounts TEXT NOT NULL DEFAULT '{}'")
+            )
+        if "userReactions" not in reply_columns:
+            db.session.execute(
+                text("ALTER TABLE ReviewReply ADD COLUMN userReactions TEXT NOT NULL DEFAULT '{}'")
+            )
+        db.session.commit()
+
     with app.app_context():
         db.create_all()
         ensure_review_schema()
@@ -547,7 +562,7 @@ def create_app():
             "sectionLabel": section_label,
             "language": review.language or "English",
             "text": review.text,
-            "likes": reaction_totals.get("❤️", 0),
+            "likes": sum(reaction_totals.values()),
             "liked": bool(user_reaction),
             "reaction": user_reaction or "",
             "reactionCounts": reaction_totals,
@@ -563,8 +578,22 @@ def create_app():
     # 🔽 以下完整保留後端同學寫的效能優化與子查詢函式，確保後端運算不崩潰
     # =========================================================================
 
-    def serialize_reply(reply):
+    def serialize_reply(reply, current_user_id=None):
         author = reply.author
+        try:
+            reaction_totals = json.loads(reply.reaction_counts or "{}")
+        except (TypeError, ValueError):
+            reaction_totals = {}
+        try:
+            user_reactions = json.loads(reply.user_reactions or "{}")
+        except (TypeError, ValueError):
+            user_reactions = {}
+        user_reaction = user_reactions.get(str(current_user_id)) if current_user_id else None
+        total_likes = sum(reaction_totals.values())
+        reaction_summary = [
+            {"reaction": emoji, "count": count}
+            for emoji, count in sorted(reaction_totals.items(), key=lambda x: (-x[1], x[0]))
+        ]
         return {
             "id": str(reply.id),
             "author": author.username if author else "Anonymous",
@@ -575,6 +604,11 @@ def create_app():
             "text": reply.text,
             "date": reply.created_at.strftime("%Y-%m-%d") if reply.created_at else "",
             "reviewId": str(reply.review_id),
+            "likes": total_likes,
+            "liked": bool(user_reaction),
+            "reaction": user_reaction or "",
+            "reactionCounts": reaction_totals,
+            "reactionSummary": reaction_summary,
         }
 
     def build_search_pattern(term):
@@ -1414,8 +1448,8 @@ def create_app():
             )
         db.session.commit()
         return jsonify({
-            "reply": serialize_reply(reply),
-            "review": serialize_review(review),
+            "reply": serialize_reply(reply, current_user_id=current_user.id),
+            "review": serialize_review(review, current_user_id=current_user.id),
         }), 201
 
     def save_reaction(user_id, reaction, review_id=None, reply_id=None):
@@ -1455,20 +1489,94 @@ def create_app():
             return jsonify({"error": "Review not found."}), 404
         data = request.get_json(silent=True) or request.form
         reaction_value = str(data.get("reaction", "")).strip()
-        save_reaction(
-            current_user.id,
-            reaction_value,
-            review_id=review.id,
-        )
-        if review.author and review.author.id != current_user.id and reaction_value:
+        allowed_reactions = {"❤️", "🙂", "😮", "😭", "👍", "🔥"}
+
+        reaction_totals = review.reaction_totals or {}
+        existing = ReviewReaction.query.filter_by(
+            review_id=review.id, user_id=current_user.id
+        ).first()
+
+        notify_reaction = None
+
+        if not reaction_value:
+            # 清除 reaction
+            if existing:
+                old = existing.emoji
+                reaction_totals[old] = max(0, reaction_totals.get(old, 1) - 1)
+                if reaction_totals[old] == 0:
+                    del reaction_totals[old]
+                db.session.delete(existing)
+        elif reaction_value not in allowed_reactions:
+            return jsonify({"error": "Unsupported reaction."}), 400
+        elif existing is None:
+            # 新增
+            db.session.add(ReviewReaction(
+                review_id=review.id, user_id=current_user.id, emoji=reaction_value
+            ))
+            reaction_totals[reaction_value] = reaction_totals.get(reaction_value, 0) + 1
+            notify_reaction = reaction_value
+        elif existing.emoji == reaction_value:
+            # toggle off（取消同一個 emoji）
+            reaction_totals[reaction_value] = max(0, reaction_totals.get(reaction_value, 1) - 1)
+            if reaction_totals[reaction_value] == 0:
+                del reaction_totals[reaction_value]
+            db.session.delete(existing)
+        else:
+            # 換成不同 emoji
+            old = existing.emoji
+            reaction_totals[old] = max(0, reaction_totals.get(old, 1) - 1)
+            if reaction_totals[old] == 0:
+                del reaction_totals[old]
+            reaction_totals[reaction_value] = reaction_totals.get(reaction_value, 0) + 1
+            existing.emoji = reaction_value
+            notify_reaction = reaction_value
+
+        review.reaction_counts = json.dumps(reaction_totals)
+
+        if notify_reaction and review.author and review.author.id != current_user.id:
             save_notification(
                 review.author.id,
-                f"{current_user.username} reacted {reaction_value} to your review on {review.course.title or review.course.code}.",
+                f"{current_user.username} reacted {notify_reaction} to your review on {review.course.title or review.course.code}.",
                 link=url_for("course_detail", course_id=review.course_id),
                 category="activity",
             )
         db.session.commit()
-        return jsonify({"review": serialize_review(review)})
+        current_user_id = current_user.id if current_user.is_authenticated else None
+        return jsonify({"review": serialize_review(review, current_user_id=current_user_id)})
+
+    @app.route("/api/replies/<int:reply_id>", methods=["PATCH"])
+    @login_required
+    def api_update_reply(reply_id):
+        reply = ReviewReply.query.get_or_404(reply_id)
+        if reply.user_id != current_user.id and not is_admin():
+            return jsonify({"error": "You can only edit your own replies."}), 403
+        data = request.get_json(silent=True) or request.form
+        text_value = str(data.get("text", "")).strip()
+        if not text_value:
+            return jsonify({"error": "Reply text is required."}), 400
+        reply.text = text_value
+        db.session.commit()
+        current_user_id = current_user.id if current_user.is_authenticated else None
+        return jsonify({
+            "reply": serialize_reply(reply, current_user_id=current_user_id),
+            "review": serialize_review(reply.review, current_user_id=current_user_id),
+        })
+
+    @app.route("/api/replies/<int:reply_id>", methods=["DELETE"])
+    @login_required
+    def api_delete_reply(reply_id):
+        reply = ReviewReply.query.get_or_404(reply_id)
+        if reply.user_id != current_user.id and not is_admin():
+            return jsonify({"error": "You can only delete your own replies."}), 403
+        review = reply.review
+        db.session.delete(reply)
+        db.session.commit()
+        current_user_id = current_user.id if current_user.is_authenticated else None
+        return jsonify({
+            "ok": True,
+            "replyId": str(reply_id),
+            "review": serialize_review(review, current_user_id=current_user_id),
+        })
 
     @app.route("/api/replies/<int:reply_id>/reaction", methods=["POST"])
     @login_required
@@ -1476,22 +1584,72 @@ def create_app():
         reply = ReviewReply.query.get_or_404(reply_id)
         data = request.get_json(silent=True) or request.form
         reaction_value = str(data.get("reaction", "")).strip()
-        save_reaction(
-            current_user.id,
-            reaction_value,
-            reply_id=reply.id,
-        )
-        if reply.author and reply.author.id != current_user.id and reaction_value:
+        allowed_reactions = {"❤️", "🙂", "😮", "😭", "👍", "🔥"}
+
+        # 從 JSON 欄位讀取目前計數
+        try:
+            reaction_totals = json.loads(reply.reaction_counts or "{}")
+        except (TypeError, ValueError):
+            reaction_totals = {}
+
+        # 用 review_id + user_id + reply_id 的組合來查找既有 reaction
+        # ReviewReaction 目前有 (reviewId, userId) unique constraint，
+        # 我們借用它，但用 review_id=None 無法插入，故直接在 reply.reaction_counts JSON 記錄
+        # 並用獨立欄位追蹤「此 user 對此 reply 的 reaction」
+        # 簡易方案：reaction_counts JSON 同時存 user 清單，key = emoji, value = count
+        # user 選擇記錄在額外的 user_reactions key 裡
+        try:
+            user_reactions = json.loads(reply.user_reactions or "{}")
+        except (TypeError, ValueError):
+            user_reactions = {}
+
+        user_id_str = str(current_user.id)
+        existing_emoji = user_reactions.get(user_id_str)
+        notify_reaction = None
+
+        if not reaction_value:
+            # 清除
+            if existing_emoji:
+                reaction_totals[existing_emoji] = max(0, reaction_totals.get(existing_emoji, 1) - 1)
+                if reaction_totals[existing_emoji] == 0:
+                    del reaction_totals[existing_emoji]
+                del user_reactions[user_id_str]
+        elif reaction_value not in allowed_reactions:
+            return jsonify({"error": "Unsupported reaction."}), 400
+        elif existing_emoji is None:
+            # 新增
+            reaction_totals[reaction_value] = reaction_totals.get(reaction_value, 0) + 1
+            user_reactions[user_id_str] = reaction_value
+            notify_reaction = reaction_value
+        elif existing_emoji == reaction_value:
+            # toggle off
+            reaction_totals[reaction_value] = max(0, reaction_totals.get(reaction_value, 1) - 1)
+            if reaction_totals[reaction_value] == 0:
+                del reaction_totals[reaction_value]
+            del user_reactions[user_id_str]
+        else:
+            # 換 emoji
+            reaction_totals[existing_emoji] = max(0, reaction_totals.get(existing_emoji, 1) - 1)
+            if reaction_totals[existing_emoji] == 0:
+                del reaction_totals[existing_emoji]
+            reaction_totals[reaction_value] = reaction_totals.get(reaction_value, 0) + 1
+            user_reactions[user_id_str] = reaction_value
+            notify_reaction = reaction_value
+
+        reply.reaction_counts = json.dumps(reaction_totals)
+        reply.user_reactions = json.dumps(user_reactions)
+
+        if notify_reaction and reply.author and reply.author.id != current_user.id:
             save_notification(
                 reply.author.id,
-                f"{current_user.username} reacted {reaction_value} to your comment.",
+                f"{current_user.username} reacted {notify_reaction} to your comment.",
                 link=url_for("course_detail", course_id=reply.review.course_id),
                 category="activity",
             )
         db.session.commit()
         return jsonify({
-            "reply": serialize_reply(reply),
-            "review": serialize_review(reply.review),
+            "reply": serialize_reply(reply, current_user_id=current_user.id),
+            "review": serialize_review(reply.review, current_user_id=current_user.id),
         })
 
     @app.route("/api/notifications")
