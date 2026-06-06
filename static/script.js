@@ -225,10 +225,8 @@ const sampleReviews = {
   ],
 };
 
-const courseReviews =
-  window.__INITIAL_REVIEWS__ && Object.keys(window.__INITIAL_REVIEWS__).length
-    ? window.__INITIAL_REVIEWS__
-    : sampleReviews;
+// FIX: 不再 fallback 到假資料，空物件就是空物件
+const courseReviews = window.__INITIAL_REVIEWS__ || {};
 
 // Utility functions to generate SVG icons
 function starIcon(fillPercent = 100) {
@@ -2318,9 +2316,9 @@ function getReviewsForCourse(courseId) {
 }
 
 function getAverageRating(reviews, fallbackRating) {
-  if (reviews.length === 0) return fallbackRating;
-  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-  return total / reviews.length;
+  const rated = reviews.filter((r) => r.rating != null);
+  if (rated.length === 0) return fallbackRating ?? 0;
+  return rated.reduce((sum, r) => sum + r.rating, 0) / rated.length;
 }
 
 function renderRatingBreakdown(reviews) {
@@ -2344,6 +2342,9 @@ function renderRatingBreakdown(reviews) {
     breakdown.appendChild(row);
   }
 }
+
+// FIX: 補上後端 allowed_reactions 對應的常數，原本漏掉定義
+const REVIEW_REACTIONS = ["❤️", "🙂", "😮", "😭", "👍", "🔥"];
 
 function renderReactionButtons(review) {
   const counts = review.reactionCounts || {};
@@ -2432,7 +2433,10 @@ async function loadReviews(courseId) {
       credentials: "same-origin",
     });
     if (!response.ok) {
-      throw new Error(`Review API returned ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      const detail = errData.error || errData.trace || "";
+      console.error("Review API error:", response.status, detail);
+      throw new Error(`Review API ${response.status}: ${detail || "unknown error"}`);
     }
 
     const data = await response.json();
@@ -2467,7 +2471,7 @@ async function loadReviews(courseId) {
       const reviewItem = document.createElement("div");
       reviewItem.className = "review-item";
 
-      const starsHtml = generateStars(review.rating);
+      const starsHtml = generateStars(review.rating ?? 0);
       const replies = review.replies || [];
       const totalReplies = replies.length;
       const replyCountText =
@@ -2501,7 +2505,7 @@ async function loadReviews(courseId) {
             
             <div class="review-rating-line">
                 <span class="review-rating">${starsHtml}</span>
-                <span class="review-score">${review.rating.toFixed(1)}</span>
+                ${review.rating != null ? `<span class="review-score">${Number(review.rating).toFixed(1)}</span>` : ""}
             </div>
             
             <div id="text-display-${review.id}">
@@ -2548,9 +2552,9 @@ async function loadReviews(courseId) {
       reviewsList.appendChild(reviewItem);
     });
   } catch (error) {
-    console.warn("Unable to load reviews.", error);
+    console.error("loadReviews failed:", error);
     reviewsList.innerHTML =
-      '<p class="empty-reviews">Unable to load reviews right now.</p>';
+      `<p class="empty-reviews">Unable to load reviews right now. (${error.message})</p>`;
   }
 }
 
@@ -3230,12 +3234,25 @@ window.saveEdit = async function(reviewId) {
 
 // === 刪除子回覆邏輯 ===
 window.deleteReply = async function(reviewId, replyId) {
-  if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
+  if (!confirm("Are you sure you want to delete this reply? This action cannot be undone.")) return;
 
-  const data = await submitReviewAction(replyId, "DELETE");
-  if (!data) return;
-
-  await loadReviews(currentCourseId);
+  // FIX: reply 沒有 /api/courses/{id}/reviews/{id} 路由，應打 review 的 DELETE
+  // 後端目前沒有獨立的 reply DELETE endpoint，改用 review 的父層刪除流程
+  // 先用 PATCH 清空內容作為軟刪除的替代方案，或直接呼叫父層 review reload
+  try {
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews/${replyId}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      alert(data.error || "Failed to delete reply.");
+      return;
+    }
+    await loadReviews(currentCourseId);
+  } catch (error) {
+    alert("Unable to delete reply.");
+  }
 };
 
 // === 開啟子回覆編輯模式 ===
@@ -3259,6 +3276,8 @@ window.saveEditReply = async function(reviewId, replyId) {
     return;
   }
 
+  // FIX: reply 的 PATCH 應打 /api/courses/{courseId}/reviews/{replyId}
+  // replyId 在後端 Review 表裡是一個 parent_id != null 的 review，因此路由相同
   const data = await submitReviewAction(replyId, "PATCH", { text: newText });
   if (!data) return;
 

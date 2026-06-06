@@ -676,7 +676,11 @@ def create_app():
                 selectinload(Review.replies).selectinload(Review.reactions),
             )
             .join(Section)
-            .filter(Section.course_id == course_id, Review.parent_id.is_(None))
+            .filter(
+                Section.course_id == course_id,
+                Review.parent_id.is_(None),
+                Review.is_visible.isnot(False),  # FIX: 過濾管理員隱藏的留言
+            )
             .order_by(Review.created_at.desc())
         )
 
@@ -726,8 +730,13 @@ def create_app():
         sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
 
         from models import Section
-        avg_rating = func.coalesce(func.avg(Review.rating), 0)
-        review_count = func.count(Review.review_id)
+        # 只計算頂層、可見的留言（排除 reply 和管理員隱藏的留言）
+        visible_review_cond = and_(
+            Review.parent_id.is_(None),
+            Review.is_visible.isnot(False),
+        )
+        avg_rating = func.coalesce(func.avg(Review.rating).filter(visible_review_cond), 0)
+        review_count = func.count(Review.review_id).filter(visible_review_cond)
         courses_query = (
             Course.query
             .outerjoin(Section, Section.course_id == Course.course_id)
@@ -844,7 +853,11 @@ def create_app():
             for review in (
                 Review.query
                 .join(Section, Review.section_id == Section.section_id)
-                .filter(Section.course_id.in_(course_ids), Review.parent_id.is_(None))
+                .filter(
+                    Section.course_id.in_(course_ids),
+                    Review.parent_id.is_(None),
+                    Review.is_visible.isnot(False),  # FIX: 過濾管理員隱藏的留言
+                )
                 .order_by(Review.created_at.desc())
                 .all()
             ):
@@ -1039,21 +1052,25 @@ def create_app():
     @app.route("/api/courses/<int:course_id>/reviews")
     def api_course_reviews(course_id):
         course = Course.query.get_or_404(course_id)
-        reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(review.rating for review in reviews if review.rating) / len(reviews)
-            if reviews
-            else 0
-        )
-        current_user_id = current_user.id if current_user.is_authenticated else None
-        return jsonify(
-            {
-                "courseId": course.course_id,
-                "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
-                "reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
-            }
-        )
+        try:
+            reviews = reviews_for_course(course_id).all()
+            average_rating = (
+                sum(review.rating for review in reviews if review.rating) / len(reviews)
+                if reviews
+                else 0
+            )
+            current_user_id = current_user.id if current_user.is_authenticated else None
+            return jsonify(
+                {
+                    "courseId": course.course_id,
+                    "reviewCount": len(reviews),
+                    "averageRating": round(float(average_rating), 1),
+                    "reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
+                }
+            )
+        except Exception as e:
+            import traceback
+            return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
     @app.route("/api/courses/<int:course_id>/reviews", methods=["POST"])
     @login_required
@@ -1186,7 +1203,8 @@ def create_app():
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
                 "averageRating": round(float(average_rating), 1),
-                "review": serialize_review(review, current_user_id=current_user_id),
+                # FIX: 不再序列化已刪除的 review 物件，改回傳被刪除的 id
+                "deletedReviewId": str(review_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
             }
         )
