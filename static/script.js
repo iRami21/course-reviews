@@ -1,8 +1,19 @@
-// Global variables
+﻿// Global variables
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
+let currentFilteredCourses = [];
+let currentPage = 1;
+let courseRequestToken = 0;
+let searchDebounceTimer = null;
+let currentPagination = {
+  page: 1,
+  perPage: 20,
+  total: 0,
+  totalPages: 1,
+};
 let selectedRating = 0;
+const COURSES_PER_PAGE = 20;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
@@ -317,7 +328,7 @@ function getDisplayName(user) {
 
 function translateIcon() {
   return `
-    <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="m5 8 6 6"></path>
       <path d="m4 14 6-6 2-3"></path>
       <path d="M2 5h12"></path>
@@ -763,19 +774,9 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
-  allCourses =
-    window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
-      ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
-      : JSON.parse(JSON.stringify(sampleCourses));
-  coursePagination = {
-    ...coursePagination,
-    ...(window.__COURSE_PAGINATION__ || {}),
-  };
-  currentUser = window.__CURRENT_USER__ || null;
-  departmentGroups = window.__DEPARTMENT_GROUPS__ || {};
-  sportActivityOptions = window.__SPORT_ACTIVITY_OPTIONS__ || [];
-  renderDepartmentFilter("");
-  displayCourses(allCourses);
+  displayCourses([], "Loading courses...");
+  loadCoursesFromApi({ page: 1 });
+  loadFilterOptions();
   setupEventListeners();
   setupAdminForms();
   checkUserLogin();
@@ -870,7 +871,7 @@ function bindDepartmentButton(button) {
     if (this.dataset.group) {
       renderDepartmentSubFilter(this.dataset.group, this);
     }
-    filterCourses();
+    loadCoursesFromApi({ page: 1 });
   });
 }
 
@@ -929,7 +930,7 @@ function renderDepartmentSubFilter(groupName, targetButton) {
   select.dataset.label = targetButton.dataset.label || groupName;
   select.innerHTML = `<option value="">${escapeHtml(groupName)}: All</option>${options}`;
   select.value = "";
-  select.addEventListener("change", filterCourses);
+  select.addEventListener("change", () => loadCoursesFromApi({ page: 1 }));
   targetButton.replaceWith(select);
   select.focus();
 }
@@ -947,6 +948,206 @@ function restoreDepartmentDropdown() {
   button.textContent = button.dataset.label;
   select.replaceWith(button);
   bindDepartmentButton(button);
+function getCourseRequestParams(page = 1) {
+  const params = new URLSearchParams();
+  const searchBox = document.getElementById("searchBox");
+  const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const ratingActiveBtn = document.querySelector("#ratingFilterRow .filter-tag-btn.active");
+  const semActiveBtn = document.querySelector("#semesterFilterRow .filter-tag-btn.active");
+  const sortActiveBtn = document.querySelector(".sort-text-btn.active");
+
+  // --- 💡 這裡是你需要修改的部分 ----------------------------------
+  // 1. 同時抓取作用中的按鈕，以及你產生的下拉選單
+  const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
+  const deptSelect = document.getElementById("deptSubFilterSelect");
+
+  // 2. 判斷：如果目前畫面上有下拉選單，就拿選單的值；如果沒有，就拿按鈕的值
+  const department = deptSelect ? deptSelect.value : (deptActiveBtn ? deptActiveBtn.dataset.value : "");
+  // -----------------------------------------------------------
+
+  const searchTerm = searchBox ? searchBox.value.trim() : "";
+  const year = yearActiveBtn ? yearActiveBtn.dataset.value : "";
+  const department = deptActiveBtn ? deptActiveBtn.dataset.value : "";
+  const minRating = ratingActiveBtn ? ratingActiveBtn.dataset.value : "";
+  const semester = semActiveBtn ? semActiveBtn.dataset.value : "";
+  const sortBy = sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular";
+
+  params.set("page", String(page));
+  params.set("per_page", String(COURSES_PER_PAGE));
+  params.set("sort", sortBy);
+  if (searchTerm) params.set("q", searchTerm);
+  if (year) params.set("year", year);
+  if (department) params.set("department", department);
+  if (minRating) params.set("min_rating", minRating);
+  if (semester) params.set("semester", semester);
+  return params;
+}
+
+async function loadCoursesFromApi({ page = 1 } = {}) {
+  const requestToken = ++courseRequestToken;
+  displayCourses([], "Loading courses...", {
+    pagination: {
+      page,
+      perPage: COURSES_PER_PAGE,
+      total: 0,
+      totalPages: 1,
+    },
+  });
+
+  try {
+    const response = await fetch(`/api/courses?${getCourseRequestParams(page).toString()}`);
+    if (!response.ok) {
+      throw new Error(`Course API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data.courses)) {
+      throw new Error("Course API returned invalid data.");
+    }
+    if (requestToken !== courseRequestToken) return;
+
+    allCourses = data.courses;
+    displayCourses(data.courses, "No courses found.", {
+      pagination: data.pagination,
+    });
+    if (typeof generateDynamicTrending === "function") {
+      generateDynamicTrending();
+    }
+  } catch (error) {
+    if (requestToken !== courseRequestToken) return;
+    console.warn("Unable to load courses from the API.", error);
+    displayCourses([], "Unable to load courses.");
+  }
+}
+
+async function loadFilterOptions() {
+  try {
+    const response = await fetch("/api/filter-options");
+    if (!response.ok) return;
+
+    const options = await response.json();
+    renderFilterRow("yearFilterRow", "Year", options.years || [], (year) => String(year));
+    renderFilterRow(
+      "semesterFilterRow",
+      "Semester",
+      options.semesters || [],
+      (term) => (Number(term) === 3 ? "Summer Vacation" : `S${term}`),
+    );
+    renderDepartmentFilterRow(
+      "deptFilterRow",
+      "Department",
+      options.departments || [],
+      (department) => String(department),
+    );
+  } catch (error) {
+    console.warn("Using static filter options because the filter API is unavailable.", error);
+  }
+}
+
+function renderFilterRow(rowId, label, values, getLabel) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+
+  row.innerHTML = "";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "filter-label";
+  labelEl.textContent = `${label} \u2502`;
+  row.appendChild(labelEl);
+
+  const allButton = createFilterButton("All", "");
+  allButton.classList.add("active");
+  row.appendChild(allButton);
+
+  values.forEach((value) => {
+    const button = createFilterButton(getLabel(value), value);
+    row.appendChild(button);
+  });
+}
+
+function renderDepartmentFilterRow(rowId, label, values, getLabel) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+
+  const visibleCount = 5;
+  const visibleValues = values.slice(0, visibleCount);
+  const tuckedValues = values.slice(visibleCount);
+
+  row.classList.add("department-filter-row");
+  row.innerHTML = "";
+
+  const mainGroup = document.createElement("div");
+  mainGroup.className = "department-filter-main";
+  row.appendChild(mainGroup);
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "filter-label";
+  labelEl.textContent = `${label} \u2502`;
+  mainGroup.appendChild(labelEl);
+
+  const allButton = createFilterButton("All", "");
+  allButton.classList.add("active");
+  mainGroup.appendChild(allButton);
+
+  visibleValues.forEach((value) => {
+    mainGroup.appendChild(createFilterButton(getLabel(value), value));
+  });
+
+  if (!tuckedValues.length) return;
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "filter-more-btn";
+  toggleButton.setAttribute("aria-expanded", "false");
+  toggleButton.textContent = `More departments (${tuckedValues.length})`;
+  mainGroup.appendChild(toggleButton);
+
+  const drawer = document.createElement("div");
+  drawer.className = "department-filter-drawer";
+  drawer.hidden = true;
+  row.appendChild(drawer);
+
+  tuckedValues.forEach((value) => {
+    drawer.appendChild(createFilterButton(getLabel(value), value));
+  });
+
+  toggleButton.addEventListener("click", function () {
+    const isOpen = !drawer.hidden;
+    drawer.hidden = isOpen;
+    toggleButton.setAttribute("aria-expanded", String(!isOpen));
+    toggleButton.textContent = isOpen
+      ? `More departments (${tuckedValues.length})`
+      : "Hide departments";
+  });
+}
+
+function createFilterButton(label, value) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filter-tag-btn";
+  button.dataset.value = String(value);
+  button.textContent = label;
+  button.addEventListener("click", function () {
+    activateFilterButton(button);
+  });
+  return button;
+}
+
+function activateFilterButton(button) {
+  const row = button.closest(".filter-row");
+  if (!row) return;
+
+  const buttons = row.querySelectorAll(".filter-tag-btn");
+  const allButton = row.querySelector('.filter-tag-btn[data-value=""]');
+  const shouldResetToAll = button.classList.contains("active") && button.dataset.value !== "";
+  const nextActiveButton = shouldResetToAll && allButton ? allButton : button;
+
+  buttons.forEach((btn) => {
+    btn.classList.remove("active");
+  });
+  nextActiveButton.classList.add("active");
+  filterCourses();
 }
 
 
@@ -996,36 +1197,38 @@ function setupEventListeners() {
   safeAddListener("authForm", "submit", login);
   safeAddListener("avatarAnimal", "change", updateAvatarPreview);
   safeAddListener("gender", "change", updateAvatarPreview);
-  safeAddListener("searchBox", "input", filterCourses);
-
-  // 收藏頁面過濾器 (維持不變)
-  safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
-  safeAddListener("favoriteRatingFilter", "change", renderFavorites);
-  safeAddListener("favoriteSortFilter", "change", renderFavorites);
+  safeAddListener("searchBox", "input", queueCourseSearch);
 
   // ✅ 全新：補上個人資料 (Profile) 專屬的頭像切換事件
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
-  
-  safeAddListener("searchBox", "input", filterCourses);
 
   // 3. 橫向篩選按鈕列事件 (維持不變)
-  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
-  filterRows.forEach(rowId => {
-    const row = document.getElementById(rowId);
-    if (!row) return;
-    const buttons = row.querySelectorAll('.filter-tag-btn');
-    buttons.forEach(btn => {
-      btn.addEventListener('click', function () {
-        buttons.forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        if (rowId === "deptCategoryFilterRow") {
-          renderDepartmentFilter(this.dataset.value || "");
-        }
-        filterCourses();
-      });
+// 💡 關鍵：保留後端留下的靜態欄位，並強制把被他刪掉的 'deptCategoryFilterRow'（大類別）加回來！
+const filterRows = ['deptCategoryFilterRow', 'ratingFilterRow'];
+
+filterRows.forEach(rowId => {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const buttons = row.querySelectorAll('.filter-tag-btn');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', function () {
+      
+      // 1. 💡 如果點的是大類別（如：通識），先觸發你的設計，讓下方生出對應的系所按鈕
+      if (rowId === "deptCategoryFilterRow") {
+        renderDepartmentFilter(this.dataset.value || "");
+      }
+
+      // 2. 執行後端寫的按鈕切換（內部包含處理 active 樣式與防呆機制）
+      activateFilterButton(this);
+
+      // 3. 既然篩選條件變了，就叫後端 API 重新向資料庫抓第一頁的資料
+      if (typeof loadCoursesFromApi === "function") {
+        loadCoursesFromApi({ page: 1 });
+      }
     });
   });
+});
 
   // === 全新：熱門搜尋面板連動邏輯 ===
   const searchBox = document.getElementById("searchBox");
@@ -1132,7 +1335,7 @@ function setupEventListeners() {
 }
 
 // Display courses
-function displayCourses(courses) {
+function displayCourses(courses, emptyText = "No courses found.", options = {}) {
   const container = document.getElementById("coursesContainer");
   renderCourseCards(container, courses, "No courses found.");
   renderCoursePagination();
@@ -1334,6 +1537,8 @@ function renderCourseCards(container, courses, emptyText) {
                 <div class="course-card-tags">
                   ${tagSearchButton(course.code, "course-code course-tag-btn")}
                   ${tagSearchButton(semesterText, "course-semester course-tag-btn")}
+                  <div class="course-latest-offered">Latest offered: ${semesterText}</div>
+
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
@@ -1358,9 +1563,7 @@ function renderCourseCards(container, courses, emptyText) {
             
             <div class="course-footer" onclick="event.stopPropagation();">
                 <div class="course-reviews-count">
-                    <span class="stat-save-display">
-                        ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
-                    </span>
+                    <span class="stat-save-display">${heartIcon()} <span id="save-count-${course.id}">${course.saveCount || 0}</span></span>
                     <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
@@ -1398,6 +1601,14 @@ function tagSearchButton(tag, className) {
   return `<button type="button" class="${className}" onclick="event.stopPropagation(); searchByTag(decodeURIComponent('${encodedTag}'))">${safeTag}</button>`;
 }
 
+function queueCourseSearch() {
+  window.clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = window.setTimeout(() => {
+    filterCourses();
+  }, 250);
+}
+}
+
 // 綁定「人氣 | 最新 | 評分」按鈕的點擊切換事件
 document.addEventListener("DOMContentLoaded", function() {
   const sortBtns = document.querySelectorAll('.sort-text-btn');
@@ -1412,28 +1623,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 });
-
-// === 新版：主頁面課程排序邏輯 ===
-function sortCourses(courses, sortBy) {
-  const sorted = [...courses];
-
-  if (sortBy === "popular") {
-    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
-    sorted.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
-      return bPopularity - aPopularity;
-    });
-  } else if (sortBy === "latest") {
-    // Latest (最新開課): 依照年份與學期由新到舊排序
-    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
-  } else if (sortBy === "rating") {
-    // Ratings (評分最高): 依照星星數由高到低排序
-    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }
-
-  return sorted;
-}
 
 // Toggle follow
 async function toggleFollow(courseId) {
@@ -1473,6 +1662,11 @@ async function toggleFollow(courseId) {
   }
 }
 
+function getCourseSaveTotal(courseId) {
+  const course = allCourses.find((entry) => entry.id === courseId);
+  return course ? Number(course.saveCount || 0) : 0;
+}
+
 function syncDetailFollowButton(courseId) {
   const detailFollowBtn = document.getElementById("detailFollowBtn");
   const course = allCourses.find((c) => c.id === courseId);
@@ -1503,12 +1697,12 @@ function renderDetailTags(course) {
     .join("");
 }
 
-function getCourseLikeTotal(courseId) {
-  const course = allCourses.find((c) => c.id === courseId);
-  return course?.saveCount || 0;
-}
-
 function getCourseCommentTotal(courseId) {
+  const course = allCourses.find((entry) => entry.id === courseId);
+  if (course && Number.isFinite(Number(course.reviewCount))) {
+    return Number(course.reviewCount);
+  }
+
   const reviews = getReviewsForCourse(courseId);
   return reviews.reduce(
     (total, review) => total + 1 + (review.replies || []).length,
@@ -1522,7 +1716,7 @@ function updateDetailSocialStats(courseId) {
 
   stats.innerHTML = `
     <span class="detail-social-stat stat-save-display">
-      ${heartIcon()} <span>${getCourseLikeTotal(courseId)}</span>
+      ${heartIcon()} <span>${getCourseSaveTotal(courseId)}</span>
     </span>
     <span class="detail-social-stat stat-comment">
       ${commentIcon()} <span>${getCourseCommentTotal(courseId)}</span>
@@ -1847,13 +2041,12 @@ function isValidEmail(email) {
 
 async function login(event) {
   event.preventDefault();
-  
-  const username = document.getElementById("username").value;
-  const email = document.getElementById("email").value;
+
+  const username = document.getElementById("username").value.trim();
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  
-  // 抓取目前的模式 (login 還是 register)
+
   const submitButton = document.getElementById("authSubmitBtn");
   const isRegistering = submitButton.dataset.mode === "register";
 
@@ -1883,55 +2076,103 @@ async function login(event) {
         }
       : {
           identifier: username,
-          password: password,
+password,
         };
-    const result = await apiRequest(endpoint, {
+
+    const response = await fetch(endpoint, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
       body: JSON.stringify(payload),
     });
 
-    currentUser = result.user;
-    checkUserLogin();
-    // refresh courses so `followed` flags come from backend for this user
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Authentication failed.");
+      return;
+    }
+
+    currentUser = data.user;
+    // 💡 收下後端寫的本地儲存功能，重整網頁才不會被登出
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    
+    await checkUserLogin();
+    
+    // 💡 結合你的核心功能：登入後用你寫的函式更新第一頁的課程與收藏愛心
     try {
       await fetchCoursesPage(1);
     } catch (e) {
       console.warn('Failed to refresh courses after login', e);
     }
+
     document.getElementById("authForm").reset();
     switchAuthTab("login");
   } catch (error) {
-    alert(error.message);
-  }
-}
+    alert(error.message || "Unable to complete authentication.");}}
 
 async function logout() {
-  try {
-    await apiRequest("/api/logout", { method: "POST" });
+
+try {
+    // 💡 採用後端的標準安全登出，確保伺服器端的 Session/Cookie 能被正確清除
+    await fetch("/api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
   } catch (error) {
-    // The UI should still return to the logged-out state if the session expired.
+    // UI should still return to the logged-out state if the session expired.
   }
+
   currentUser = null;
+  localStorage.removeItem("currentUser"); // 💡 補上這行，確保登出時完全清除瀏覽器的記憶！
   updateAuthUI();
-  document.getElementById("navBlock").style.display = "none";
+document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  openLoginModal(true);
-  fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));
-}
+  
+  // 💡 採用後端寫法：確保登出後，新版彈窗會正確切換到「歡迎畫面」，並清空輸入框
+  document.getElementById("loginModal").style.display = "block";
+  document.getElementById("loginModal").classList.add("login-page-overlay");
+  document.getElementById("welcomeStartSection").style.display = "block";
+  document.getElementById("authCoreSection").style.display = "none";
+  document.getElementById("authForm").reset();
+
+  // 💡 完美保留你的功能：登出後立刻重刷課程列表，把卡片上的愛心全部拔掉
+  fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));}
 
 async function checkUserLogin() {
   try {
-    const session = await apiRequest("/api/session");
-    currentUser = session.authenticated ? session.user : currentUser;
+
+  // 1. 採用後端寫法：帶上憑證去跟伺服器檢查 Session
+    const response = await fetch("/api/session", {
+      credentials: "same-origin",
+    });
+    const data = await response.json();
+
+    if (response.ok && data.authenticated && data.user) {
+      currentUser = data.user;
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    } else {
+      // 💡 保留你原本的彈性：如果 API 沒查到，先看看有沒有 window 的全域變數，都沒有才正式登出
+      currentUser = window.__CURRENT_USER__ || null;
+      if (!currentUser) localStorage.removeItem("currentUser");
+    }
   } catch (error) {
-    currentUser = window.__CURRENT_USER__ || currentUser;
+    currentUser = window.__CURRENT_USER__ || null;
+    if (!currentUser) localStorage.removeItem("currentUser");
   }
 
-  document.getElementById("navBlock").style.display = "block";
-  document.getElementById("mainContentBlock").style.display = "block";
-
+  // 2. 💡 介面連動：如果確認有登入，就把主畫面打開，並完美關閉新版彈窗與遮罩
   if (currentUser) {
-    closeLoginModal();
+    document.getElementById("navBlock").style.display = "block";
+    document.getElementById("mainContentBlock").style.display = "block";
+    
+    if (typeof closeLoginModal === "function") {
+      closeLoginModal();
+    } else {
+      document.getElementById("loginModal").style.display = "none";
+    }
+    document.getElementById("loginModal").classList.remove("login-page-overlay");
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
@@ -2023,7 +2264,7 @@ function openCourseDetail(courseId) {
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
   
   document.getElementById("coursesContainer").style.display = "none";
-  const pagination = document.getElementById("coursesPagination");
+const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2060,8 +2301,12 @@ function closeCourseDetail() {
   }
 
   document.getElementById("coursesContainer").style.display = "";
+// 1. 💡 關鍵：把你在前面關卡隱藏的分頁列重新還原顯示！
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
+
+  // 2. 💡 呼叫你寫的渲染機制（傳入 allCourses），確保卡片和分頁大腦同步刷新
+  displayCourses(allCourses);
   currentCourseId = null;
   renderAdminCoursePanel(null);
 }
@@ -2098,50 +2343,153 @@ function renderRatingBreakdown(reviews) {
   }
 }
 
-// Load reviews
-function loadReviews(courseId) {
-  const reviews = getReviewsForCourse(courseId);
+function renderReactionButtons(review) {
+  const counts = review.reactionCounts || {};
+  const selectedReaction = review.reaction || "";
 
-  const reviewsList = document.getElementById("reviewsList");
-  reviewsList.innerHTML = "";
-  updateStudentReviewStats(reviews);
-  updateDetailSocialStats(courseId);
+  return `
+    <div class="review-reaction-bar" aria-label="Review reactions">
+      ${REVIEW_REACTIONS.map((emoji) => {
+        const count = Number(counts[emoji] || 0);
+        const selected = selectedReaction === emoji;
+        return `
+          <button
+            type="button"
+            class="review-reaction-btn ${selected ? "selected" : ""}"
+            onclick="reactToReview('${review.id}', '${emoji}')"
+            aria-pressed="${selected ? "true" : "false"}"
+            title="React ${emoji}"
+          >
+            <span class="review-reaction-emoji">${emoji}</span>
+            <span class="review-reaction-count">${count}</span>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
 
-  if (reviews.length === 0) {
-    reviewsList.innerHTML =
-      '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
+async function reactToReview(reviewId, reaction) {
+  if (!currentUser) {
+    alert("Please login to react.");
+    openLoginModal();
     return;
   }
+  if (!currentCourseId) return;
 
-  reviews.forEach((review) => {
-    const reviewItem = document.createElement("div");
-    reviewItem.className = "review-item";
+  try {
+    const response = await fetch(
+      `/api/courses/${currentCourseId}/reviews/${reviewId}/reactions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ reaction }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Unable to update reaction.");
+      return;
+    }
 
-    const starsHtml = generateStars(review.rating);
-    const replies = review.replies || [];
-    const totalReplies = replies.length;
-    const replyCountText =
-      totalReplies > 0
-        ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
-        : "Reply";
-    const showReplies = expandedReplyGroups.has(`${review.id}:root`);
+    applyReviewReactionUpdate(reviewId, data.review);
+    await loadReviews(currentCourseId);
+  } catch (error) {
+    alert("Unable to update reaction.");
+  }
+}
 
-    // === 判斷這則評論是不是「我」發的 ===
-    const isMyReview = currentUser && review.author === getDisplayName(currentUser);
-    const myActionsHtml = isMyReview ? `
-      <div class="my-review-actions">
-        <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
-        <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
-      </div>
-    ` : "";
+function applyReviewReactionUpdate(reviewId, updatedReview) {
+  if (!updatedReview || !currentCourseId) return;
+  const reviews = getReviewsForCourse(currentCourseId);
+  const reviewIdNumber = Number(reviewId);
 
-    reviewItem.innerHTML = `
+  for (const review of reviews) {
+    if (Number(review.id) === reviewIdNumber) {
+      Object.assign(review, updatedReview);
+      return;
+    }
+    const reply = (review.replies || []).find((item) => Number(item.id) === reviewIdNumber);
+    if (reply) {
+      Object.assign(reply, updatedReview);
+      return;
+    }
+  }
+}
+
+// Load reviews
+async function loadReviews(courseId) {
+  const reviewsList = document.getElementById("reviewsList");
+  if (!reviewsList) return;
+
+  try {
+    const response = await fetch(`/api/courses/${courseId}/reviews`, {
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      throw new Error(`Review API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const reviews = data.reviews || [];
+    courseReviews[courseId] = reviews;
+
+    const course = allCourses.find((entry) => entry.id === courseId);
+    if (course) {
+      course.rating = data.averageRating ?? course.rating;
+      course.reviewCount = data.reviewCount ?? course.reviewCount;
+    }
+
+    reviewsList.innerHTML = "";
+    updateStudentReviewStats(reviews);
+    updateDetailSocialStats(courseId);
+
+    if (data.averageRating !== undefined) {
+      document.getElementById("detailRatingValue").textContent = Number(data.averageRating).toFixed(1);
+      document.getElementById("detailStars").innerHTML = generateStars(data.averageRating);
+      document.getElementById("detailReviewCount").textContent = `Based on ${data.reviewCount} review${data.reviewCount !== 1 ? "s" : ""}`;
+    }
+
+    renderRatingBreakdown(reviews);
+
+    if (reviews.length === 0) {
+      reviewsList.innerHTML =
+        '<p class="empty-reviews">No reviews yet. Be the first to write one.</p>';
+      return;
+    }
+
+    reviews.forEach((review) => {
+      const reviewItem = document.createElement("div");
+      reviewItem.className = "review-item";
+
+      const starsHtml = generateStars(review.rating);
+      const replies = review.replies || [];
+      const totalReplies = replies.length;
+      const replyCountText =
+        totalReplies > 0
+          ? `${totalReplies} ${totalReplies === 1 ? "reply" : "replies"}`
+          : "Reply";
+      const showReplies = expandedReplyGroups.has(`${review.id}:root`);
+
+      const isMyReview = currentUser && review.author === getDisplayName(currentUser);
+      const myActionsHtml = isMyReview ? `
+        <div class="my-review-actions">
+          <button type="button" class="icon-btn-small" onclick="editReview('${review.id}')" title="edit"><img src="../static/icons/edit.png" width="20" height="20"></button>
+          <button type="button" class="icon-btn-small" onclick="deleteReview('${review.id}')" title="delete"><img src="../static/icons/delete.png" width="20" height="20"></button>
+        </div>
+      ` : "";
+
+      reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
                   <span class="review-avatar ${getGenderClass(review.avatar?.gender)}">${avatarIcon(review.avatar || getDefaultProfile(review.author))}</span>
                   <span class="review-author">${escapeHtml(review.author)}</span>
                   <span class="review-dot"></span>
                   <span class="review-date">${escapeHtml(review.date)}</span>
+                  ${review.sectionLabel ? `<span class="review-dot"></span><span class="review-section-label">Section: ${escapeHtml(review.sectionLabel)}</span>` : ""}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
@@ -2167,8 +2515,7 @@ function loadReviews(courseId) {
             </div>
             
             <div class="review-actions">
-              ${renderReactionControl(review, review.id)}
-
+              ${renderReactionButtons(review)}
               <button class="review-action-btn reply-open-btn" onclick="toggleReplyForm('${review.id}')" aria-label="Write a reply" title="Write a reply">
                 ${commentIcon()}
               </button>
@@ -2196,8 +2543,13 @@ function loadReviews(courseId) {
             ${showReplies ? `<div class="review-replies">${renderReplies(replies, review.id)}</div>` : ""}
         `;
 
-    reviewsList.appendChild(reviewItem);
-  });
+      reviewsList.appendChild(reviewItem);
+    });
+  } catch (error) {
+    console.warn("Unable to load reviews.", error);
+    reviewsList.innerHTML =
+      '<p class="empty-reviews">Unable to load reviews right now.</p>';
+  }
 }
 
 function updateStudentReviewStats(reviews = []) {
@@ -2265,7 +2617,7 @@ function renderReplies(replies = [], reviewId) {
               </div>
 
               <div class="reply-actions">
-                ${renderReactionControl(reply, reviewId, reply.id)}
+                ${renderReactionButtons(reply)}
               </div>
             </div>
           </div>
@@ -2290,98 +2642,10 @@ function findReviewById(reviewId) {
   return reviews.find((review) => review.id === reviewId);
 }
 
-function toggleReviewLike(reviewId) {
-  if (!currentUser) {
-    alert("Please login to like reviews.");
-    openLoginModal();
-    return;
-  }
-
-  const review = findReviewById(reviewId);
-  if (!review) return;
-
-  review.liked = !review.liked;
-  review.likes += review.liked ? 1 : -1;
-  loadReviews(currentCourseId);
-}
-
 function findReplyById(reviewId, replyId) {
   const review = findReviewById(reviewId);
   if (!review || !review.replies) return null;
   return review.replies.find((reply) => reply.id === replyId) || null;
-}
-
-function findReactionTarget(reviewId, replyId = null) {
-  return replyId ? findReplyById(reviewId, replyId) : findReviewById(reviewId);
-}
-
-function applyReaction(reviewId, reaction = "❤️", replyId = null) {
-  if (!currentUser) {
-    alert("Please login to react.");
-    openLoginModal();
-    return;
-  }
-
-  const target = findReactionTarget(reviewId, replyId);
-  if (!target) return;
-
-  if (!target.liked) {
-    target.likes = (target.likes ?? 0) + 1;
-  }
-
-  target.liked = true;
-  target.reaction = reaction;
-  loadReviews(currentCourseId);
-}
-
-function handleQuickLike(event, reviewId, replyId = null) {
-  event.stopPropagation();
-
-  const target = findReactionTarget(reviewId, replyId);
-  if (target?.liked && (target.reaction || "❤️") === "❤️") {
-    if (!currentUser) {
-      alert("Please login to react.");
-      openLoginModal();
-      return;
-    }
-
-    target.liked = false;
-    target.reaction = "";
-    target.likes = Math.max(0, (target.likes ?? 0) - 1);
-    loadReviews(currentCourseId);
-    return;
-  }
-
-  applyReaction(reviewId, "❤️", replyId);
-}
-
-function selectReviewEmoji(
-  event,
-  reviewId,
-  replyIdOrReaction,
-  maybeReaction = null,
-) {
-  event.stopPropagation();
-
-  const hasReplyId = maybeReaction !== null;
-  const replyId = hasReplyId ? replyIdOrReaction : null;
-  const reaction = hasReplyId ? maybeReaction : replyIdOrReaction;
-  applyReaction(reviewId, reaction, replyId);
-}
-
-function toggleReplyLike(reviewId, replyId) {
-  if (!currentUser) {
-    alert("Please login to like replies.");
-    openLoginModal();
-    return;
-  }
-
-  const reply = findReplyById(reviewId, replyId);
-  if (!reply) return;
-
-  reply.liked = !reply.liked;
-  reply.likes += reply.liked ? 1 : -1;
-  loadReviews(currentCourseId);
 }
 
 function toggleReplyForm(reviewId) {
@@ -2411,42 +2675,45 @@ function handleReplyKeydown(event, reviewId) {
   submitReply(reviewId);
 }
 
-function submitReply(reviewId) {
+async function submitReply(reviewId) {
   if (!currentUser) {
     alert("Please login to reply.");
     openLoginModal();
     return;
   }
 
-  const review = findReviewById(reviewId);
   const inputId = `replyInput-${reviewId}`;
   const input = document.getElementById(inputId);
-  if (!review || !input) return;
+  if (!input) return;
 
   const text = input.value.trim();
   if (!text) return;
 
-  if (!review.replies) {
-    review.replies = [];
+  try {
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        comment: text,
+        parentId: Number(reviewId),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Failed to submit reply.");
+      return;
+    }
+
+    input.value = "";
+    expandedReplyGroups.add(`${reviewId}:root`);
+    await loadReviews(currentCourseId);
+  } catch (error) {
+    alert("Unable to submit reply.");
   }
-
-  review.replies.push({
-    id: `reply-${Date.now()}`,
-    author: getDisplayName(currentUser),
-    avatar: {
-      avatarAnimal: currentUser.avatarAnimal,
-      gender: currentUser.gender,
-    },
-    date: new Date().toISOString().slice(0, 10),
-    text: text,
-    likes: 0,
-    liked: false,
-    reaction: "",
-    replies: [],
-  });
-
-  expandedReplyGroups.add(`${reviewId}:root`);
-  loadReviews(currentCourseId);
 }
 
 const DEFAULT_REACTION = "❤️";
@@ -2713,6 +2980,7 @@ async function submitReview(event) {
 
   if (!currentUser) {
     alert("Please login to submit a review.");
+    openLoginModal();
     return;
   }
 
@@ -2721,38 +2989,57 @@ async function submitReview(event) {
     return;
   }
 
-  const reviewText = document.getElementById("reviewText").value;
-  const course = allCourses.find((c) => c.id === currentCourseId);
+// 1. 💡 採用後端的防呆機制，避免使用者送出空白評論
+  const reviewText = document.getElementById("reviewText").value.trim();
+  if (!reviewText) {
+    alert("Please write a review.");
+    return;
+  }
 
   try {
-    const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
+    // 2. 💡 必須配合後端新規格：改成複數 /reviews，且內文欄位名稱改為 comment
+    const response = await fetch(`/api/courses/${currentCourseId}/reviews`, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
       body: JSON.stringify({
         rating: selectedRating,
-        text: reviewText,
-        language: "English",
+        comment: reviewText, 
       }),
     });
 
-    if (!courseReviews[currentCourseId]) {
-      courseReviews[currentCourseId] = [];
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Failed to submit review.");
+      return;
     }
-    courseReviews[currentCourseId].unshift(result.review);
 
-    if (course && result.course) {
-      Object.assign(course, result.course);
+    // 3. 同步更新前端的評論資料與平均分數
+    courseReviews[currentCourseId] = data.reviews || [];
+    const course = allCourses.find((entry) => entry.id === currentCourseId);
+    if (course) {
+      course.rating = data.averageRating;
+      course.reviewCount = data.reviewCount;
     }
 
     alert("Review submitted successfully!");
     closeReviewModal();
 
-    if (currentCourseId) {
+    // 4. 💡 採用後端的無閃爍局部刷新，若函式不存在則執行你原本的重開視窗防呆
+    if (typeof loadReviews === "function") {
+      await loadReviews(currentCourseId);
+      if (typeof updateDetailSocialStats === "function") updateDetailSocialStats(currentCourseId);
+      if (typeof renderRatingBreakdown === "function") renderRatingBreakdown(courseReviews[currentCourseId] || []);
+    } else if (typeof openCourseDetail === "function" && currentCourseId) {
       openCourseDetail(currentCourseId);
     }
   } catch (error) {
-    alert(error.message);
+    alert("Unable to submit review.");
   }
 }
+
 
 // Close modals when clicking outside
 window.onclick = function (event) {
@@ -2814,60 +3101,6 @@ window.showAuthFields = function() {
   if (auth) auth.style.display = "block";
 };
 
-// 控制 Filter 面板的開關
-window.toggleFilterPanel = function() {
-  const panel = document.getElementById('filterPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-};
-
-// 綁定「標籤」的點擊事件
-document.addEventListener("DOMContentLoaded", function() {
-  const filterOptions = document.querySelectorAll('.filter-options');
-  
-  filterOptions.forEach(group => {
-    const pills = group.querySelectorAll('.filter-pill');
-    pills.forEach(pill => {
-      pill.addEventListener('click', (e) => {
-        // 把同一個 row 裡面的標籤全部取消 active
-        pills.forEach(p => p.classList.remove('active'));
-        // 幫剛點擊的標籤加上 active
-        e.target.classList.add('active');
-        // 觸發重新篩選
-        filterCourses();
-      });
-    });
-  });
-});
-
-// === 強效修正：確保頭像點擊絕對能開關選單 ===
-document.addEventListener("DOMContentLoaded", function() {
-  const userAvatar = document.getElementById("userAvatar");
-  
-  if (userAvatar) {
-    // 移除舊的監聽，重新綁定一個最直接、不會壞的點擊事件
-    userAvatar.onclick = function(e) {
-      e.stopPropagation(); // 阻止事件擴散
-      
-      // 如果還沒登入，就打開歡迎/登入視窗
-      if (!currentUser) {
-        if (typeof window.openLoginModal === "function") {
-          window.openLoginModal();
-        }
-        return;
-      }
-      
-      // 如果已經登入，就精準開關我們的 Google 風格卡片
-      const menuCard = document.getElementById("avatarMenuCard");
-      if (menuCard) {
-        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
-        menuCard.style.display = isHidden ? "block" : "none";
-      } else {
-        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
-      }
-    };
-  }
-});
-
 // === 控制 Filter 面板的開關與一鍵重置 ===
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
@@ -2908,10 +3141,11 @@ window.toggleFilterPanel = function() {
 
 // === 專屬的標籤重置小幫手 ===
 window.resetAllFilters = function() {
+
   renderDepartmentFilter("");
   renderDepartmentSubFilter("");
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
-  
+
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
@@ -2936,26 +3170,48 @@ window.resetAllFilters = function() {
 };
 
 
+async function submitReviewAction(reviewId, method, payload) {
+  if (!currentCourseId) return null;
+
+  const response = await fetch(`/api/courses/${currentCourseId}/reviews/${reviewId}`, {
+    method,
+    headers: method === "DELETE" ? undefined : {
+      "Content-Type": "application/json",
+    },
+    credentials: "same-origin",
+    body: method === "DELETE" ? undefined : JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    alert(data.error || "Action failed.");
+    return null;
+  }
+
+  return data;
+}
+
 // === 刪除評論邏輯 ===
 window.deleteReview = async function(reviewId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-  try {
-    const result = await apiRequest(`/api/reviews/${reviewId}`, {
-      method: "DELETE",
-    });
+// 1. 💡 採用後端封裝好的核心功能，確保安全帶上憑證發送 DELETE 請求
+  const data = await submitReviewAction(reviewId, "DELETE");
+  if (!data) return;
 
-    const reviews = courseReviews[currentCourseId];
-    if (reviews) {
-      const index = reviews.findIndex((review) => String(review.id) === String(reviewId));
-      if (index !== -1) reviews.splice(index, 1);
-    }
-    if (result.course) replaceCourseInState(result.course);
+  // 2. 💡 重新載入該課程的最新評論列表
+  if (typeof loadReviews === "function") {
+    await loadReviews(currentCourseId);
+  }
 
-    loadReviews(currentCourseId);
+  // 3. 💡 保留你的前端資料連動：如果後端有回傳最新的課程評分狀態，就同步更新它
+  if (data && data.course && typeof replaceCourseInState === "function") {
+    replaceCourseInState(data.course);
+  }
+  
+  // 4. 💡 重新刷新你設計的精美評分摘要面板
+  if (typeof refreshDetailRatingSummary === "function") {
     refreshDetailRatingSummary(currentCourseId);
-  } catch (error) {
-    alert(error.message);
   }
 };
 
@@ -2980,37 +3236,39 @@ window.saveEdit = async function(reviewId) {
     return;
   }
 
-  try {
-    const result = await apiRequest(`/api/reviews/${reviewId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ text: newText }),
-    });
+// 1. 💡 採用後端封裝好的核心功能，安全發送 PATCH 請求更新修改文字
+  const data = await submitReviewAction(reviewId, "PATCH", { text: newText });
+  if (!data) return;
 
-    if (result.review) replaceReviewInState(result.review);
-    if (result.course) replaceCourseInState(result.course);
+  // 2. 💡 重新載入最新評論列表，確保畫面文字是最新的
+  if (typeof loadReviews === "function") {
+    await loadReviews(currentCourseId);
+  }
 
-    loadReviews(currentCourseId);
+  // 3. 💡 保留你的前端狀態連動：如果後端有回傳更新後的評論與課程狀態，同步塞回變數中
+  if (data) {
+    if (data.review && typeof replaceReviewInState === "function") {
+      replaceReviewInState(data.review);
+    }
+    if (data.course && typeof replaceCourseInState === "function") {
+      replaceCourseInState(data.course);
+    }
+  }
+
+  // 4. 💡 重新刷新你設計的精美評分摘要面板
+  if (typeof refreshDetailRatingSummary === "function") {
     refreshDetailRatingSummary(currentCourseId);
-  } catch (error) {
-    alert(error.message);
   }
 };
 
 // === 刪除子回覆邏輯 ===
-window.deleteReply = function(reviewId, replyId) {
+window.deleteReply = async function(reviewId, replyId) {
   if (!confirm("Are you sure you want to delete this review? This action cannot be undone.")) return;
 
-  const review = findReviewById(reviewId);
-  if (!review || !review.replies) return;
+  const data = await submitReviewAction(replyId, "DELETE");
+  if (!data) return;
 
-  // 找出該則回覆在陣列中的位置並刪除
-  const index = review.replies.findIndex(r => r.id === replyId);
-  if (index !== -1) {
-    review.replies.splice(index, 1);
-    
-    // 重新渲染畫面
-    loadReviews(currentCourseId);
-  }
+  await loadReviews(currentCourseId);
 };
 
 // === 開啟子回覆編輯模式 ===
@@ -3026,7 +3284,7 @@ window.cancelEditReply = function(replyId) {
 };
 
 // === 儲存子回覆修改的內容 ===
-window.saveEditReply = function(reviewId, replyId) {
+window.saveEditReply = async function(reviewId, replyId) {
   const newText = document.getElementById(`edit-input-${replyId}`).value.trim();
   
   if (!newText) {
@@ -3034,12 +3292,10 @@ window.saveEditReply = function(reviewId, replyId) {
     return;
   }
 
-  const reply = findReplyById(reviewId, replyId);
-  if (reply) {
-    reply.text = newText;
-    // 更新完畢後，重新渲染
-    loadReviews(currentCourseId);
-  }
+  const data = await submitReviewAction(replyId, "PATCH", { text: newText });
+  if (!data) return;
+
+  await loadReviews(currentCourseId);
 };
 
 // === 自動生成熱門搜尋標籤 ===
@@ -3088,6 +3344,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // 等假資料都載入後，呼叫生成函數
   setTimeout(generateDynamicTrending, 100); 
 });
+
 
 function updateBackToTopButton() {
   const button = document.getElementById("backToTopBtn");

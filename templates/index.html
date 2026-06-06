@@ -35,13 +35,7 @@
               
               <div class="search-dropdown-card" id="searchDropdownCard" style="display: none;">
                 <div class="search-dropdown-header">Hot Search 🔥</div>
-                <div class="trending-tags">
-                  <button type="button" class="trending-tag-btn">Calculus</button>
-                  <button type="button" class="trending-tag-btn">Computer Science</button>
-                  <button type="button" class="trending-tag-btn">Dr. Lin</button>
-                  <button type="button" class="trending-tag-btn">Writing</button>
-                  <button type="button" class="trending-tag-btn">Physics</button>
-                </div>
+                <div class="trending-tags"></div>
               </div>
             </div>
 
@@ -58,8 +52,23 @@
                   <button type="button" class="mark-read-btn" onclick="markAllAsRead()">Mark all as read</button>
                 </div>
                 
-                <div class="notification-list" id="notificationList"></div>
-                <div class="notification-empty" id="notificationEmpty" style="display: flex !important; justify-content: center !important;">No notifications yet.</div>
+                <div class="notification-list">
+                  <div class="notification-item unread">
+                    <div class="noti-icon">📚</div>
+                    <div class="noti-content">
+                      <p>There is 1 new review on your saved course.</p>
+                      <span class="noti-time">10 minutes ago</span>
+                    </div>
+                  </div>
+                  
+                  <div class="notification-item unread">
+                    <div class="noti-icon">💬</div>
+                    <div class="noti-content">
+                      <p>Someone replied to your review.</p>
+                      <span class="noti-time">2 hours ago</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -300,9 +309,6 @@
         <div class="filter-row" id="semesterFilterRow">
           <span class="filter-label">Semester │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
-          <button type="button" class="filter-tag-btn" data-value="1">S1</button>
-          <button type="button" class="filter-tag-btn" data-value="2">S2</button>
-          <button type="button" class="filter-tag-btn" data-value="3">Summer Vacation</button>
         </div>
 
         <div class="filter-row" id="ratingFilterRow">
