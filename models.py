@@ -19,26 +19,16 @@ class User(UserMixin, db.Model):
     role = db.Column(db.Text, nullable=False, default="student")
     dept_id = db.Column("deptId", db.Integer, db.ForeignKey("Department.deptId"))
 
+    # 你剛剛加的新欄位
+    avatar_animal = db.Column("avatarAnimal", db.Text, default="question")
+    gender = db.Column("gender", db.Text, default="undisclosed")
+
+    # 👇 拜託把這三行加回來！這是系統辨識使用者身份的關鍵橋樑
     @property
     def id(self):
         return self.user_id
 
-    @property
-    def avatar_animal(self):
-        return "question"
-
-    @avatar_animal.setter
-    def avatar_animal(self, value):
-        pass
-
-    @property
-    def gender(self):
-        return "undisclosed"
-
-    @gender.setter
-    def gender(self, value):
-        pass
-
+    # 下面的關聯保持原樣
     reviews = db.relationship("Review", back_populates="author")
     review_reactions = db.relationship("ReviewReaction", back_populates="user")
     favorites = db.relationship("Favorite", back_populates="user", cascade="all, delete-orphan")

@@ -249,11 +249,15 @@ def create_app():
             db.session.execute(
                 text("ALTER TABLE \"User\" ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
             )
-
-        review_columns = get_table_columns("Review")
-        if "is_visible" not in review_columns:
+            
+        # 👇 新增這兩段：如果資料庫沒有這兩個欄位，就自動幫它加進去
+        if "avatarAnimal" not in user_columns:
             db.session.execute(
-                text("ALTER TABLE \"Review\" ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+                text("ALTER TABLE \"User\" ADD COLUMN avatarAnimal TEXT DEFAULT 'question'")
+            )
+        if "gender" not in user_columns:
+            db.session.execute(
+                text("ALTER TABLE \"User\" ADD COLUMN gender TEXT DEFAULT 'undisclosed'")
             )
 
         db.session.commit()
