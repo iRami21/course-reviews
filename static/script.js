@@ -679,30 +679,7 @@ function buildNotificationItem(item) {
     `;
 }
 
-// script.js around line 733: Improved renderActivityList with innerHTML empty state
-function renderActivityList() {
-    const list = document.getElementById("activityList");
-    // const empty = document.getElementById("activityEmpty"); // REMOVE external div dependency
-
-    if (!list) return;
-
-    // 只篩選出 category 為 "activity" 的動態
-    const items = (notificationState.items || []).filter((item) => item.category === "activity");
-
-    // 💡 關鍵優化：採用與首頁一致的「內部空狀態卡片」邏輯
-    if (items.length === 0) {
-        list.innerHTML = `
-            <div class="empty-state-card">
-                <span class="empty-icon">🗓️</span>
-                <h3>No Activity Recorded Yet</h3>
-                <p>Start browsing courses or write reviews to populate your Banana activity log.</p>
-            </div>
-        `;
-        return;
-    }
-
-    list.innerHTML = items.map(buildNotificationItem).join("");
-}
+// renderActivityList — legacy shim; real logic in showActivity / loadActivityData
 
 function updateNotificationBadge() {
   const badge = document.getElementById("notiBadge");
@@ -1715,6 +1692,15 @@ function showFavorites() {
     });
 }
 
+// ── Activity State ───────────────────────────────────────────────────────────
+let activityState = {
+  activeTab: "personal",
+  personalActions: [],
+  interactions: [],
+  unreadInteractionCount: 0,
+  loaded: false,
+};
+
 function showActivity() {
   if (!currentUser) {
     alert("Please login to view activity.");
@@ -1723,8 +1709,10 @@ function showActivity() {
   }
 
   document.getElementById("pageHeading").style.display = "none";
-  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
-  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+  const quickSort = document.getElementById("quickSortMenu");
+  if (quickSort) quickSort.style.display = "none";
+  const filterPanel = document.getElementById("filterPanel");
+  if (filterPanel) filterPanel.style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "none";
   const pagination = document.getElementById("coursesPagination");
@@ -1733,18 +1721,191 @@ function showActivity() {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "block";
 
-  refreshNotifications();
-  renderActivityList();
+  switchActivityTab("personal");
+  loadActivityData();
 }
 
-function renderActivityList() {
-  const list = document.getElementById("activityList");
-  const empty = document.getElementById("activityEmpty");
-  if (!list || !empty) return;
+function switchActivityTab(tab) {
+  activityState.activeTab = tab;
+  document.getElementById("activityTabPersonal").classList.toggle("active", tab === "personal");
+  document.getElementById("activityTabInteractions").classList.toggle("active", tab === "interactions");
+  document.getElementById("activityPanelPersonal").style.display = tab === "personal" ? "block" : "none";
+  document.getElementById("activityPanelInteractions").style.display = tab === "interactions" ? "block" : "none";
+  if (tab === "interactions" && activityState.unreadInteractionCount > 0) {
+    markInteractionsRead();
+  }
+}
 
-  const items = (notificationState.items || []).filter((item) => item.category === "activity");
-  list.innerHTML = items.length ? items.map(buildNotificationItem).join("") : "";
-  empty.style.display = items.length ? "none" : "flex";
+async function loadActivityData() {
+  const personalList = document.getElementById("activityListPersonal");
+  const interactionsList = document.getElementById("activityListInteractions");
+  const loadingHtml = `<div class="activity-loading"><div class="activity-loading-spinner"></div><span>Loading…</span></div>`;
+  if (personalList) personalList.innerHTML = loadingHtml;
+  if (interactionsList) interactionsList.innerHTML = loadingHtml;
+
+  try {
+    const res = await fetch("/api/user/activity");
+    if (!res.ok) throw new Error("Failed to load activity.");
+    const data = await res.json();
+    activityState.personalActions = data.personalActions || [];
+    activityState.interactions = data.interactions || [];
+    activityState.unreadInteractionCount = data.unreadInteractionCount || 0;
+    activityState.loaded = true;
+    renderPersonalActions();
+    renderInteractions();
+    updateActivityInteractionBadge();
+  } catch (err) {
+    const errHtml = `<div class="empty-state-card"><span class="empty-icon">⚠️</span><h3>Could not load activity</h3><p>${err.message}</p></div>`;
+    if (personalList) personalList.innerHTML = errHtml;
+    if (interactionsList) interactionsList.innerHTML = errHtml;
+  }
+}
+
+function renderPersonalActions() {
+  const list = document.getElementById("activityListPersonal");
+  if (!list) return;
+  const items = activityState.personalActions;
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state-card"><span class="empty-icon">🍌</span><h3>No activity yet</h3><p>Save a course, write a review, or react to a review to see your actions here.</p></div>`;
+    return;
+  }
+  list.innerHTML = items.map(buildPersonalActionCard).join("");
+}
+
+function renderInteractions() {
+  const list = document.getElementById("activityListInteractions");
+  if (!list) return;
+  const items = activityState.interactions;
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state-card"><span class="empty-icon">💬</span><h3>No interactions yet</h3><p>When someone replies to your review or reacts to your comment, it'll show up here.</p></div>`;
+    return;
+  }
+  list.innerHTML = items.map(buildInteractionCard).join("");
+}
+
+function buildPersonalActionCard(item) {
+  const typeLabel = {
+    favorite: '<span class="activity-type-badge badge-favorite">Saved</span>',
+    review:   '<span class="activity-type-badge badge-review">Review</span>',
+    reaction: '<span class="activity-type-badge badge-reaction">Reacted</span>',
+  }[item.type] || "";
+  const ratingHtml = item.type === "review" && item.rating
+    ? `<div class="activity-card-rating">${"★".repeat(item.rating)}${"☆".repeat(5 - item.rating)}</div>` : "";
+  const snippetHtml = item.reviewSnippet
+    ? `<p class="activity-card-snippet">"${escapeHtml(item.reviewSnippet)}"</p>` : "";
+  const courseLink = item.courseId ? `data-course-id="${item.courseId}"` : "";
+  return `
+    <div class="activity-card" ${courseLink} onclick="handleActivityCardClick(this)" role="button" tabindex="0">
+      <div class="activity-card-icon">${escapeHtml(item.icon)}</div>
+      <div class="activity-card-body">
+        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt)}</span></div>
+        <p class="activity-card-message">${item.message}</p>
+        ${ratingHtml}${snippetHtml}
+        <span class="activity-card-course-code">${escapeHtml(item.courseCode || "")}</span>
+      </div>
+      <div class="activity-card-arrow">›</div>
+    </div>`;
+}
+
+function buildInteractionCard(item) {
+  const unreadDot = !item.isRead ? `<span class="activity-unread-dot"></span>` : "";
+  const cardClass = `activity-card interaction-card${item.isRead ? "" : " unread"}`;
+  const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
+  return `
+    <div class="${cardClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}
+         onclick="handleInteractionCardClick(this)" role="button" tabindex="0">
+      <div class="activity-card-icon">🔔</div>
+      <div class="activity-card-body">
+        <p class="activity-card-message">${escapeHtml(item.message)}</p>
+        <span class="activity-card-time">${escapeHtml(item.createdAt)}</span>
+      </div>
+      ${unreadDot}
+    </div>`;
+}
+
+function handleActivityCardClick(el) {
+  const courseId = parseInt(el.dataset.courseId);
+  if (!courseId) return;
+  navigateToCourseFromActivity(courseId);
+}
+
+function handleInteractionCardClick(el) {
+  const link = el.dataset.link;
+  const id = el.dataset.id;
+  if (id) {
+    markSingleInteractionRead(id);
+    el.classList.remove("unread");
+    const dot = el.querySelector(".activity-unread-dot");
+    if (dot) dot.remove();
+  }
+  if (link && link.includes("/courses/")) {
+    const match = link.match(/\/courses\/(\d+)/);
+    if (match) navigateToCourseFromActivity(parseInt(match[1]));
+  }
+}
+
+async function navigateToCourseFromActivity(courseId) {
+  // 先隱藏 Activity 頁面
+  document.getElementById("activityPage").style.display = "none";
+
+  // 如果 allCourses 裡已經有這堂課，直接跳
+  const cached = allCourses.find((c) => String(c.id) === String(courseId));
+  if (cached) {
+    openCourseDetail(courseId);
+    return;
+  }
+
+  // 否則先去 API 拿課程資料，塞進 allCourses，再跳
+  try {
+    const res = await fetch(`/api/courses/${courseId}`);
+    if (!res.ok) throw new Error("Course not found.");
+    const data = await res.json();
+    const course = data.course || data;
+    if (course && course.id) {
+      // 避免重複推入
+      if (!allCourses.find((c) => String(c.id) === String(course.id))) {
+        allCourses.push(course);
+      }
+      openCourseDetail(course.id);
+    }
+  } catch (err) {
+    alert("無法載入課程資料：" + err.message);
+    // 跳回 Activity
+    document.getElementById("activityPage").style.display = "block";
+  }
+}
+
+function updateActivityInteractionBadge() {
+  const badge = document.getElementById("activityInteractionBadge");
+  if (!badge) return;
+  const count = activityState.unreadInteractionCount;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? "inline-flex" : "none";
+}
+
+async function markInteractionsRead() {
+  try {
+    const unreadIds = activityState.interactions.filter(i => !i.isRead).map(i => i.id);
+    if (!unreadIds.length) return;
+    await apiRequest("/api/notifications/mark_read", { method: "POST", body: JSON.stringify({ ids: unreadIds }) });
+    activityState.unreadInteractionCount = 0;
+    activityState.interactions = activityState.interactions.map(i => ({ ...i, isRead: true }));
+    updateActivityInteractionBadge();
+  } catch (_) { /* silent */ }
+}
+
+async function markSingleInteractionRead(id) {
+  try {
+    await apiRequest("/api/notifications/mark_read", { method: "POST", body: JSON.stringify({ ids: [id] }) });
+    activityState.interactions = activityState.interactions.map(i => i.id === id ? { ...i, isRead: true } : i);
+    activityState.unreadInteractionCount = activityState.interactions.filter(i => !i.isRead).length;
+    updateActivityInteractionBadge();
+  } catch (_) { /* silent */ }
+}
+
+// Legacy shim so any stale callers don't crash
+function renderActivityList() {
+  if (activityState.loaded) { renderPersonalActions(); renderInteractions(); }
 }
 
 function showBrowseCourses() {
@@ -1987,6 +2148,9 @@ function closeLoginModal() {
 window.continueAsGuest = function() {
   document.getElementById("navBlock").style.display = "block";
   document.getElementById("mainContentBlock").style.display = "block";
+  const schedBtn = document.getElementById("scheduleToggleBtn");
+  if (schedBtn) schedBtn.style.display = "";
+  updateBackToTopButton();
   closeLoginModal();
 };
 
@@ -2108,6 +2272,10 @@ async function logout() {
   updateAuthUI();
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
+  const schedBtn = document.getElementById("scheduleToggleBtn");
+  if (schedBtn) schedBtn.style.display = "none";
+  const topBtn = document.getElementById("backToTopBtn");
+  if (topBtn) topBtn.classList.remove("visible");
   openLoginModal(true);
   fetchCoursesPage(1).catch((e) => console.warn('Failed to refresh courses after logout', e));
 }
@@ -2125,11 +2293,18 @@ async function checkUserLogin() {
 
   if (currentUser) {
     closeLoginModal();
+    const schedBtn = document.getElementById("scheduleToggleBtn");
+    if (schedBtn) schedBtn.style.display = "";
+    updateBackToTopButton();
     // 💡 在這裡觸發通知載入，確保 currentUser 已經正確設定
     refreshNotifications(); 
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
+    const schedBtn = document.getElementById("scheduleToggleBtn");
+    if (schedBtn) schedBtn.style.display = "none";
+    const topBtn = document.getElementById("backToTopBtn");
+    if (topBtn) topBtn.classList.remove("visible");
     openLoginModal(true);
   }
 
@@ -3265,8 +3440,11 @@ document.addEventListener("DOMContentLoaded", function() {
 function updateBackToTopButton() {
   const button = document.getElementById("backToTopBtn");
   if (!button) return;
-
-  button.classList.add("visible");
+  if (!document.getElementById("navBlock") || document.getElementById("navBlock").style.display === "none") {
+    button.classList.remove("visible");
+    return;
+  }
+  button.classList.toggle("visible", window.scrollY > 200);
 }
 
 function scrollToPageTop() {
@@ -3664,6 +3842,7 @@ function injectScheduleSidebarHTML() {
   const toggleBtn = document.createElement("button");
   toggleBtn.id = "scheduleToggleBtn";
   toggleBtn.setAttribute("aria-label", "Toggle schedule sidebar");
+  toggleBtn.style.display = "none";
   toggleBtn.innerHTML = `
     📅
     <span class="schedule-toggle-label">Schedule</span>

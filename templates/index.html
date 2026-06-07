@@ -359,7 +359,6 @@
 
             <!-- index.html around line 185 -->
       <section id="activityPage" class="activity-page" style="display: none">
-          <!-- 1. 更新頁面標題結構，與其他頁面保持一致 -->
           <div class="activity-page-header page-heading">
               <div class="activity-title-group">
                   <p class="page-kicker">TRACK YOUR ACTIONS</p>
@@ -370,9 +369,25 @@
               </button>
           </div>
 
-          <div class="activity-list-wrapper">
-              <!-- 2. 活動列表容器，JS 將在此生成精美的卡片 -->
-              <div class="activity-list" id="activityList"></div>
+          <!-- Tab Switcher -->
+          <div class="activity-tabs-bar">
+              <button class="activity-tab-btn active" id="activityTabPersonal" type="button" onclick="switchActivityTab('personal')">
+                  <span class="activity-tab-icon">🍌</span> My Actions
+              </button>
+              <button class="activity-tab-btn" id="activityTabInteractions" type="button" onclick="switchActivityTab('interactions')">
+                  <span class="activity-tab-icon">💬</span> Interactions
+                  <span class="activity-tab-badge" id="activityInteractionBadge" style="display:none;"></span>
+              </button>
+          </div>
+
+          <!-- Personal Actions Panel -->
+          <div class="activity-panel" id="activityPanelPersonal">
+              <div class="activity-list" id="activityListPersonal"></div>
+          </div>
+
+          <!-- Interactions Panel -->
+          <div class="activity-panel" id="activityPanelInteractions" style="display:none;">
+              <div class="activity-list" id="activityListInteractions"></div>
           </div>
       </section>
 

@@ -1122,6 +1122,142 @@ def create_app():
             ]
         })
 
+    @app.route("/api/courses/<int:course_id>")
+    def api_get_course(course_id):
+        course = Course.query.options(
+            selectinload(Course.offers).selectinload(Offer.department),
+            selectinload(Course.sections)
+            .selectinload(Section.teaches)
+            .selectinload(Teach.instructor),
+        ).get_or_404(course_id)
+        fav_counts = {course_id: Favorite.query.filter_by(course_id=course_id).count()}
+        fav_ids = user_favorite_course_ids([course_id])
+        return jsonify({"course": serialize_course(course, favorite_counts=fav_counts, favorite_course_ids=fav_ids)})
+
+    @app.route("/api/user/activity")
+    @login_required
+    def api_user_activity():
+        """Return the current user's personal activity log.
+
+        personal_actions: things the user did themselves
+          - favorites: courses they saved (with timestamp)
+          - reviews: reviews/ratings they wrote
+          - reactions: emoji reactions they gave to others' reviews
+
+        interactions: notifications received from others (replies, reactions on your reviews)
+          - comes from Notification model with category="activity"
+        """
+        uid = current_user.id
+
+        # ── 1. Favorites ────────────────────────────────────────────────────────
+        favorites = (
+            Favorite.query
+            .filter_by(user_id=uid)
+            .order_by(Favorite.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        fav_course_ids = [f.course_id for f in favorites]
+        fav_courses = {}
+        if fav_course_ids:
+            for course in Course.query.filter(Course.course_id.in_(fav_course_ids)).all():
+                fav_courses[course.course_id] = course
+
+        personal_actions = []
+        for fav in favorites:
+            course = fav_courses.get(fav.course_id)
+            if not course:
+                continue
+            personal_actions.append({
+                "type": "favorite",
+                "icon": "⭐",
+                "message": f"You saved <strong>{course.name}</strong>",
+                "courseId": course.course_id,
+                "courseName": course.name,
+                "courseCode": course.code,
+                "link": f"/courses/{course.course_id}",
+                "createdAt": fav.created_at.strftime("%Y-%m-%d %H:%M") if fav.created_at else "",
+            })
+
+        # ── 2. Reviews the user wrote ────────────────────────────────────────────
+        reviews = (
+            Review.query
+            .options(selectinload(Review.section).selectinload(Section.course))
+            .filter(Review.user_id == uid, Review.parent_id.is_(None))
+            .order_by(Review.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        for review in reviews:
+            course = review.course
+            if not course:
+                continue
+            personal_actions.append({
+                "type": "review",
+                "icon": "✍️",
+                "message": f"You reviewed <strong>{course.name}</strong>",
+                "courseId": course.course_id,
+                "courseName": course.name,
+                "courseCode": course.code,
+                "rating": review.rating,
+                "ratingStars": "★" * (review.rating or 0) + "☆" * (5 - (review.rating or 0)),
+                "reviewSnippet": (review.text or "")[:80] + ("…" if len(review.text or "") > 80 else ""),
+                "link": f"/courses/{course.course_id}",
+                "createdAt": review.created_at.strftime("%Y-%m-%d %H:%M") if review.created_at else "",
+            })
+
+        # ── 3. Reactions the user gave ───────────────────────────────────────────
+        reactions = (
+            ReviewReaction.query
+            .options(
+                selectinload(ReviewReaction.review)
+                .selectinload(Review.section)
+                .selectinload(Section.course)
+            )
+            .filter(ReviewReaction.user_id == uid)
+            .order_by(ReviewReaction.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        for rxn in reactions:
+            review = rxn.review
+            if not review or not review.course:
+                continue
+            course = review.course
+            personal_actions.append({
+                "type": "reaction",
+                "icon": rxn.emoji,
+                "message": f"You reacted {rxn.emoji} to a review on <strong>{course.name}</strong>",
+                "courseId": course.course_id,
+                "courseName": course.name,
+                "courseCode": course.code,
+                "emoji": rxn.emoji,
+                "link": f"/courses/{course.course_id}",
+                "createdAt": rxn.created_at.strftime("%Y-%m-%d %H:%M") if rxn.created_at else "",
+            })
+
+        # Sort all personal actions by date desc
+        personal_actions.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+
+        # ── 4. Interactions: notifications received ──────────────────────────────
+        notifications = (
+            Notification.query
+            .filter_by(user_id=uid, category="activity")
+            .order_by(Notification.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        interactions = [serialize_notification(n) for n in notifications]
+        unread_interaction_count = Notification.query.filter_by(
+            user_id=uid, category="activity", is_read=False
+        ).count()
+
+        return jsonify({
+            "personalActions": personal_actions,
+            "interactions": interactions,
+            "unreadInteractionCount": unread_interaction_count,
+        })
+
     @app.route("/api/filter-options")
     def api_filter_options():
         years = [
