@@ -9,7 +9,7 @@ let selectedRating = 0;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
-const COURSES_PER_PAGE = 100;
+const COURSES_PER_PAGE = 60;
 let coursePagination = {
   page: 1,
   perPage: COURSES_PER_PAGE,
@@ -1299,9 +1299,16 @@ function setupEventListeners() {
   const searchDropdown = document.getElementById("searchDropdownCard");
 
   if (searchBox && searchDropdown) {
-    // 1. 當點擊(聚焦)搜尋框時，展開熱門搜尋面板
-    searchBox.addEventListener("focus", function() {
+    // Hover only expands the field; click or keyboard focus opens recommendations.
+    searchBox.addEventListener("click", function(e) {
+      e.stopPropagation();
       searchDropdown.style.display = "block";
+    });
+
+    searchBox.addEventListener("focus", function(e) {
+      if (e.target.matches(":focus-visible")) {
+        searchDropdown.style.display = "block";
+      }
     });
 
     // 2. 點擊網頁其他地方時，自動收起面板
@@ -1539,22 +1546,21 @@ function renderCoursePagination() {
       type="button"
       class="pagination-btn pagination-step"
       onclick="goToCoursePage(${Math.max(1, currentPage - 1)})"
+      aria-label="Previous page"
       ${currentPage === 1 ? "disabled" : ""}
     >
-      Prev
+      ‹
     </button>
     ${pageButtons}
     <button
       type="button"
       class="pagination-btn pagination-step"
       onclick="goToCoursePage(${Math.min(totalPages, currentPage + 1)})"
+      aria-label="Next page"
       ${currentPage === totalPages ? "disabled" : ""}
     >
-      Next
+      ›
     </button>
-    <span class="pagination-summary">
-      Page ${currentPage} of ${totalPages}
-    </span>
   `;
 }
 
@@ -2631,9 +2637,8 @@ function openCourseReviewForm(courseId) {
 }
 
 function handleNavLogoClick() {
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-  }
+  showHomePage();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function closeCourseDetail() {

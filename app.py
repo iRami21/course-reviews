@@ -209,7 +209,7 @@ def create_app():
 
     @app.route("/")
     def index():
-        payload = get_courses_payload(page=1, per_page=100)
+        payload = get_courses_payload(page=1, per_page=60)
         return render_template(
             "index.html",
             courses_json=payload["courses"],
@@ -645,7 +645,7 @@ def create_app():
 
     def get_courses_payload(page=None, per_page=None):
         page = max(1, int(page or request.args.get("page", 1)))
-        per_page = min(100, max(1, int(per_page or request.args.get("per_page", 100))))
+        per_page = min(60, max(1, int(per_page or request.args.get("per_page", 60))))
         query_text = str(request.args.get("q", "")).strip()
         year = str(request.args.get("year", "")).strip()
         department_category = str(request.args.get("department_category", "")).strip()

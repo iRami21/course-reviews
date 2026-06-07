@@ -288,17 +288,17 @@ body {
 
 .login-page-overlay .welcome-shell,
 .login-page-overlay .welcome-white-box {
-  animation: slideInFromRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: welcomePanelIn 0.72s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideInFromRight {
+@keyframes welcomePanelIn {
   from {
     opacity: 0;
-    transform: translateX(100px);
+    transform: translateY(28px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -319,12 +319,32 @@ body {
 }
 
 .welcome-shell {
+  position: relative;
   display: grid;
   gap: 1.35rem;
   width: min(92vw, 560px);
   background: transparent !important;
   box-shadow: none !important;
   text-align: center;
+}
+
+.welcome-shell::before {
+  content: "";
+  position: absolute;
+  inset: -4.5rem -2.5rem;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 207, 118, 0.16), transparent 62%);
+  animation: welcomeGlow 5.5s ease-in-out infinite;
+}
+
+.welcome-header {
+  animation: welcomeRiseIn 0.78s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#databaseLogoHomepage {
+  animation: welcomeLogoFloat 4.8s ease-in-out infinite;
+  transform-origin: center;
 }
 
 #loginModal .welcome-header h1 {
@@ -336,6 +356,7 @@ body {
 .welcome-subtitle {
   color: #ffffbc;
   font-size: 1.5rem;
+  animation: welcomeRiseIn 0.78s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
   margin-bottom: 1rem;
   font-weight: 700;
 }
@@ -345,6 +366,7 @@ body {
   justify-content: center;
   flex-wrap: wrap;
   gap: 0.85rem;
+  animation: welcomeRiseIn 0.78s 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .welcome-primary-btn,
@@ -373,11 +395,24 @@ body {
 
 .welcome-secondary-btn {
   position: relative;
+  overflow: hidden;
   padding: 0.85rem 1.75rem;
   background: #ffcf76;
   color: #89272a;
   box-shadow: 0 14px 28px rgba(255, 207, 118, 0.34), 0 5px 0 rgba(137, 39, 42, 0.16);
   animation: welcomeLoginPulse 2.4s ease-in-out infinite;
+}
+
+.welcome-secondary-btn::after {
+  content: "";
+  position: absolute;
+  top: -45%;
+  left: -70%;
+  width: 45%;
+  height: 190%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: rotate(18deg);
+  animation: welcomeButtonShine 3.2s ease-in-out infinite;
 }
 
 .welcome-primary-btn:hover,
@@ -408,6 +443,60 @@ body {
   }
   50% {
     box-shadow: 0 18px 36px rgba(255, 207, 118, 0.52), 0 5px 0 rgba(137, 39, 42, 0.16);
+  }
+}
+
+@keyframes welcomeRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes welcomeLogoFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(-1.5deg);
+  }
+}
+
+@keyframes welcomeGlow {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes welcomeButtonShine {
+  0%, 45% {
+    left: -70%;
+  }
+  70%, 100% {
+    left: 130%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page-overlay .welcome-shell,
+  .login-page-overlay .welcome-white-box,
+  .welcome-shell::before,
+  .welcome-header,
+  #databaseLogoHomepage,
+  .welcome-subtitle,
+  .welcome-actions,
+  .welcome-secondary-btn,
+  .welcome-secondary-btn::after {
+    animation: none !important;
   }
 }
 
@@ -2257,30 +2346,47 @@ button {
 }
 
 .pagination-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(1.1rem, env(safe-area-inset-bottom));
+  z-index: 900;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  margin: 2rem 0 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  max-width: calc(100vw - 2rem);
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid rgba(79, 103, 177, 0.14);
+  border-radius: 999px;
+  background-color: rgba(255, 250, 240, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 38px rgba(79, 103, 177, 0.2);
+  transform: translateX(-50%);
+}
+
+.pagination-bar:empty {
+  display: none;
 }
 
 .pagination-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.6rem;
-  min-height: 2.6rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid rgba(79, 103, 177, 0.2);
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid rgba(79, 103, 177, 0.18);
   border-radius: 999px;
-  background-color: #fefaf0;
+  background-color: #fffaf0;
   color: #4f67b1;
   cursor: pointer;
   font-family: "Comic Relief", system-ui;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.1);
+  line-height: 1;
+  box-shadow: none;
   transition:
     background-color 0.2s ease,
     color 0.2s ease,
@@ -2290,35 +2396,26 @@ button {
 
 .pagination-btn:hover:not(:disabled),
 .pagination-btn.active {
-  background-color: #c74d30;
-  color: #fefaf0;
-  box-shadow: 0 10px 22px rgba(79, 103, 177, 0.22);
+  background-color: #4f67b1;
+  color: #fffaf0;
+  box-shadow: 0 8px 18px rgba(79, 103, 177, 0.22);
   transform: translateY(-1px);
 }
 
 .pagination-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: 0.42;
   box-shadow: none;
 }
 
 .pagination-step {
-  min-width: 4.5rem;
+  font-size: 1.4rem;
 }
 
-.pagination-ellipsis,
-.pagination-summary {
+.pagination-ellipsis {
   color: #6b7280;
   font-family: "Sniglet", system-ui;
   font-weight: 800;
-}
-
-.pagination-summary {
-  flex-basis: 100%;
-  margin-top: 0.25rem;
-  text-align: center;
-  font-family: "Comic Relief", system-ui !important;
-  font-weight: 800 !important;
 }
 
 .page-kicker {
@@ -3051,23 +3148,19 @@ button {
   color: transparent;
 }
 
-/* 滑鼠移過去時也有按鈕的效果 */
-.expandable-search:hover .search-box {
-  background-color: #edf2ff;
-}
-
-/* 3. 點擊輸入框 (Focus) 或裡面有文字時：向左伸長！ */
+/* Hover expands the control first; clicking or keyboard focus opens suggestions. */
+.expandable-search:hover .search-box,
 .expandable-search .search-box:focus,
 .expandable-search .search-box:not(:placeholder-shown) {
-  width: 260px; /* 展開後的寬度 */
+  width: 260px;
   background-color: #ffffff;
   border-color: #4f67b1;
-  color: #2b2f44; /* 顯示輸入的文字 */
+  color: #2b2f44;
   cursor: text;
   box-shadow: 0 4px 12px rgba(79, 103, 177, 0.15);
 }
 
-/* 展開時把 placeholder 文字顯示出來 */
+.expandable-search:hover .search-box::placeholder,
 .expandable-search .search-box:focus::placeholder {
   color: #999999;
 }
