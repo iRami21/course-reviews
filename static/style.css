@@ -4110,6 +4110,21 @@ button {
   overflow-y: auto;
 }
 
+/* Activity 頁面版面 */
+.favorites-page {
+  padding: 0;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
 .notification-item {
   display: flex;
   gap: 0.85rem;

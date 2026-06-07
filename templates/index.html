@@ -3,12 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Course Review Platform</title>
+    <title>Ba-navi</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single+Ink:wght@100..900&family=Cause:wght@100..900&family=Chewy&family=Comic+Relief:wght@400;700&family=Delicious+Handrawn&family=Grandstander:ital,wght@0,100..900;1,100..900&family=Jersey+10&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Rampart+One&family=Roboto:ital,wght@0,100..900;1,100..900&family=Sniglet:wght@400;800&family=Space+Mono&display=swap" rel="stylesheet">
+    <link rel="icon" href="../static/icons/databaselogo.png" sizes="32x32" type="image/png">
   </head>
+
   <body>
     <!-- Navigation Bar -->
     <nav class="navbar" id="navBlock" style="display: none;">
@@ -314,6 +316,13 @@
           <button type="button" class="filter-tag-btn" data-value="2">2+ Stars</button>
           <button type="button" class="filter-tag-btn" data-value="1">1+ Stars</button>
         </div>
+
+        <div class="filter-row" id="professorFilterRow">
+          <span class="filter-label">Professor │</span>
+          <select class="professor-filter-select" id="professorFilterSelect">
+            <option value="">All</option>
+          </select>
+        </div>
         
       </div>
 
@@ -351,18 +360,20 @@
         <div class="courses-container" id="favoritesContainer"></div>
       </section>
 
-      <section id="activityPage" class="favorites-page" style="display: none">
-        <div class="section-heading">
+      <section id="activityPage" class="activity-page" style="display: none">
+        <div class="activity-page-header">
           <div>
             <p class="page-kicker">Your Activity</p>
-            <h2>Activity</h2>
+            <h2 class="activity-page-title">Activity</h2>
           </div>
           <button class="btn-secondary" type="button" onclick="showBrowseCourses()">
             Back to Browse
           </button>
         </div>
-        <div class="activity-list" id="activityList"></div>
-        <div class="notification-empty" id="activityEmpty" style="display: flex !important; justify-content: center;">No activity yet.</div>
+        <div class="activity-list-wrapper">
+          <div class="activity-list" id="activityList"></div>
+          <div class="notification-empty" id="activityEmpty" style="display: flex !important; justify-content: center;">No activity yet.</div>
+        </div>
       </section>
 
       <!-- Course Detail Page -->

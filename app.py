@@ -782,6 +782,12 @@ def create_app():
         review_count = func.count(Review.review_id).filter(visible_review_cond)
         courses_query = (
             Course.query
+            .options(
+                selectinload(Course.offers).selectinload(Offer.department),
+                selectinload(Course.sections)
+                .selectinload(Section.teaches)
+                .selectinload(Teach.instructor),
+            )
             .outerjoin(Section, Section.course_id == Course.course_id)
             .outerjoin(Review, Review.section_id == Section.section_id)
             .group_by(Course.course_id)
@@ -803,9 +809,8 @@ def create_app():
                 for token in tokens:
                     lower = token.lower()
                     if lower.isdigit():
-                        search_filters.append(
-                            Course.sections.any(Section.roc_year == int(lower))
-                        )
+                        if len(lower) == 3:
+                            search_filters.append(Course.sections.any(Section.roc_year == int(lower)))
                         continue
                     if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
                         search_filters.append(Course.sections.any(Section.term == 1))
@@ -1045,6 +1050,44 @@ def create_app():
                 "saveCount": save_count,
             }
         )
+
+    @app.route("/api/user/favorites")
+    @login_required
+    def api_user_favorites():
+        """Return all favorited courses for the current user (no pagination)."""
+        favorite_course_ids = {
+            course_id
+            for (course_id,) in db.session.query(Favorite.course_id)
+            .filter(Favorite.user_id == current_user.id)
+            .all()
+        }
+        if not favorite_course_ids:
+            return jsonify({"courses": []})
+
+        courses_list = Course.query.filter(
+            Course.course_id.in_(favorite_course_ids)
+        ).all()
+
+        fav_counts = {
+            course_id: total
+            for course_id, total in (
+                db.session.query(Favorite.course_id, func.count(Favorite.id))
+                .filter(Favorite.course_id.in_(favorite_course_ids))
+                .group_by(Favorite.course_id)
+                .all()
+            )
+        }
+
+        return jsonify({
+            "courses": [
+                serialize_course(
+                    course,
+                    favorite_counts=fav_counts,
+                    favorite_course_ids=favorite_course_ids,
+                )
+                for course in courses_list
+            ]
+        })
 
     @app.route("/api/filter-options")
     def api_filter_options():
@@ -1882,7 +1925,7 @@ def create_app():
         if data["code"]:
             course.code = data["code"]
         if data["title"]:
-            course.title = data["title"]
+            course.name = data["title"]
         course.title_zh = data["title_zh"]
         course.professor = data["professor"]
         course.department = data["department"]

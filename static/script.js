@@ -2,6 +2,8 @@
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
+// favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
+let favoritesCache = [];
 let selectedRating = 0;
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
@@ -1337,6 +1339,7 @@ function renderCourseCards(container, courses, emptyText) {
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
+                  data-course-id="${course.id}"
                   onclick="event.stopPropagation(); toggleFollow(${course.id})"
                   aria-label="${course.followed ? "Unfollow course" : "Follow course"}"
                   title="${course.followed ? "Saved" : "Save course"}"
@@ -1443,34 +1446,71 @@ async function toggleFollow(courseId) {
     return;
   }
 
-  const course = allCourses.find((c) => String(c.id) === String(courseId));
+  const course = allCourses.find((c) => String(c.id) === String(courseId))
+    || favoritesCache.find((c) => String(c.id) === String(courseId));
   if (!course) return;
+
+  // 樂觀更新：先翻轉狀態讓 UI 立即反應
+  const prevFollowed = course.followed;
+  const prevSaveCount = course.saveCount || 0;
+  course.followed = !prevFollowed;
+  course.saveCount = prevFollowed ? Math.max(0, prevSaveCount - 1) : prevSaveCount + 1;
+  updateFollowButtonsForCourse(courseId, course.followed, course.saveCount);
 
   try {
     const data = await apiRequest(`/api/courses/${courseId}/favorite`, {
       method: "POST",
     });
+    // 用後端回傳的正確值覆蓋
     course.followed = Boolean(data.followed);
-    course.saveCount = data.saveCount || 0;
+    course.saveCount = data.saveCount ?? course.saveCount;
+    updateFollowButtonsForCourse(courseId, course.followed, course.saveCount);
+
+    // 同步更新 favoritesCache（不依賴 allCourses 分頁）
+    if (course.followed) {
+      // 加入收藏快取（若不存在）
+      if (!favoritesCache.some(c => String(c.id) === String(courseId))) {
+        favoritesCache.push({ ...course });
+      } else {
+        // 更新已存在的快取項目
+        const idx = favoritesCache.findIndex(c => String(c.id) === String(courseId));
+        if (idx !== -1) favoritesCache[idx] = { ...course };
+      }
+    } else {
+      // 從收藏快取移除
+      favoritesCache = favoritesCache.filter(c => String(c.id) !== String(courseId));
+    }
   } catch (error) {
+    // 失敗時還原
+    course.followed = prevFollowed;
+    course.saveCount = prevSaveCount;
+    updateFollowButtonsForCourse(courseId, course.followed, course.saveCount);
     alert(error.message);
     if (error.message.toLowerCase().includes("authentication")) {
       openLoginModal();
     }
-    return;
   }
 
-  const countSpan = document.getElementById(`save-count-${courseId}`);
-  if (countSpan) {
-    countSpan.textContent = course.saveCount || 0;
+  // 如果在 favorites 頁面，移除或加入該卡片
+  if (document.getElementById("favoritesPage")?.style.display === "block") {
+    renderFavorites();
   }
+}
+
+// 只更新所有跟這門課有關的愛心按鈕，不重繪整個列表
+function updateFollowButtonsForCourse(courseId, followed, saveCount) {
+  // 課程列表卡片上的愛心
+  document.querySelectorAll(`.course-follow-btn[data-course-id="${courseId}"]`).forEach((btn) => {
+    btn.classList.toggle("followed", followed);
+    btn.setAttribute("aria-label", followed ? "Unsave course" : "Save course");
+    btn.title = followed ? "Saved" : "Save course";
+  });
+  // 數量
+  const countSpan = document.getElementById(`save-count-${courseId}`);
+  if (countSpan) countSpan.textContent = saveCount;
+  // 詳情頁的愛心
   syncDetailFollowButton(courseId);
   updateDetailSocialStats(courseId);
-  if (document.getElementById("favoritesPage").style.display === "block") {
-    renderFavorites();
-  } else {
-    displayCourses(allCourses);
-  }
 }
 
 function syncDetailFollowButton(courseId) {
@@ -1549,7 +1589,26 @@ function showFavorites() {
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
-  renderFavorites();
+
+  // 從後端取最新收藏清單（支援跨頁收藏）
+  const container = document.getElementById("favoritesContainer");
+  if (container) container.innerHTML = '<p class="empty-state">Loading...</p>';
+
+  apiRequest("/api/user/favorites")
+    .then(data => {
+      favoritesCache = data.courses || [];
+      // 同步 allCourses 的 followed 狀態
+      favoritesCache.forEach(fav => {
+        const c = allCourses.find(x => String(x.id) === String(fav.id));
+        if (c) { c.followed = true; c.saveCount = fav.saveCount; }
+      });
+      renderFavorites();
+    })
+    .catch(() => {
+      // fallback: 從 allCourses 過濾（只有當前分頁的課程）
+      favoritesCache = allCourses.filter(c => c.followed === true);
+      renderFavorites();
+    });
 }
 
 function showActivity() {
@@ -1732,8 +1791,8 @@ function syncUserContentProfile(previousUsername) {
 
 // === 新版：安全不當機的收藏頁面渲染邏輯 ===
 function renderFavorites() {
-  // 1. 抓出所有被使用者按愛心 (followed === true) 的課程
-  let favorites = allCourses.filter(course => course.followed === true);
+  // 1. 從獨立的 favoritesCache 取資料（跨頁收藏完整保留）
+  let favorites = [...favoritesCache];
   
   // 2. 抓取目前亮起的純文字排序按鈕（Hottest / Latest / Ratings）
   const activeSortBtn = document.querySelector('.fav-sort-btn.active');
