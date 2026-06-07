@@ -672,7 +672,7 @@ function renderNotificationList() {
   empty.textContent = notificationState.activeTab === "activity"
     ? "No activity yet."
     : "No notifications yet.";
-  empty.style.display = filteredItems.length ? "none" : "block";
+  empty.style.display = filteredItems.length ? "none" : "flex";
 }
 
 function updateNotificationBadge() {
@@ -1094,13 +1094,20 @@ function setupEventListeners() {
       const index = notificationState.items.findIndex((n) => String(n.id) === notiId);
 
       if (index !== -1) {
+        // 檢查是不是原本屬於未讀狀態
         const wasUnread = !notificationState.items[index].isRead;
-        notificationState.items[index].isRead = true;
-        notificationState.unreadCount = Math.max(0, notificationState.unreadCount - 1);
-        updateNotificationBadge();
+        
+        if (wasUnread) {
+          // 標記為已讀
+          notificationState.items[index].isRead = true;
+          // 未讀數量減 1
+          notificationState.unreadCount = Math.max(0, notificationState.unreadCount - 1);
+          // 更新鈴鐺上的小紅點
+          updateNotificationBadge();
+        }
 
-        // 先從畫面上隱藏已讀通知
-        notificationState.items.splice(index, 1);
+        // 刪除原本的 notificationState.items.splice(index, 1);
+        // 只要重新渲染列表，已讀的通知就會自動被隱藏（因為系統有過濾未讀）
         renderNotificationList();
       }
 
@@ -1789,19 +1796,19 @@ function syncUserContentProfile(previousUsername) {
   });
 }
 
-// === 新版：安全不當機的收藏頁面渲染邏輯 ===
 function renderFavorites() {
-  // 1. 從獨立的 favoritesCache 取資料（跨頁收藏完整保留）
-  let favorites = [...favoritesCache];
+  let favorites = allCourses.filter(course => course.followed === true);
   
-  // 2. 抓取目前亮起的純文字排序按鈕（Hottest / Latest / Ratings）
   const activeSortBtn = document.querySelector('.fav-sort-btn.active');
   const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : "popular";
 
-  // 3. 安全的排序邏輯
   if (sortBy === "popular") {
-    // Hottest: 依據愛心數量由多到少
-    favorites.sort((a, b) => (b.saveCount || 0) - (a.saveCount || 0));
+    // 👈 修改這裡：計算「愛心數 + 總留言數」來排序
+    favorites.sort((a, b) => {
+      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
+      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+      return bPopularity - aPopularity;
+    });
   } else if (sortBy === "latest") {
     // Latest: 依據年份與學期由新到舊
     favorites.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
@@ -1810,7 +1817,6 @@ function renderFavorites() {
     favorites.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }
 
-  // 
   const container = document.getElementById("favoritesContainer");
   if (container) {
     renderCourseCards(

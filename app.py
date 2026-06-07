@@ -784,6 +784,10 @@ def create_app():
         )
         avg_rating = func.coalesce(func.avg(Review.rating).filter(visible_review_cond), 0)
         review_count = func.count(Review.review_id).filter(visible_review_cond)
+        
+        # 👇 確保這行有加進來！先呼叫子查詢
+        fav_sq = favorite_stats_subquery()
+
         courses_query = (
             Course.query
             .options(
@@ -794,6 +798,7 @@ def create_app():
             )
             .outerjoin(Section, Section.course_id == Course.course_id)
             .outerjoin(Review, Review.section_id == Section.section_id)
+            .outerjoin(fav_sq, fav_sq.c.course_id == Course.course_id)  # 👈 還有這行也要連進來
             .group_by(Course.course_id)
         )
 
@@ -890,7 +895,11 @@ def create_app():
         elif sort_by == "rating":
             courses_query = courses_query.order_by(avg_rating.desc(), Course.code.asc())
         else:
-            courses_query = courses_query.order_by(review_count.desc(), Course.code.asc())
+            # 👇 這裡的 fav_sq 就找得到上面的定義了！
+            total_hot = review_count + func.coalesce(fav_sq.c.save_count, 0)
+            courses_query = courses_query.order_by(total_hot.desc(), Course.code.asc())
+            
+        
 
         total = courses_query.count()
         total_pages = max(1, (total + per_page - 1) // per_page)

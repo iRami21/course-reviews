@@ -4045,7 +4045,6 @@ button {
 }
 
 #notificationEmpty{
-  display: flex !important;
   margin: 10px 0px;
 }
 
