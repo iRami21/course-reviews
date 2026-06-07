@@ -305,11 +305,30 @@ def create_app():
         db.session.add(admin_user)
         db.session.commit()
 
+    def ensure_notifications_table():
+        inspector = inspect(db.engine)
+        if "notifications" not in inspector.get_table_names():
+            db.session.execute(text("""
+                CREATE TABLE notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId INTEGER NOT NULL,
+                    category VARCHAR(32) NOT NULL DEFAULT 'notification',
+                    message TEXT NOT NULL,
+                    link VARCHAR(255) DEFAULT '',
+                    is_read BOOLEAN DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (userId) REFERENCES "User"(userId)
+                )
+            """))
+            db.session.commit()
+            print("Created notifications table")
+
     with app.app_context():
         db.create_all()
         ensure_app_schema()
         ensure_course_schema()
         ensure_admin_user()
+        ensure_notifications_table()
 
     @login_manager.user_loader
     def load_user(user_id):

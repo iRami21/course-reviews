@@ -19,7 +19,7 @@ let coursePagination = {
 let isLoadingCourses = false;
 let pendingCourseFetchPage = null;
 let notificationState = {
-  activeTab: "notifications",
+  activeTab: "activity",
   items: [],
   unreadCount: 0,
 };
@@ -343,29 +343,28 @@ function reactionIcon(reaction) {
   return reaction || heartIcon();
 }
 
+// 修改 script_2.js 中的 renderReactionControl 函式
 function renderReactionControl(item, reviewId, replyId = null) {
   const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
-  const selectedReaction = item.reaction || (item.liked ? "❤️" : "");
+  const paletteButtons = REACTION_OPTIONS.map(
+    (reaction) =>
+      `<button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
+  ).join("");
 
   return `
     <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
       <button
         class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
-        onclick="handleQuickLike(event, ${targetArgs})"
+        onclick="toggleReactionPalette(event)" 
         type="button"
       >
         <span class="emoji-stack">
-          <span class="emoji-item">${reactionIcon(selectedReaction)}</span>
+          ${renderReactionStack(item)}
         </span>
         <span class="like-count-num">${item.likes ?? 0}</span>
       </button>
       <div class="reaction-palette">
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '❤️')">❤️</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🙂')">🙂</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😮')">😮</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '😭')">😭</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '👍')">👍</button>
-        <button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '🔥')">🔥</button>
+        ${paletteButtons}
       </div>
     </div>
   `;
@@ -645,37 +644,20 @@ function setupAdminForms() {
 }
 
 // script.js around line 401: Improved buildNotificationItem to a modern card style
+// script_3.js
 function buildNotificationItem(item) {
     const statusClass = item.isRead ? "" : "unread";
-    // 雖然原 HTML 有設定不同的 icon，但在 Activity 頁面，
-    // 我們將使用更漂亮的頭像系統來美編，不直接使用純文字 emoji
+    const icon = item.category === "activity" ? "💬" : "🔔";
     const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
-
-    // 💡 關鍵優化：利用現有的動物頭像系統 (Banana platform theme)
-    // 預設為問號頭像。在實際應用中，後端資料應提供 actor 資訊
-    const actorProfile = { avatarAnimal: "question", gender: "undisclosed" }; 
-    const avatarHtml = avatarIcon(actorProfile);
-    const genderClass = getGenderClass(actorProfile.gender);
-
+    const unreadDot = !item.isRead ? `<span class="noti-unread-dot"></span>` : "";
     return `
-        <!-- 使用新的 notification-card-item 類別，生成與課程卡片一致的卡片樣式 -->
-        <div class="notification-card-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
-            
-            <!-- 大頭貼區域 -->
-            <div class="noti-avatar ${genderClass}">
-                ${avatarHtml}
-            </div>
-
-            <!-- 活動內容區域 -->
-            <div class="noti-body">
-                <p class="noti-text">${escapeHtml(item.message)}</p>
-                <div class="noti-meta">
-                    <span class="noti-time">${escapeHtml(item.createdAt)}</span>
-                </div>
-            </div>
-
-            <!-- 3. 未讀狀態的小紅點（如果是未讀的話） -->
-            ${item.isRead ? '' : '<span class="unread-dot" title="Unread"></span>'}
+        <div class="noti-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
+          <div class="noti-icon-wrap">${icon}</div>
+          <div class="noti-body">
+            <p class="noti-msg">${escapeHtml(item.message)}</p>
+            <span class="noti-time">${escapeHtml(item.createdAt)}</span>
+          </div>
+          ${unreadDot}
         </div>
     `;
 }
@@ -720,23 +702,59 @@ function switchNotificationTab(tab) {
   renderNotificationList();
 }
 
-async function refreshNotifications() {
-  if (!currentUser) return;
-  try {
-    const data = await apiRequest("/api/notifications");
-    notificationState.items = data.notifications || [];
-    notificationState.unreadCount = data.unreadCount || 0;
-    updateNotificationBadge();
-    if (document.getElementById("notificationDropdown")?.style.display === "block") {
-      renderNotificationList();
-    }
-    if (document.getElementById("activityPage")?.style.display === "block") {
-      renderActivityList();
-    }
-  } catch (error) {
-    console.warn("Failed to refresh notifications:", error);
-  }
+function renderNotificationList() {
+    const list = document.getElementById("notificationList");
+    const empty = document.getElementById("notificationEmpty");
+    if (!list || !empty) return;
+
+    const items = notificationState.items || [];
+    
+    // 根據目前選中的頁籤（Tab）過濾出對應的通知項目
+    const filteredItems = items.filter(item => {
+        if (item.isRead) return false;
+        if (notificationState.activeTab === "activity") {
+            return item.category === "activity";
+        }
+        return item.category !== "activity";
+    });
+
+    // 渲染 HTML 內容：有資料就跑 map，沒資料就清空
+    list.innerHTML = filteredItems.length ? filteredItems.map(buildNotificationItem).join("") : "";
+    
+    // 切換空狀態提示的顯示或隱藏
+    empty.style.display = filteredItems.length ? "none" : "block";
 }
+
+// 重新獲取並重新整理通知的函式
+function refreshNotifications() {
+    // 如果全域變數 currentUser 不存在（未登入），則不發送請求
+    if (!currentUser) {
+        console.warn("refreshNotifications: No current user logged in.");
+        return;
+    }
+
+    fetch("/api/notifications")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to fetch notifications");
+            }
+            return response.json();
+        })
+        .then(data => {
+            // 將後端回傳的資料存入全域的 notificationState 狀態機
+            notificationState.items = data.notifications || [];
+            notificationState.unreadCount = data.unreadCount || 0;
+
+            // 呼叫渲染函式更新畫面，並更新未讀小紅點
+            renderNotificationList();
+            updateNotificationBadge();
+        })
+        .catch(error => {
+            console.error("Error fetching notifications:", error);
+        });
+}
+
+
 
 
 async function markAllAsRead() {
@@ -746,7 +764,8 @@ async function markAllAsRead() {
       method: "POST",
       body: JSON.stringify({}),
     });
-    await refreshNotifications();
+    notificationState.items.forEach(item => { item.isRead = true; });
+    renderNotificationList();
   } catch (error) {
     console.warn("Failed to mark notifications read:", error);
   }
@@ -1122,7 +1141,7 @@ function setupEventListeners() {
       }
     });
     notiDropdown.addEventListener("click", async function (e) {
-      const item = e.target.closest(".notification-item");
+      const item = e.target.closest(".noti-item");
       if (!item) return;
 
       e.preventDefault();
@@ -1145,8 +1164,7 @@ function setupEventListeners() {
           updateNotificationBadge();
         }
 
-        // 刪除原本的 notificationState.items.splice(index, 1);
-        // 只要重新渲染列表，已讀的通知就會自動被隱藏（因為系統有過濾未讀）
+        notificationState.items.splice(index, 1);
         renderNotificationList();
       }
 
@@ -1163,7 +1181,8 @@ function setupEventListeners() {
         const courseMatch = String(link).match(/\/courses\/(\d+)/);
         if (courseMatch && typeof openCourseDetail === "function") {
           const courseId = Number(courseMatch[1]);
-          if (!Number.isNaN(courseId)) {
+          const course = allCourses.find((c) => String(c.id) === String(courseId));
+          if (!Number.isNaN(courseId) && course) {
             openCourseDetail(courseId);
             return;
           }
@@ -2089,6 +2108,8 @@ async function checkUserLogin() {
 
   if (currentUser) {
     closeLoginModal();
+    // 💡 在這裡觸發通知載入，確保 currentUser 已經正確設定
+    refreshNotifications(); 
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
@@ -2599,6 +2620,7 @@ function renderReactionStack(item) {
     .join("");
 }
 
+// script.js 找到這一段並修改
 function renderReactionControl(item, reviewId, replyId = null) {
   const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
   const paletteButtons = REACTION_OPTIONS.map(
@@ -2610,7 +2632,7 @@ function renderReactionControl(item, reviewId, replyId = null) {
     <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
       <button
         class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
-        onclick="handleQuickLike(event, ${targetArgs})"
+        onclick="toggleReactionPalette(event)" 
         type="button"
       >
         <span class="emoji-stack">
@@ -2719,13 +2741,20 @@ async function handleQuickLike(event, reviewId, replyId = null) {
   }
 
   const target = findReactionTarget(String(reviewId), replyId ? String(replyId) : null);
-  const shouldClear = target?.liked && (target.reaction || "\u2764\uFE0F") === "\u2764\uFE0F";
-
-  try {
-    await persistReaction(reviewId, shouldClear ? "" : "\u2764\uFE0F", replyId);
-    loadReviews(currentCourseId);
-  } catch (error) {
-    alert(error.message);
+  
+  // 檢查目前是否已經有表情了
+  if (target && target.liked && target.reaction) {
+    // 如果已經有表情，就當作「取消該表情」
+    try {
+        await persistReaction(reviewId, "", replyId); 
+        loadReviews(currentCourseId);
+    } catch (error) { alert(error.message); }
+  } else {
+    // 如果沒有表情，才預設給一個愛心
+    try {
+        await persistReaction(reviewId, "❤️", replyId);
+        loadReviews(currentCourseId);
+    } catch (error) { alert(error.message); }
   }
 }
 
@@ -3692,3 +3721,26 @@ function updatePageTitle() {
         if (backBtn) backBtn.style.display = "none";  // 隱藏按鈕
     }
 }
+
+// script.js 新增這段程式碼
+window.toggleReactionPalette = function(event) {
+    event.stopPropagation();
+    const container = event.currentTarget.closest(".reaction-container");
+    
+    // 關閉其他所有已開啟的面板
+    document.querySelectorAll(".reaction-container.open").forEach(c => {
+        if (c !== container) c.classList.remove("open");
+    });
+
+    // 切換當前狀態
+    if (container) {
+        container.classList.toggle("open");
+    }
+};
+
+// 點擊網頁任何空白處，自動關閉所有開啟的表情選單
+document.addEventListener("click", function() {
+    document.querySelectorAll(".reaction-container.open").forEach(c => {
+        c.classList.remove("open");
+    });
+});

@@ -937,41 +937,29 @@ body {
   display: inline-block;
 }
 
-/* 🌟 隱藏的表情面板（完全配合 Sniglet 圓潤風） */
+
+.reaction-container:hover .reaction-palette {
+  display: none; 
+}
+
+/* 改為使用 .open class 來控制顯示 */
+.reaction-container.open .reaction-palette {
+  display: flex !important;
+}
+
+/* 確保面板基本樣式正確 */
 .reaction-palette {
-  display: none; /* 平常藏起來 */
+  display: none; 
   position: absolute;
-  bottom: 100%;  /* 釘在按鈕正上方 */
+  bottom: calc(100% + 8px); 
   left: 0;
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 30px; /* 圓角膠囊形狀 */
+  border-radius: 30px; 
   padding: 6px 10px;
-  box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.12); /* 舒適的陰影 */
+  box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.12);
   gap: 10px;
-  z-index: 99;
-  transform: translateY(-6px);
-  animation: emojiPop 0.2s ease; /* 彈出動效 */
-}
-
-/* 🌟 當點擊按鈕時，面板現身（改為 click 觸發） */
-.reaction-container.open .reaction-palette {
-  display: flex;
-}
-
-/* 面板內獨立的表情小按鈕 */
-.reaction-palette button {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.15s ease;
-}
-
-/* 滑鼠滑過面板內的小表情時，單個表情會變大跳動 */
-.reaction-palette button:hover {
-  transform: scale(1.3) translateY(-4px);
+  z-index: 999;
 }
 
 @keyframes emojiPop {
@@ -4010,53 +3998,186 @@ button {
 }
 
 /* === 通知系統 UI === */
+/* ── Notification Badge ── */
 .notification-badge {
   position: absolute;
   top: 0;
   right: 0;
-  background-color: #ef4444; /* 搶眼的紅色 */
-  color: white;
-  font-family: system-ui;
-  font-size: 0.7rem;
-  font-weight: bold;
-  border-radius: 50%;
-  min-width: 18px;
-  height: 18px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 999px;
+  min-width: 17px;
+  height: 17px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #fff;
-  transform: translate(25%, -25%); /* 把紅點推到鈴鐺右上角邊緣 */
+  padding: 0 3px;
+  border: 2px solid #4f67b1;
+  transform: translate(30%, -30%);
+  pointer-events: none;
 }
 
+/* ── Dropdown Shell ── */
 .notification-dropdown-card {
   position: absolute;
-  top: calc(100% + 12px);
-  right: -10px; /* 靠右對齊 */
-  width: 320px;
+  top: calc(100% + 10px);
+  right: -8px;
+  width: 340px;
   background: #ffffff;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.14), 0 2px 8px rgba(16, 24, 40, 0.06);
   z-index: 10000;
-  animation: dropdownPop 0.2s ease;
+  animation: dropdownPop 0.18s ease;
   overflow: hidden;
   text-align: left;
 }
 
-#notificationEmpty{
-  margin: 10px 0px;
-}
-
+/* ── Header ── */
 .notification-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  padding: 0.8rem;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #fafafa;
+}
+
+.notification-header::before {
+  content: "🔔 Notifications";
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.mark-read-btn {
+  background: none;
+  border: none;
+  color: #19449b;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mark-read-btn:hover {
+  background: #f3f4f6;
+  color: var(--text);
+}
+
+/* ── Scrollable List ── */
+.notification-list {
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.notification-list::-webkit-scrollbar {
+  width: 4px;
+}
+.notification-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+#notificationEmpty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 0.88rem;
+  color: #9ca3af;
+}
+
+/* ── Individual Item ── */
+.noti-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.noti-item:last-child {
+  border-bottom: none;
+}
+
+.noti-item:hover {
   background: #f9fafb;
 }
 
+.noti-item.unread {
+  background: #f0f4ff;
+}
+
+.noti-item.unread:hover {
+  background: #e8effe;
+}
+
+/* left accent bar for unread */
+.noti-item.unread::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #4f67b1;
+  border-radius: 0 2px 2px 0;
+}
+
+.noti-icon-wrap {
+  font-size: 1.2rem;
+  line-height: 1;
+  margin-top: 1px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: #f1f3f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.noti-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.noti-msg {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: #1f2937;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.noti-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.noti-unread-dot {
+  width: 8px;
+  height: 8px;
+  background: #4f67b1;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+/* ── Tab buttons (kept for future use) ── */
 .notification-tab-group {
   display: flex;
   gap: 0.5rem;
@@ -4065,48 +4186,21 @@ button {
 .notification-tab-btn {
   background: transparent;
   border: 1px solid transparent;
-  padding: 0.5rem 0.8rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 999px;
   color: #4b5563;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .notification-tab-btn.active {
-  background: #2563eb;
-  color: #ffffff;
-  border-color: rgba(37, 99, 235, 0.25);
+  background: #4f67b1;
+  color: #fff;
 }
 
 .notification-tab-btn:hover {
   background: #eff6ff;
-}
-
-.notification-header h3 {
-  font-family: "Sniglet", system-ui;
-  font-size: 1.1rem;
-  color: #374151;
-  margin: 0;
-}
-
-.mark-read-btn {
-  background: none;
-  border: none;
-  color: #3b82f6;
-  font-size: 1rem;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0;
-}
-
-.mark-read-btn:hover {
-  text-decoration: underline;
-}
-
-.notification-list {
-  max-height: 350px;
-  overflow-y: auto;
 }
 
 /* Activity 頁面版面 */
@@ -4124,61 +4218,7 @@ button {
   background: #fff;
 }
 
-.notification-item {
-  display: flex;
-  gap: 0.85rem;
-  padding: 1rem;
-  border-bottom: 1px solid #f3f4f6;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.notification-item:hover {
-  background: #f9fafb;
-}
-
-/* 未讀通知的淡藍色底 */
-.notification-item.unread {
-  background: #eff6ff;
-}
-
-.notification-item.unread:hover {
-  background: #e0f2fe;
-}
-
-/* Activity styling tweaks */
-.notification-item {
-  border-left: 4px solid transparent;
-}
-.notification-item.unread {
-  border-left-color: #2563eb;
-}
-.notification-item .noti-content p {
-  margin: 0 0 0.25rem 0;
-  font-size: 0.95rem;
-  color: #0f172a;
-}
-.notification-item .noti-content .noti-time {
-  font-size: 0.78rem;
-  color: #6b7280;
-}
-
-.noti-icon {
-  font-size: 1.5rem;
-  margin-top: 2px;
-}
-
-.noti-content p {
-  margin: 0 0 0.25rem 0;
-  font-size: 0.95rem;
-  color: #1f2937;
-  line-height: 1.4;
-}
-
-.noti-time {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
+/* (notification-item and notification-card-item styles moved to the notification section above) */
 
 .back-to-top-btn {
   position: fixed;
@@ -4720,130 +4760,4 @@ body.schedule-open #scheduleToggleBtn {
 }
 
 /* 4. 精美的活動卡片 (Modern Card Style - Match course cards) */
-.notification-card-item {
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 1.25rem;
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    gap: 1rem;
-    align-items: flex-start;
-    cursor: pointer;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-    position: relative; /* 給未讀小紅點定位用 */
-    overflow: hidden;
-}
-
-/* 卡片 Hover 特效 */
-.notification-card-item:hover {
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-}
-
-/* 未讀狀態的特別美編：左側加上 Banana 配色 (var(--primary)) 的粗邊框與不同底色 */
-.notification-card-item.unread {
-    border-left: 4px solid var(--primary); 
-    background-color: #f8fafc; /* 使用稍淡的底色區別 */
-}
-
-/* 大頭貼區域 (卡片內部的動物頭像) */
-.notification-card-item .noti-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px; /* 比首頁卡片稍小 */
-    height: 48px;
-    flex: 0 0 auto;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-}
-
-.notification-card-item .noti-avatar img {
-    width: 78%; /* 大頭貼內部占比 */
-    height: 78%;
-    object-fit: contain;
-}
-
-/* 套用與個人資料相同的頭像背景配色 (Male/Female/Undisclosed) */
-.notification-card-item .noti-avatar.avatar-male { background-color: #dbeafe; }
-.notification-card-item .noti-avatar.avatar-female { background-color: #fce7f3; }
-.notification-card-item .noti-avatar.avatar-undisclosed { background-color: #ede9fe; }
-
-/* 活動內文美編 */
-.notification-card-item .noti-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.notification-card-item .noti-text {
-    color: var(--text);
-    font-size: 1.05rem;
-    line-height: 1.45;
-    margin-bottom: 0.3rem;
-}
-
-/* 活動時間 (運用 muted 配色) */
-.notification-card-item .noti-meta {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 600;
-}
-
-/* 未讀狀態的小紅點 */
-.notification-card-item .unread-dot {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 10px;
-    height: 10px;
-    background-color: var(--primary); /* 使用 Banana 主色 */
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-/* 5. 空狀態卡片美編 (Match empty courses state) */
-.activity-list .empty-state-card {
-    grid-column: 1 / -1; /* 佔滿整排 */
-    text-align: center;
-    padding: 4rem 2rem;
-    background: #ffffff;
-    border-radius: var(--radius-md);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
-}
-
-.empty-state-card .empty-icon {
-    font-size: 3.5rem;
-    display: block;
-    margin-bottom: 1rem;
-    opacity: 0.8;
-}
-
-.empty-state-card h3 {
-    font-family: "Sniglet", system-ui; /* 使用 Banana 特有字體 */
-    font-size: 1.5rem;
-    color: #4b5563;
-    margin-bottom: 0.5rem;
-}
-
-.empty-state-card p {
-    font-family: "Comic Relief", system-ui;
-    color: #6b7280;
-    font-size: 1.05rem;
-}
-
-/* 手機版適配：在窄螢幕下微調 padding */
-@media (max-width: 640px) {
-    .notification-card-item {
-        padding: 1rem;
-        flex-direction: column; /* 手機版改為直列排版 */
-        gap: 0.75rem;
-        align-items: center;
-        text-align: center;
-    }
-    
-    .notification-card-item .noti-meta {
-        justify-content: center;
-    }
-}
+/* (old notification-card-item removed) */
