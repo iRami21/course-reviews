@@ -435,6 +435,7 @@ function renderAdminControls() {
   const addPanel = document.getElementById("adminAddCoursePanel");
   if (addPanel) {
     addPanel.style.display = isCurrentUserAdmin() ? "block" : "none";
+
   }
 
   // Show/hide the "+" button in the page heading for admin users
@@ -473,6 +474,15 @@ function toggleAdminAddCourseForm() {
   if (button) {
     button.textContent = isCollapsed ? "New Course" : "Close";
   }
+
+  // 展開 Add Course 時，收起 Edit 面板
+  if (!isCollapsed) {
+    const editPanel = document.getElementById("adminEditCoursePanel");
+    if (editPanel) {
+      editPanel.style.display = "none";
+      editPanel.innerHTML = "";
+    }
+  }
 }
 
 // Edit admin course - shows edit panel in the All Courses page
@@ -485,12 +495,19 @@ window.editAdminCourse = function(courseId) {
     closeCourseDetail();
   }
 
+  // Collapse the Add Course form if it's open
+  const addForm = document.getElementById("adminAddCourseForm");
+  const addToggle = document.getElementById("adminAddCourseToggle");
+  if (addForm && !addForm.classList.contains("admin-course-form-collapsed")) {
+    addForm.classList.add("admin-course-form-collapsed");
+    if (addToggle) addToggle.textContent = "New Course";
+  }
+
   // Show the admin edit panel
   const panel = document.getElementById("adminEditCoursePanel");
   if (panel) {
     panel.style.display = "block";
     renderAdminCoursePanel(course);
-    // Scroll to the panel
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 };
