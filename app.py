@@ -492,11 +492,12 @@ def create_app():
         if favorite_course_ids is not None:
             followed = course.course_id in favorite_course_ids
         else:
+            # 這裡的邏輯非常重要，確保 Favorite 表裡面真的有這一筆資料
             followed = (
                 current_user.is_authenticated
                 and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None
             )
-
+            
         # 💡 完美保留你原本寫的：把丟給前端的文字做清洗與格式化，這樣你的前端排版才不會壞掉！
         grade_tag = format_grade_tag(course.grade)
         professor_name = clean_professor_name(course.professor)

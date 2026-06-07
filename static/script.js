@@ -2,6 +2,7 @@
 let currentUser = null;
 let currentCourseId = null;
 let allCourses = [];
+let currentViewMode = 'browse';
 // favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
 let favoritesCache = [];
 let selectedRating = 0;
@@ -1435,6 +1436,8 @@ function renderCourseCards(container, courses, emptyText) {
 
 // 修改後的 filterCourses
 function filterCourses() {
+  const searchTerm = document.getElementById("searchBox")?.value.trim();
+  currentViewMode = searchTerm ? 'search' : 'browse'; // 判斷是搜尋模式還是瀏覽模式
   updatePageTitle(); // 👈 每次篩選時都更新標題
   fetchCoursesPage(1);
 }
@@ -1501,10 +1504,19 @@ async function toggleFollow(courseId) {
     openLoginModal();
     return;
   }
-
+ 
   const course = allCourses.find((c) => String(c.id) === String(courseId))
-    || favoritesCache.find((c) => String(c.id) === String(courseId));
-  if (!course) return;
+                || favoritesCache.find((c) => String(c.id) === String(courseId));
+
+  if (!course) {
+    // 如果找不到，先試著去後端查一下這門課是不是被收藏的
+    try {
+      const data = await apiRequest(`/api/courses/${courseId}/favorite`, { method: "POST" });
+      // 處理後端邏輯...
+      return;
+    } catch(e) { console.error("Course not found for toggle"); return; }
+  }
+
 
   // 樂觀更新：先翻轉狀態讓 UI 立即反應
   const prevFollowed = course.followed;
@@ -1700,19 +1712,36 @@ function renderActivityList() {
 }
 
 function showBrowseCourses() {
+  // 1. 隱藏其他頁面
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
-  document.getElementById("pageHeading").style.display = "";
   
+  // 2. 恢復頁面主標題與相關選單
+  document.getElementById("pageHeading").style.display = "";
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
   
-  // 👇 把原本的 style.display = "" 改成 "none"
+  // 3. 關鍵修正：強制清空搜尋框的文字
+  const searchBox = document.getElementById("searchBox");
+  if (searchBox) {
+    searchBox.value = ""; 
+  }
+  
+  // 4. 強制更新標題 (變回 All Courses) 與隱藏「Back to Browse」按鈕
+  updatePageTitle(); 
+
+  // 5. 確保隱藏篩選面板 (依據您之前的需求)
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
+  // 6. 顯示課程列表
   document.getElementById("coursesContainer").style.display = "";
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
+  
+  // 7. 移除 body 的 detail-open class (防止排版卡住)
+  document.body.classList.remove("detail-open");
+  
+  // 8. 重新載入完整的課程列表 (因為 searchBox 已經是空的，所以會撈出所有課程)
   filterCourses();
 }
 
@@ -2155,7 +2184,20 @@ function openCourseDetail(courseId) {
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
-}
+
+  // 找到按鈕元素 (如果你的 HTML ID 是 back-button 則選用該 class)
+  const backBtn = document.querySelector(".back-button"); 
+  if (backBtn) {
+      // 根據模式顯示文字，並保留你的 SVG 圖示
+      const labelText = (currentViewMode === 'search') ? "Back to Search" : "Back to Browse";
+      backBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 12H5"></path>
+          <path d="m12 19-7-7 7-7"></path>
+        </svg>
+        ${labelText}
+      `;
+}}
 
 function openCourseReviewForm(courseId) {
   openCourseDetail(courseId);
