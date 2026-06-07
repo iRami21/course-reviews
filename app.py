@@ -344,6 +344,10 @@ def create_app():
             db.session.execute(
                 text("ALTER TABLE Review ADD COLUMN reactionCounts TEXT NOT NULL DEFAULT '{}'")
             )
+        if "is_visible" not in columns:
+            db.session.execute(
+                text("ALTER TABLE Review ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+            )
         db.session.commit()
 
         rows = Review.query.filter((Review.reaction_counts.is_(None)) | (Review.reaction_counts == ""))
@@ -363,6 +367,10 @@ def create_app():
         if "userReactions" not in reply_columns:
             db.session.execute(
                 text("ALTER TABLE ReviewReply ADD COLUMN userReactions TEXT NOT NULL DEFAULT '{}'")
+            )
+        if "is_visible" not in reply_columns:
+            db.session.execute(
+                text("ALTER TABLE ReviewReply ADD COLUMN is_visible BOOLEAN DEFAULT 1")
             )
         db.session.commit()
 
