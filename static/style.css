@@ -4677,3 +4677,173 @@ body.schedule-open #scheduleToggleBtn {
   font-weight: 800;
   line-height: 1.4;
 }
+
+/* === BEAUTIFIED ACTIVITY PAGE STYLES (Match other Banana Pages theme) === */
+
+/* 1. 頁面外觀：使用一致的 container 寬度和 margin */
+.activity-page {
+    max-width: var(--container); /* 運用現有變數 */
+    margin: 2.75rem auto;
+    padding: 0 2rem;
+}
+
+/* 2. 標題與 kicker 美編 (運用 Favorites 頁面風格) */
+.activity-page .page-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.activity-title-group h2 {
+    color: var(--text);
+    font-size: clamp(2rem, 3vw, 3rem);
+    line-height: 1.08;
+}
+
+.page-kicker {
+    margin-bottom: 0.25rem;
+    margin-left: 0.3rem;
+    color: var(--text-soft);
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* 3. 活動列表網格：使用與首頁一致的單行卡片排版 */
+.activity-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem; /* 卡片之間的間距 */
+}
+
+/* 4. 精美的活動卡片 (Modern Card Style - Match course cards) */
+.notification-card-item {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    position: relative; /* 給未讀小紅點定位用 */
+    overflow: hidden;
+}
+
+/* 卡片 Hover 特效 */
+.notification-card-item:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* 未讀狀態的特別美編：左側加上 Banana 配色 (var(--primary)) 的粗邊框與不同底色 */
+.notification-card-item.unread {
+    border-left: 4px solid var(--primary); 
+    background-color: #f8fafc; /* 使用稍淡的底色區別 */
+}
+
+/* 大頭貼區域 (卡片內部的動物頭像) */
+.notification-card-item .noti-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px; /* 比首頁卡片稍小 */
+    height: 48px;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+}
+
+.notification-card-item .noti-avatar img {
+    width: 78%; /* 大頭貼內部占比 */
+    height: 78%;
+    object-fit: contain;
+}
+
+/* 套用與個人資料相同的頭像背景配色 (Male/Female/Undisclosed) */
+.notification-card-item .noti-avatar.avatar-male { background-color: #dbeafe; }
+.notification-card-item .noti-avatar.avatar-female { background-color: #fce7f3; }
+.notification-card-item .noti-avatar.avatar-undisclosed { background-color: #ede9fe; }
+
+/* 活動內文美編 */
+.notification-card-item .noti-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notification-card-item .noti-text {
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.45;
+    margin-bottom: 0.3rem;
+}
+
+/* 活動時間 (運用 muted 配色) */
+.notification-card-item .noti-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* 未讀狀態的小紅點 */
+.notification-card-item .unread-dot {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 10px;
+    height: 10px;
+    background-color: var(--primary); /* 使用 Banana 主色 */
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* 5. 空狀態卡片美編 (Match empty courses state) */
+.activity-list .empty-state-card {
+    grid-column: 1 / -1; /* 佔滿整排 */
+    text-align: center;
+    padding: 4rem 2rem;
+    background: #ffffff;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+}
+
+.empty-state-card .empty-icon {
+    font-size: 3.5rem;
+    display: block;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.empty-state-card h3 {
+    font-family: "Sniglet", system-ui; /* 使用 Banana 特有字體 */
+    font-size: 1.5rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state-card p {
+    font-family: "Comic Relief", system-ui;
+    color: #6b7280;
+    font-size: 1.05rem;
+}
+
+/* 手機版適配：在窄螢幕下微調 padding */
+@media (max-width: 640px) {
+    .notification-card-item {
+        padding: 1rem;
+        flex-direction: column; /* 手機版改為直列排版 */
+        gap: 0.75rem;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .notification-card-item .noti-meta {
+        justify-content: center;
+    }
+}

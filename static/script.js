@@ -643,36 +643,65 @@ function setupAdminForms() {
   });
 }
 
+// script.js around line 401: Improved buildNotificationItem to a modern card style
 function buildNotificationItem(item) {
-  const statusClass = item.isRead ? "" : "unread";
-  const icon = item.category === "activity" ? "💬" : "🔔";
-  const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
-  return `
-    <div class="notification-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
-      <div class="noti-icon">${icon}</div>
-      <div class="noti-content">
-        <p>${escapeHtml(item.message)}</p>
-        <span class="noti-time">${escapeHtml(item.createdAt)}</span>
-      </div>
-    </div>
-  `;
+    const statusClass = item.isRead ? "" : "unread";
+    // 雖然原 HTML 有設定不同的 icon，但在 Activity 頁面，
+    // 我們將使用更漂亮的頭像系統來美編，不直接使用純文字 emoji
+    const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
+
+    // 💡 關鍵優化：利用現有的動物頭像系統 (Banana platform theme)
+    // 預設為問號頭像。在實際應用中，後端資料應提供 actor 資訊
+    const actorProfile = { avatarAnimal: "question", gender: "undisclosed" }; 
+    const avatarHtml = avatarIcon(actorProfile);
+    const genderClass = getGenderClass(actorProfile.gender);
+
+    return `
+        <!-- 使用新的 notification-card-item 類別，生成與課程卡片一致的卡片樣式 -->
+        <div class="notification-card-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
+            
+            <!-- 大頭貼區域 -->
+            <div class="noti-avatar ${genderClass}">
+                ${avatarHtml}
+            </div>
+
+            <!-- 活動內容區域 -->
+            <div class="noti-body">
+                <p class="noti-text">${escapeHtml(item.message)}</p>
+                <div class="noti-meta">
+                    <span class="noti-time">${escapeHtml(item.createdAt)}</span>
+                </div>
+            </div>
+
+            <!-- 3. 未讀狀態的小紅點（如果是未讀的話） -->
+            ${item.isRead ? '' : '<span class="unread-dot" title="Unread"></span>'}
+        </div>
+    `;
 }
 
-function renderNotificationList() {
-  const list = document.getElementById("notificationList");
-  const empty = document.getElementById("notificationEmpty");
-  if (!list || !empty) return;
+// script.js around line 733: Improved renderActivityList with innerHTML empty state
+function renderActivityList() {
+    const list = document.getElementById("activityList");
+    // const empty = document.getElementById("activityEmpty"); // REMOVE external div dependency
 
-  const items = notificationState.items || [];
-  const filteredItems = notificationState.activeTab === "activity"
-    ? items.filter((item) => item.category === "activity")
-    : items.filter((item) => !item.isRead);
+    if (!list) return;
 
-  list.innerHTML = filteredItems.length ? filteredItems.map(buildNotificationItem).join("") : "";
-  empty.textContent = notificationState.activeTab === "activity"
-    ? "No activity yet."
-    : "No notifications yet.";
-  empty.style.display = filteredItems.length ? "none" : "flex";
+    // 只篩選出 category 為 "activity" 的動態
+    const items = (notificationState.items || []).filter((item) => item.category === "activity");
+
+    // 💡 關鍵優化：採用與首頁一致的「內部空狀態卡片」邏輯
+    if (items.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state-card">
+                <span class="empty-icon">🗓️</span>
+                <h3>No Activity Recorded Yet</h3>
+                <p>Start browsing courses or write reviews to populate your Banana activity log.</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = items.map(buildNotificationItem).join("");
 }
 
 function updateNotificationBadge() {
@@ -998,7 +1027,8 @@ function setupEventListeners() {
   safeAddListener("authForm", "submit", login);
   safeAddListener("avatarAnimal", "change", updateAvatarPreview);
   safeAddListener("gender", "change", updateAvatarPreview);
-  safeAddListener("searchBox", "input", filterCourses);
+  safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
+  safeAddListener("profileGender", "change", updateProfileAvatarPreview);
 
   // 收藏頁面過濾器 (維持不變)
   safeAddListener("favoriteDepartmentFilter", "change", renderFavorites);
@@ -1009,7 +1039,15 @@ function setupEventListeners() {
   safeAddListener("profileAvatarAnimal", "change", updateProfileAvatarPreview);
   safeAddListener("profileGender", "change", updateProfileAvatarPreview);
   
-  safeAddListener("searchBox", "input", filterCourses);
+  const _searchBoxEl = document.getElementById("searchBox");
+  if (_searchBoxEl) {
+    let _searchDebounceTimer = null;
+    _searchBoxEl.addEventListener("input", function () {
+      clearTimeout(_searchDebounceTimer);
+      updatePageTitle();
+      _searchDebounceTimer = setTimeout(() => filterCourses(), 300);
+    });
+  }
 
   // 3. 橫向篩選按鈕列事件 (維持不變)
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
@@ -1190,7 +1228,11 @@ function buildCoursePageUrl(page = 1) {
 }
 
 async function fetchCoursesPage(page = 1) {
-  if (isLoadingCourses) return;
+  if (isLoadingCourses) {
+    pendingCourseFetchPage = page;
+  return;
+  }
+  pendingCourseFetchPage = null;
   isLoadingCourses = true;
   const container = document.getElementById("coursesContainer");
   if (container) {
@@ -1217,6 +1259,11 @@ async function fetchCoursesPage(page = 1) {
     }
   } finally {
     isLoadingCourses = false;
+    if (pendingCourseFetchPage !== null) {
+      const nextPage = pendingCourseFetchPage;
+      pendingCourseFetchPage = null;
+      fetchCoursesPage(nextPage);
+    }
   }
 }
 
@@ -1385,10 +1432,12 @@ function renderCourseCards(container, courses, emptyText) {
 }
 
 // Filter courses based on search and filters
+
+// 修改後的 filterCourses
 function filterCourses() {
+  updatePageTitle(); // 👈 每次篩選時都更新標題
   fetchCoursesPage(1);
 }
-
 function searchByTag(tag) {
   const searchBox = document.getElementById("searchBox");
   const value = String(tag || "").trim();
@@ -1656,9 +1705,10 @@ function showBrowseCourses() {
   document.getElementById("courseDetailPage").style.display = "none";
   document.getElementById("pageHeading").style.display = "";
   
-  // 🟢 修正：回到主頁時，再次把選單顯示出來
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
-  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "";
+  
+  // 👇 把原本的 style.display = "" 改成 "none"
+  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
   document.getElementById("coursesContainer").style.display = "";
   const pagination = document.getElementById("coursesPagination");
@@ -2860,11 +2910,13 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // === 控制 Filter 面板的開關與一鍵重置 ===
+// === 控制 Filter 面板的開關與一鍵重置 ===
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
   const courseDetailPage = document.getElementById("courseDetailPage");
   const favoritesPage = document.getElementById("favoritesPage");
-  
+  const activityPage = document.getElementById("activityPage"); // 👈 補上 Activity 頁面的抓取
+
   let wasOnOtherPage = false;
 
   // 1. 如果在其他頁面，先回到主頁
@@ -2873,6 +2925,11 @@ window.toggleFilterPanel = function() {
     wasOnOtherPage = true;
   }
   if (favoritesPage && favoritesPage.style.display === "block") {
+    if (typeof showBrowseCourses === "function") showBrowseCourses();
+    wasOnOtherPage = true;
+  }
+  // 👇 補上如果在 Activity 頁面，也要先回到主頁
+  if (activityPage && activityPage.style.display === "block") {
     if (typeof showBrowseCourses === "function") showBrowseCourses();
     wasOnOtherPage = true;
   }
@@ -2886,7 +2943,7 @@ window.toggleFilterPanel = function() {
       const isCurrentlyOpen = panel.style.display !== 'none';
       
       if (isCurrentlyOpen) {
-        // 【核心新增】如果面板要「關閉」，就一併把條件重置、讓課程全部跑出來！
+        // 如果面板要「關閉」，就一併把條件重置、讓課程全部跑出來！
         panel.style.display = 'none';
         resetAllFilters();
       } else {
@@ -3086,7 +3143,8 @@ function generateDynamicTrending() {
   sortedCourses.forEach(course => {
     if (topKeywords.size < 5) {
       // 這裡可以自己決定要放什麼，例如放課程名稱
-      topKeywords.add(course.title); 
+      const keyword = course.name || course.title;
+      if (keyword) topKeywords.add(keyword);
     }
   });
 
@@ -3571,3 +3629,24 @@ document.addEventListener("DOMContentLoaded", function () {
   renderScheduleSidebar();
   updateScheduleBadge();
 });
+
+// 動態更新頁面標題的函式
+// script_2.js
+function updatePageTitle() {
+    const searchBox = document.getElementById("searchBox");
+    const heading = document.querySelector("#pageHeading h2");
+    const kicker = document.querySelector("#pageHeading .page-kicker");
+    const backBtn = document.getElementById("backToBrowseBtn");
+
+    if (searchBox && searchBox.value.trim() !== "") {
+        // 搜尋模式
+        heading.textContent = "Search Results";
+        kicker.textContent = "Searching for: " + searchBox.value;
+        if (backBtn) backBtn.style.display = "block"; // 顯示按鈕
+    } else {
+        // 瀏覽模式
+        heading.textContent = "All Courses";
+        kicker.textContent = "Let's explore !";
+        if (backBtn) backBtn.style.display = "none";  // 隱藏按鈕
+    }
+}

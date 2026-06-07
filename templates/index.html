@@ -223,6 +223,10 @@
             <p class="page-kicker"> Let's explore !</p>
             <h2>All Courses</h2>
           </div>
+
+          <button class="btn-secondary" id="backToBrowseBtn" type="button" onclick="showBrowseCourses()" style="display: none;">
+            Back to Browse
+          </button>
         </section>
 
       <section class="admin-course-section" id="adminAddCoursePanel" style="display: none;">
@@ -353,20 +357,23 @@
         <div class="courses-container" id="favoritesContainer"></div>
       </section>
 
+            <!-- index.html around line 185 -->
       <section id="activityPage" class="activity-page" style="display: none">
-        <div class="activity-page-header">
-          <div>
-            <p class="page-kicker">Your Activity</p>
-            <h2 class="activity-page-title">Activity</h2>
+          <!-- 1. 更新頁面標題結構，與其他頁面保持一致 -->
+          <div class="activity-page-header page-heading">
+              <div class="activity-title-group">
+                  <p class="page-kicker">TRACK YOUR ACTIONS</p>
+                  <h2 class="activity-page-title">Banana Activity</h2>
+              </div>
+              <button class="btn-secondary" type="button" onclick="showBrowseCourses()">
+                  Back to Browse
+              </button>
           </div>
-          <button class="btn-secondary" type="button" onclick="showBrowseCourses()">
-            Back to Browse
-          </button>
-        </div>
-        <div class="activity-list-wrapper">
-          <div class="activity-list" id="activityList"></div>
-          <div class="notification-empty" id="activityEmpty" style="display: none; justify-content: center;">No activity yet.</div>
-        </div>
+
+          <div class="activity-list-wrapper">
+              <!-- 2. 活動列表容器，JS 將在此生成精美的卡片 -->
+              <div class="activity-list" id="activityList"></div>
+          </div>
       </section>
 
       <!-- Course Detail Page -->
