@@ -25,6 +25,7 @@ let notificationState = {
 };
 let departmentGroups = {};
 let sportActivityOptions = [];
+let latestCourseYear = Number(window.__LATEST_COURSE_YEAR__ || 0);
 const UNDERGRAD_COLLEGE_DEPARTMENTS = {
   "文學院": ["文學院", "中文系", "外文系", "音樂系", "劇藝系"],
   "理學院": ["理學院", "化學系", "物理系", "生科系", "應數系"],
@@ -986,6 +987,8 @@ document.addEventListener("DOMContentLoaded", function () {
   currentUser = window.__CURRENT_USER__ || null;
   departmentGroups = window.__DEPARTMENT_GROUPS__ || {};
   sportActivityOptions = window.__SPORT_ACTIVITY_OPTIONS__ || [];
+  latestCourseYear = Number(window.__LATEST_COURSE_YEAR__ || latestCourseYear || 0);
+  updateLatestYearToggleLabel();
   renderDepartmentFilter("");
   displayCourses(allCourses);
   setupEventListeners();
@@ -1276,6 +1279,16 @@ function setupEventListeners() {
     });
   }
 
+  const latestYearToggle = document.getElementById("latestYearOnlyToggle");
+  if (latestYearToggle) {
+    latestYearToggle.addEventListener("change", function () {
+      if (this.checked && latestCourseYear) {
+        setFilterRowActiveValue("yearFilterRow", "");
+      }
+      filterCourses();
+    });
+  }
+
   // 3. 橫向篩選按鈕列事件 (維持不變)
   const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
   filterRows.forEach(rowId => {
@@ -1286,6 +1299,10 @@ function setupEventListeners() {
       btn.addEventListener('click', function () {
         buttons.forEach(b => b.classList.remove('active'));
         this.classList.add('active');
+        if (rowId === "yearFilterRow") {
+          const latestYearToggle = document.getElementById("latestYearOnlyToggle");
+          if (latestYearToggle) latestYearToggle.checked = false;
+        }
         if (rowId === "deptCategoryFilterRow") {
           renderDepartmentFilter(this.dataset.value || "");
         }
@@ -1419,6 +1436,19 @@ function displayCourses(courses) {
   renderCoursePagination();
 }
 
+function updateLatestYearToggleLabel() {
+  const label = document.getElementById("latestYearToggleLabel");
+  if (label && latestCourseYear) label.textContent = String(latestCourseYear);
+}
+
+function setFilterRowActiveValue(rowId, value) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  row.querySelectorAll(".filter-tag-btn").forEach((button) => {
+    button.classList.toggle("active", (button.dataset.value || "") === String(value || ""));
+  });
+}
+
 function getActiveCourseFilters() {
   const searchTerm = document.getElementById("searchBox")?.value.trim() || "";
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
@@ -1435,9 +1465,14 @@ function getActiveCourseFilters() {
     ? selectedSubDepartment
     : deptActiveBtn?.dataset.value || "";
 
+  const latestYearOnly = document.getElementById("latestYearOnlyToggle")?.checked;
+  const selectedYear = latestYearOnly && latestCourseYear
+    ? String(latestCourseYear)
+    : yearActiveBtn?.dataset.value || "";
+
   return {
     q: searchTerm,
-    year: yearActiveBtn?.dataset.value || "",
+    year: selectedYear,
     department_category: deptCategoryActiveBtn?.dataset.value || "",
     department_group: selectedDepartmentGroup,
     department: selectedDepartment,

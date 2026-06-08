@@ -217,12 +217,16 @@ def create_app():
             course_pagination_json=payload["pagination"],
             department_groups=get_department_groups(),
             sport_activity_options=get_sport_activity_options(),
+            latest_course_year=get_latest_course_year(),
             current_user_json=(
                 serialize_user(current_user)
                 if current_user.is_authenticated
                 else None
             ),
         )
+
+    def get_latest_course_year():
+        return db.session.query(func.max(Section.roc_year)).scalar() or 0
 
     def get_department_groups():
         rows = (

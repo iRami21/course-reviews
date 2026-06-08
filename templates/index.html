@@ -282,6 +282,11 @@
         <button type="button" class="sort-text-btn active" data-sort="popular">Hottest</button>
         <button type="button" class="sort-text-btn" data-sort="latest">Latest</button>
         <button type="button" class="sort-text-btn" data-sort="rating">Ratings</button>
+        <label class="latest-year-toggle" for="latestYearOnlyToggle">
+          <input type="checkbox" id="latestYearOnlyToggle" />
+          <span class="latest-year-slider" aria-hidden="true"></span>
+          <span class="latest-year-text">僅顯示最新年份課程 (<span id="latestYearToggleLabel">114</span>)</span>
+        </label>
       </div>
 
       <div class="filter-panel" id="filterPanel" style="display: none;">
@@ -543,6 +548,7 @@
       window.__COURSE_PAGINATION__ = {{ course_pagination_json | default({}) | tojson }};
       window.__DEPARTMENT_GROUPS__ = {{ department_groups | default({}) | tojson }};
       window.__SPORT_ACTIVITY_OPTIONS__ = {{ sport_activity_options | default([]) | tojson }};
+      window.__LATEST_COURSE_YEAR__ = {{ latest_course_year | default(0) | tojson }};
       window.__CURRENT_USER__ = {{ current_user_json | default(none) | tojson }};
     </script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
