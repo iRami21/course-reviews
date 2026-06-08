@@ -5172,45 +5172,71 @@ body.schedule-open #scheduleToggleBtn {
 
 /* ── Dimension Ratings in Review Card ── */
 .review-dim-ratings {
-  display: grid;
-  grid-template-columns: 0.2fr 0.2fr;
-  gap: 5px 16px;
-  margin: 6px 0 10px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 12px 0 16px !important;
+  background-color: #ffefbe !important; /* 保留你原有的可愛淺藍底色 */
+  border: 1px solid #000000 !important;   /* 保留你原有的極簡黑邊 */
+  width: 100% !important;
+  max-width: 600px !important;          /* 保留 600px 寬度 */
+  min-height: 110px !important;         /* 稍微增加一點點高度以容納英文標註 */
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+  justify-content: flex-start !important;
+}
+
+.review-dim-header-label {
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  color: #4f67b1 !important;       
+  letter-spacing: 0.06em !important; 
+  padding-bottom: 4px !important;
+  margin-bottom: 2px !important;
+  width: 100% !important;
+}
+
+.review-dim-body-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important; /* 完美切分左二右二 */
+  gap: 6px 24px !important;
+  width: 100% !important;
 }
 
 .dim-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: space-around;+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important; /* 文字靠左，香蕉/星星圖示靠右 */
+  width: 100% !important;
 }
 
 .dim-label {
-  font-size: 1rem;
-  color: var(--text-muted, #6b7280);
-  font-weight: 600;
-  min-width: 28px;
+  font-size: 0.88rem !important;
+  color: #2b2f44 !important;
+  font-weight: 700 !important;
+  min-width: 70px !important;
 }
 
 .dim-icons-row {
-  display: flex;
-  gap: 2px;
-  align-items: center;
+  display: flex !important;
+  gap: 3px !important;
+  align-items: center !important;
 }
 
 .dim-icon-wrap {
-  display: inline-flex;
+  display: inline-flex !important;
 }
 
 .dim-icon-wrap .dim-icon-unit {
-  width: 25px;
-  height: 25px;
-  object-fit: contain;
-  transition: filter 0.1s, opacity 0.1s;
+  width: 22px !important; /* 微調圖示大小讓 2x2 格局更精美精緻 */
+  height: 22px !important;
+  object-fit: contain !important;
+  transition: filter 0.1s, opacity 0.1s !important;
 }
 
 .dim-icon-wrap.inactive .dim-icon-unit {
-  opacity: 0.25;
+  opacity: 0.22 !important;
+  filter: grayscale(1) !important; /* 未滿的分數稍微呈現灰色透明，視覺更有層次 */
 }
 
 .dim-icon-wrap .dim-emoji-unit {
@@ -5224,14 +5250,13 @@ body.schedule-open #scheduleToggleBtn {
 
 /* ── Dimension Breakdown in Detail Card ── */
 .dim-breakdown {
-  margin-top: 14px;
   border-top: 1px solid var(--border, #e5e7eb);
   padding-top: 12px;
 }
 
 .dim-breakdown-title {
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text-muted, #6b7280);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -5239,8 +5264,6 @@ body.schedule-open #scheduleToggleBtn {
 }
 
 .dim-breakdown-row {
-  display: flex;
-  align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
@@ -5249,10 +5272,16 @@ body.schedule-open #scheduleToggleBtn {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 500;
   color: var(--text, #1f2937);
   min-width: 56px;
+  margin-bottom: 10px;
+}
+
+.dim-ratings{
+  display:flex;
+  gap:20px;
 }
 
 .dim-bar-icon {
@@ -5276,15 +5305,16 @@ body.schedule-open #scheduleToggleBtn {
 .dim-bar-fill {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #4f67b1, #7b93d3);
+  background: #4f67b1;
   border-radius: 999px;
   transition: width 0.4s ease;
 }
 
 .dim-bar-score {
-  font-size: 0.8rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text, #1f2937);
   min-width: 24px;
   text-align: right;
+  margin-top: -8px;
 }

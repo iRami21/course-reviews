@@ -486,19 +486,6 @@ function getDisplayName(user) {
   return typeof user === "string" ? user : user?.username;
 }
 
-function translateIcon() {
-  return `
-    <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 8 6 6"></path>
-      <path d="m4 14 6-6 2-3"></path>
-      <path d="M2 5h12"></path>
-      <path d="M7 2h1"></path>
-      <path d="m22 22-5-10-5 10"></path>
-      <path d="M14 18h6"></path>
-    </svg>
-  `;
-}
-
 function heartIcon() {
   return `
     <svg class="heart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -2682,22 +2669,6 @@ function renderRatingBreakdown(reviews) {
   const breakdown = document.getElementById("ratingBreakdown");
   const total = reviews.length;
   breakdown.innerHTML = "";
-
-  for (let rating = 5; rating >= 1; rating -= 1) {
-    const count = reviews.filter((review) => review.rating === rating).length;
-    const percent = total > 0 ? (count / total) * 100 : 0;
-    const row = document.createElement("div");
-    row.className = "rating-breakdown-row";
-    row.innerHTML = `
-      <span class="rating-breakdown-label">${rating}${starIcon()}</span>
-      <div class="rating-track">
-        <span class="rating-bar" style="width: ${percent}%"></span>
-      </div>
-      <span class="rating-breakdown-count">${count}</span>
-    `;
-    breakdown.appendChild(row);
-  }
-
   renderDimBreakdown(reviews);
 }
 
@@ -2706,10 +2677,10 @@ function renderDimBreakdown(reviews) {
   if (!container) return;
 
   const dims = [
-    { key: "ratingQuality",   label: "品質", img: "/static/icons/award.png" },
-    { key: "ratingSweetness", label: "甜度", img: "/static/icons/candy.png" },
-    { key: "ratingCoolness",  label: "涼度", img: "/static/icons/cool.png"  },
-    { key: "ratingSolidity",  label: "紮實", img: "/static/icons/bicep.png" },
+    { key: "ratingQuality",   label: "Quality", img: "/static/icons/award.png" },
+    { key: "ratingSweetness", label: "Sweetness", img: "/static/icons/candy.png" },
+    { key: "ratingCoolness",  label: "Coolness", img: "/static/icons/cool.png"  },
+    { key: "ratingSolidity",  label: "Solidaty", img: "/static/icons/bicep.png" },
   ];
 
   const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
@@ -2726,10 +2697,12 @@ function renderDimBreakdown(reviews) {
       return `
         <div class="dim-breakdown-row">
           <span class="dim-bar-label">${iconHtml} ${d.label}</span>
-          <div class="dim-bar-track">
-            <span class="dim-bar-fill" style="width:${pct}%"></span>
+          <div class="dim-ratings">
+            <div class="dim-bar-track">
+              <span class="dim-bar-fill" style="width:${pct}%"></span>
+            </div>
+            <span class="dim-bar-score">${avg.toFixed(1)}</span>
           </div>
-          <span class="dim-bar-score">${avg.toFixed(1)}</span>
         </div>`;
     }).join("")}
   `;
@@ -2741,6 +2714,26 @@ function loadReviews(courseId) {
 
   const reviewsList = document.getElementById("reviewsList");
   reviewsList.innerHTML = "";
+
+  // ---- 💡 前端優化控管：控管「Write a Review」按鈕的狀態 ----
+  const addReviewBtn = document.querySelector(".btn-add-review");
+  if (addReviewBtn) {
+    // 檢查評論名單裡，有沒有人的名字跟當前登入的 currentUser 一模一樣
+    const hasIReviewed = currentUser && reviews.some(r => r.author === getDisplayName(currentUser));
+    
+    if (hasIReviewed) {
+      addReviewBtn.disabled = true;
+      addReviewBtn.style.opacity = "0.5";
+      addReviewBtn.style.cursor = "not-allowed";
+      addReviewBtn.textContent = "Already Reviewed"; // 改成已評價
+    } else {
+      addReviewBtn.disabled = false;
+      addReviewBtn.style.opacity = "1";
+      addReviewBtn.style.cursor = "pointer";
+      addReviewBtn.textContent = "Write a Review";
+    }
+  }
+
   updateStudentReviewStats(reviews);
   updateDetailSocialStats(courseId);
 
@@ -2754,28 +2747,31 @@ function loadReviews(courseId) {
     const reviewItem = document.createElement("div");
     reviewItem.className = "review-item";
 
-    const starsHtml = generateStars(review.rating || 0);
     const DIM_ICONS = {
       ratingQuality:   { img: "/static/icons/award.png" },
       ratingSweetness: { img: "/static/icons/candy.png" },
       ratingCoolness:  { img: "/static/icons/cool.png" },
       ratingSolidity:  { img: "/static/icons/bicep.png" },
     };
-    const DIM_LABELS = { ratingQuality: "Quality", ratingSweetness: "Sweeetness", ratingCoolness: "Coolness", ratingSolidity: "Solidity" };
+    const DIM_LABELS = { ratingQuality: "Quality", ratingSweetness: "Sweetness", ratingCoolness: "Coolness", ratingSolidity: "Solidity" };
 
+    // 💡 精美排版：保留原有 #daecff 與 width 結構，但在各維度圖示最上方增加英文標註 DIMENSION RATINGS
     const dimRatingsHtml = (review.ratingQuality || review.ratingSweetness || review.ratingCoolness || review.ratingSolidity) ? `
       <div class="review-dim-ratings">
-        ${Object.entries(DIM_LABELS).map(([key, label]) => {
-          const v = review[key] || 0;
-          const icon = DIM_ICONS[key];
-          const iconHtml = icon.emoji
-            ? `<span class="dim-icon-unit dim-emoji-unit">${icon.emoji}</span>`
-            : `<img src="${icon.img}" class="dim-icon-unit">`;
-          const iconsRow = Array.from({length: 5}, (_, i) =>
-            `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}">${iconHtml}</span>`
-          ).join("");
-          return `<div class="dim-row"><div class="dim-label"><span class="dim-label">${label}</span></div><div class="dim-icon"><span class="dim-icons-row">${iconsRow}</span></div></div>`;
-        }).join("")}
+        <div class="review-dim-header-label">DIMENSION RATINGS</div>
+        <div class="review-dim-body-grid">
+          ${Object.entries(DIM_LABELS).map(([key, label]) => {
+            const v = review[key] || 0;
+            const icon = DIM_ICONS[key];
+            const iconHtml = icon.emoji
+              ? `<span class="dim-icon-unit dim-emoji-unit">${icon.emoji}</span>`
+              : `<img src="${icon.img}" class="dim-icon-unit">`;
+            const iconsRow = Array.from({length: 5}, (_, i) =>
+              `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}">${iconHtml}</span>`
+            ).join("");
+            return `<div class="dim-row"><span class="dim-label">${label}</span><span class="dim-icons-row">${iconsRow}</span></div>`;
+          }).join("")}
+        </div>
       </div>` : "";
     const replies = review.replies || [];
     const totalReplies = replies.length;
@@ -2785,7 +2781,6 @@ function loadReviews(courseId) {
         : "Reply";
     const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
-    // === 判斷這則評論是不是「我」發的 ===
     const isMyReview = currentUser && review.author === getDisplayName(currentUser);
     const myActionsHtml = isMyReview ? `
       <div class="my-review-actions">
@@ -2794,6 +2789,7 @@ function loadReviews(courseId) {
       </div>
     ` : "";
 
+    // 💡 完美同步：確保個別評論不再渲染重複的 .review-rating-line 與大星星
     reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
@@ -2804,14 +2800,10 @@ function loadReviews(courseId) {
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
-                  <span class="review-language" title="${escapeHtml(review.language)}" aria-label="${escapeHtml(review.language)}">${translateIcon()}</span>
+                  
                 </div>
             </div>
             
-            <div class="review-rating-line">
-                <span class="review-rating">${starsHtml}</span>
-                <span class="review-score">${(review.rating || 0).toFixed(1)}</span>
-            </div>
             ${dimRatingsHtml}
             
             <div id="text-display-${review.id}">

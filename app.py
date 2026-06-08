@@ -1456,11 +1456,22 @@ def create_app():
     @login_required
     def api_submit_review(course_id):
         course = Course.query.get_or_404(course_id)
-        data = request.get_json(silent=True) or request.form
-        comment = str(data.get("comment", data.get("text", ""))).strip()
         section = course.latest_section
         if not section:
             return jsonify({"error": "This course has no section to review."}), 400
+
+        # 💡 核心安全檢查：去資料庫查這個人是不是已經投過票了
+        existing_review = Review.query.filter_by(
+            section_id=section.section_id,
+            user_id=current_user.id
+        ).first()
+        
+        if existing_review:
+            return jsonify({"error": "You have already submitted a review for this course. Multiple reviews are not allowed."}), 400
+
+        # ---- 底下維持你原本的計算與防禦邏輯 ----
+        data = request.get_json(silent=True) or request.form
+        comment = str(data.get("comment", data.get("text", ""))).strip()
 
         def parse_dim(key):
             try:
@@ -1489,8 +1500,14 @@ def create_app():
             rating_solidity=rating_solidity,
             text=comment,
         )
-        db.session.add(review)
-        db.session.commit()
+        
+        try:
+            db.session.add(review)
+            db.session.commit()
+        except IntegrityError: # 雙重保險：如果因併發衝突觸發資料庫 Unique 限制
+            db.session.rollback()
+            return jsonify({"error": "You have already reviewed this course."}), 400
+
         return jsonify({
             "review": serialize_review(review),
             "course": serialize_course(course),
