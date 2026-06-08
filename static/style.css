@@ -5270,3 +5270,218 @@ body.schedule-open #scheduleToggleBtn {
   outline: 3px solid rgba(255, 153, 181, 0.38);
   outline-offset: 3px;
 }
+/* ── Multi-dimension Rating Form ── */
+.multi-rating-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin-top: 6px;
+}
+
+.rating-dimension {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rating-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.rating-dimension .star-rating {
+  display: flex;
+  gap: 3px;
+}
+
+/* icon button base */
+.rating-dimension .star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px;
+  line-height: 1;
+  transition: transform 0.12s;
+  display: flex;
+  align-items: center;
+}
+
+.rating-dimension .star:hover {
+  transform: scale(1.2);
+}
+
+/* PNG icons in form — greyscale when inactive, full color when active */
+.rating-dimension .star .dim-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  opacity: 0.25;
+  transition: filter 0.15s;
+}
+
+.rating-dimension .star.active .dim-icon,
+.rating-dimension .star:hover .dim-icon {
+  opacity: 1;
+}
+
+/* emoji icons in form */
+.rating-dimension .star .dim-emoji {
+  font-size: 1.3rem;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+
+.rating-dimension .star.active .dim-emoji,
+.rating-dimension .star:hover .dim-emoji {
+  opacity: 1;
+}
+
+/* ── Dimension Ratings in Review Card ── */
+.review-dim-ratings {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 12px 0 16px !important;
+  background-color: #ffefbe !important; /* 保留你原有的可愛淺藍底色 */
+  border: 1px solid #000000 !important;   /* 保留你原有的極簡黑邊 */
+  width: 100% !important;
+  max-width: 600px !important;          /* 保留 600px 寬度 */
+  min-height: 110px !important;         /* 稍微增加一點點高度以容納英文標註 */
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+  justify-content: flex-start !important;
+}
+
+.review-dim-header-label {
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  color: #4f67b1 !important;       
+  letter-spacing: 0.06em !important; 
+  padding-bottom: 4px !important;
+  margin-bottom: 2px !important;
+  width: 100% !important;
+}
+
+.review-dim-body-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important; /* 完美切分左二右二 */
+  gap: 6px 24px !important;
+  width: 100% !important;
+}
+
+.dim-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important; /* 文字靠左，香蕉/星星圖示靠右 */
+  width: 100% !important;
+}
+
+.dim-label {
+  font-size: 0.88rem !important;
+  color: #2b2f44 !important;
+  font-weight: 700 !important;
+  min-width: 70px !important;
+}
+
+.dim-icons-row {
+  display: flex !important;
+  gap: 3px !important;
+  align-items: center !important;
+}
+
+.dim-icon-wrap {
+  display: inline-flex !important;
+}
+
+.dim-icon-wrap .dim-icon-unit {
+  width: 22px !important; /* 微調圖示大小讓 2x2 格局更精美精緻 */
+  height: 22px !important;
+  object-fit: contain !important;
+  transition: filter 0.1s, opacity 0.1s !important;
+}
+
+.dim-icon-wrap.inactive .dim-icon-unit {
+  opacity: 0.22 !important;
+  filter: grayscale(1) !important; /* 未滿的分數稍微呈現灰色透明，視覺更有層次 */
+}
+
+.dim-icon-wrap .dim-emoji-unit {
+  font-size: 1rem;
+  transition: opacity 0.1s;
+}
+
+.dim-icon-wrap.inactive .dim-emoji-unit {
+  opacity: 0.25;
+}
+
+/* ── Dimension Breakdown in Detail Card ── */
+.dim-breakdown {
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 12px;
+}
+
+.dim-breakdown-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.dim-breakdown-row {
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dim-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text, #1f2937);
+  min-width: 56px;
+  margin-bottom: 10px;
+}
+
+.dim-ratings{
+  display:flex;
+  gap:20px;
+}
+
+.dim-bar-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.dim-bar-emoji {
+  font-size: 0.95rem;
+}
+
+.dim-bar-track {
+  flex: 1;
+  height: 7px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dim-bar-fill {
+  display: block;
+  height: 100%;
+  background: #4f67b1;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.dim-bar-score {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+  min-width: 24px;
+  text-align: right;
+  margin-top: -8px;
+}

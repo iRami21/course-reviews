@@ -459,6 +459,7 @@
             </div>
             <p class="rating-summary-count" id="detailReviewCount"></p>
             <div class="rating-breakdown" id="ratingBreakdown"></div>
+            <div class="dim-breakdown" id="dimBreakdown"></div>
           </aside>
         </div>
 
@@ -476,33 +477,48 @@
             style="display: none"
           >
             <div class="form-group">
-              <label for="rating">Rating:</label>
-              <div class="star-rating" onmouseleave="updateStarDisplay()">
-                <button type="button" class="star" onclick="setRating(1)" onmouseenter="previewRating(1)" onfocus="previewRating(1)" aria-label="1 star">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8z" />
-                  </svg>
-                </button>
-                <button type="button" class="star" onclick="setRating(2)" onmouseenter="previewRating(2)" onfocus="previewRating(2)" aria-label="2 stars">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8z" />
-                  </svg>
-                </button>
-                <button type="button" class="star" onclick="setRating(3)" onmouseenter="previewRating(3)" onfocus="previewRating(3)" aria-label="3 stars">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8z" />
-                  </svg>
-                </button>
-                <button type="button" class="star" onclick="setRating(4)" onmouseenter="previewRating(4)" onfocus="previewRating(4)" aria-label="4 stars">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8z" />
-                  </svg>
-                </button>
-                <button type="button" class="star" onclick="setRating(5)" onmouseenter="previewRating(5)" onfocus="previewRating(5)" aria-label="5 stars">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8z" />
-                  </svg>
-                </button>
+              <label>Rating:</label>
+              <div class="multi-rating-grid">
+                <div class="rating-dimension">
+                  <span class="rating-label">Quality</span>
+                  <div class="star-rating" id="starsQuality" data-dim="Quality" onmouseleave="updateDimStars('Quality')">
+                    <button type="button" class="star" onclick="setDimRating('Quality',1)" onmouseenter="previewDimRating('Quality',1)" aria-label="1"><img src="/static/icons/award.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Quality',2)" onmouseenter="previewDimRating('Quality',2)" aria-label="2"><img src="/static/icons/award.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Quality',3)" onmouseenter="previewDimRating('Quality',3)" aria-label="3"><img src="/static/icons/award.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Quality',4)" onmouseenter="previewDimRating('Quality',4)" aria-label="4"><img src="/static/icons/award.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Quality',5)" onmouseenter="previewDimRating('Quality',5)" aria-label="5"><img src="/static/icons/award.png" class="dim-icon"></button>
+                  </div>
+                </div>
+                <div class="rating-dimension">
+                  <span class="rating-label">Sweetness</span>
+                  <div class="star-rating" id="starsSweetness" data-dim="Sweetness" onmouseleave="updateDimStars('Sweetness')">
+                    <button type="button" class="star" onclick="setDimRating('Sweetness',1)" onmouseenter="previewDimRating('Sweetness',1)" aria-label="1"><img src="/static/icons/candy.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Sweetness',2)" onmouseenter="previewDimRating('Sweetness',2)" aria-label="2"><img src="/static/icons/candy.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Sweetness',3)" onmouseenter="previewDimRating('Sweetness',3)" aria-label="3"><img src="/static/icons/candy.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Sweetness',4)" onmouseenter="previewDimRating('Sweetness',4)" aria-label="4"><img src="/static/icons/candy.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Sweetness',5)" onmouseenter="previewDimRating('Sweetness',5)" aria-label="5"><img src="/static/icons/candy.png" class="dim-icon"></button>
+                  </div>
+                </div>
+                <div class="rating-dimension">
+                  <span class="rating-label">Coolness</span>
+                  <div class="star-rating" id="starsCoolness" data-dim="Coolness" onmouseleave="updateDimStars('Coolness')">
+                    <button type="button" class="star" onclick="setDimRating('Coolness',1)" onmouseenter="previewDimRating('Coolness',1)" aria-label="1"><img src="/static/icons/cool.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Coolness',2)" onmouseenter="previewDimRating('Coolness',2)" aria-label="2"><img src="/static/icons/cool.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Coolness',3)" onmouseenter="previewDimRating('Coolness',3)" aria-label="3"><img src="/static/icons/cool.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Coolness',4)" onmouseenter="previewDimRating('Coolness',4)" aria-label="4"><img src="/static/icons/cool.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Coolness',5)" onmouseenter="previewDimRating('Coolness',5)" aria-label="5"><img src="/static/icons/cool.png" class="dim-icon"></button>
+                  </div>
+                </div>
+                <div class="rating-dimension">
+                  <span class="rating-label">Solidity</span>
+                  <div class="star-rating" id="starsSolidity" data-dim="Solidity" onmouseleave="updateDimStars('Solidity')">
+                    <button type="button" class="star" onclick="setDimRating('Solidity',1)" onmouseenter="previewDimRating('Solidity',1)" aria-label="1"><img src="/static/icons/bicep.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Solidity',2)" onmouseenter="previewDimRating('Solidity',2)" aria-label="2"><img src="/static/icons/bicep.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Solidity',3)" onmouseenter="previewDimRating('Solidity',3)" aria-label="3"><img src="/static/icons/bicep.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Solidity',4)" onmouseenter="previewDimRating('Solidity',4)" aria-label="4"><img src="/static/icons/bicep.png" class="dim-icon"></button>
+                    <button type="button" class="star" onclick="setDimRating('Solidity',5)" onmouseenter="previewDimRating('Solidity',5)" aria-label="5"><img src="/static/icons/bicep.png" class="dim-icon"></button>
+                  </div>
+                </div>
               </div>
               <input type="hidden" id="ratingInput" value="0" />
             </div>

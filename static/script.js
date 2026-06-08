@@ -6,6 +6,7 @@ let currentViewMode = 'browse';
 // favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
 let favoritesCache = [];
 let selectedRating = 0;
+const selectedDimRatings = { Quality: 0, Sweetness: 0, Coolness: 0, Solidity: 0 };
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
@@ -484,19 +485,6 @@ function getDefaultProfile(username) {
 
 function getDisplayName(user) {
   return typeof user === "string" ? user : user?.username;
-}
-
-function translateIcon() {
-  return `
-    <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 8 6 6"></path>
-      <path d="m4 14 6-6 2-3"></path>
-      <path d="M2 5h12"></path>
-      <path d="M7 2h1"></path>
-      <path d="m22 22-5-10-5 10"></path>
-      <path d="M14 18h6"></path>
-    </svg>
-  `;
 }
 
 function heartIcon() {
@@ -2716,22 +2704,43 @@ function renderRatingBreakdown(reviews) {
   const breakdown = document.getElementById("ratingBreakdown");
   const total = reviews.length;
   breakdown.innerHTML = "";
+  renderDimBreakdown(reviews);
+}
 
-  for (let rating = 5; rating >= 1; rating -= 1) {
-    const count = reviews.filter((review) => review.rating === rating).length;
-    const percent = total > 0 ? (count / total) * 100 : 0;
-    const row = document.createElement("div");
-    row.className = "rating-breakdown-row";
-    row.innerHTML = `
-      <span class="rating-breakdown-label">${rating}${starIcon()}</span>
-      <div class="rating-track">
-        <span class="rating-bar" style="width: ${percent}%"></span>
-      </div>
-      <span class="rating-breakdown-count">${count}</span>
-    `;
+function renderDimBreakdown(reviews) {
+  const container = document.getElementById("dimBreakdown");
+  if (!container) return;
 
-    breakdown.appendChild(row);
-  }
+  const dims = [
+    { key: "ratingQuality",   label: "Quality", img: "/static/icons/award.png" },
+    { key: "ratingSweetness", label: "Sweetness", img: "/static/icons/candy.png" },
+    { key: "ratingCoolness",  label: "Coolness", img: "/static/icons/cool.png"  },
+    { key: "ratingSolidity",  label: "Solidaty", img: "/static/icons/bicep.png" },
+  ];
+
+  const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
+  if (rated.length === 0) { container.innerHTML = ""; return; }
+
+  container.innerHTML = `
+    <div class="dim-breakdown-title">Dimension Averages</div>
+    ${dims.map(d => {
+      const avg = rated.reduce((s, r) => s + (r[d.key] || 0), 0) / rated.length;
+      const pct = (avg / 5) * 100;
+      const iconHtml = d.emoji
+        ? `<span class="dim-bar-emoji">${d.emoji}</span>`
+        : `<img src="${d.img}" class="dim-bar-icon">`;
+      return `
+        <div class="dim-breakdown-row">
+          <span class="dim-bar-label">${iconHtml} ${d.label}</span>
+          <div class="dim-ratings">
+            <div class="dim-bar-track">
+              <span class="dim-bar-fill" style="width:${pct}%"></span>
+            </div>
+            <span class="dim-bar-score">${avg.toFixed(1)}</span>
+          </div>
+        </div>`;
+    }).join("")}
+  `;
 }
 
 // Load reviews
@@ -2740,6 +2749,26 @@ function loadReviews(courseId) {
 
   const reviewsList = document.getElementById("reviewsList");
   reviewsList.innerHTML = "";
+
+  // ---- 💡 前端優化控管：控管「Write a Review」按鈕的狀態 ----
+  const addReviewBtn = document.querySelector(".btn-add-review");
+  if (addReviewBtn) {
+    // 檢查評論名單裡，有沒有人的名字跟當前登入的 currentUser 一模一樣
+    const hasIReviewed = currentUser && reviews.some(r => r.author === getDisplayName(currentUser));
+    
+    if (hasIReviewed) {
+      addReviewBtn.disabled = true;
+      addReviewBtn.style.opacity = "0.5";
+      addReviewBtn.style.cursor = "not-allowed";
+      addReviewBtn.textContent = "Already Reviewed"; // 改成已評價
+    } else {
+      addReviewBtn.disabled = false;
+      addReviewBtn.style.opacity = "1";
+      addReviewBtn.style.cursor = "pointer";
+      addReviewBtn.textContent = "Write a Review";
+    }
+  }
+
   updateStudentReviewStats(reviews);
   updateDetailSocialStats(courseId);
 
@@ -2753,7 +2782,32 @@ function loadReviews(courseId) {
     const reviewItem = document.createElement("div");
     reviewItem.className = "review-item";
 
-    const starsHtml = generateStars(review.rating);
+    const DIM_ICONS = {
+      ratingQuality:   { img: "/static/icons/award.png" },
+      ratingSweetness: { img: "/static/icons/candy.png" },
+      ratingCoolness:  { img: "/static/icons/cool.png" },
+      ratingSolidity:  { img: "/static/icons/bicep.png" },
+    };
+    const DIM_LABELS = { ratingQuality: "Quality", ratingSweetness: "Sweetness", ratingCoolness: "Coolness", ratingSolidity: "Solidity" };
+
+    // 💡 精美排版：保留原有 #daecff 與 width 結構，但在各維度圖示最上方增加英文標註 DIMENSION RATINGS
+    const dimRatingsHtml = (review.ratingQuality || review.ratingSweetness || review.ratingCoolness || review.ratingSolidity) ? `
+      <div class="review-dim-ratings">
+        <div class="review-dim-header-label">DIMENSION RATINGS</div>
+        <div class="review-dim-body-grid">
+          ${Object.entries(DIM_LABELS).map(([key, label]) => {
+            const v = review[key] || 0;
+            const icon = DIM_ICONS[key];
+            const iconHtml = icon.emoji
+              ? `<span class="dim-icon-unit dim-emoji-unit">${icon.emoji}</span>`
+              : `<img src="${icon.img}" class="dim-icon-unit">`;
+            const iconsRow = Array.from({length: 5}, (_, i) =>
+              `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}">${iconHtml}</span>`
+            ).join("");
+            return `<div class="dim-row"><span class="dim-label">${label}</span><span class="dim-icons-row">${iconsRow}</span></div>`;
+          }).join("")}
+        </div>
+      </div>` : "";
     const replies = review.replies || [];
     const totalReplies = replies.length;
     const replyCountText =
@@ -2762,7 +2816,6 @@ function loadReviews(courseId) {
         : "Reply";
     const showReplies = expandedReplyGroups.has(`${review.id}:root`);
 
-    // === 判斷這則評論是不是「我」發的 ===
     const isMyReview = currentUser && review.author === getDisplayName(currentUser);
     const myActionsHtml = isMyReview ? `
       <div class="my-review-actions">
@@ -2771,6 +2824,7 @@ function loadReviews(courseId) {
       </div>
     ` : "";
 
+    // 💡 完美同步：確保個別評論不再渲染重複的 .review-rating-line 與大星星
     reviewItem.innerHTML = `
             <div class="review-header">
                 <div class="review-meta">
@@ -2781,14 +2835,11 @@ function loadReviews(courseId) {
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
-                  <span class="review-language" title="${escapeHtml(review.language)}" aria-label="${escapeHtml(review.language)}">${translateIcon()}</span>
+                  
                 </div>
             </div>
             
-            <div class="review-rating-line">
-                <span class="review-rating">${starsHtml}</span>
-                <span class="review-score">${review.rating.toFixed(1)}</span>
-            </div>
+            ${dimRatingsHtml}
             
             <div id="text-display-${review.id}">
               ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
@@ -3230,8 +3281,8 @@ function openReviewForm() {
   }
   document.getElementById("reviewForm").style.display = "flex";
   selectedRating = 0;
+  Object.keys(selectedDimRatings).forEach(d => { selectedDimRatings[d] = 0; updateDimStars(d); });
   document.getElementById("reviewForm").reset();
-  updateStarDisplay();
   document.getElementById("reviewText").focus();
 }
 
@@ -3239,30 +3290,36 @@ function closeReviewModal() {
   document.getElementById("reviewForm").style.display = "none";
   document.getElementById("reviewForm").reset();
   selectedRating = 0;
-  updateStarDisplay();
+  Object.keys(selectedDimRatings).forEach(d => { selectedDimRatings[d] = 0; updateDimStars(d); });
 }
 
-// Set rating
-function setRating(rating) {
-  selectedRating = rating;
-  document.getElementById("ratingInput").value = rating;
-  updateStarDisplay();
+// Set rating for a single dimension
+function setDimRating(dim, value) {
+  selectedDimRatings[dim] = value;
+  updateDimStars(dim);
 }
 
-function previewRating(rating) {
-  updateStarDisplay(rating);
-}
-
-function updateStarDisplay(displayRating = selectedRating) {
-  const stars = document.querySelectorAll(".star-rating .star");
-  stars.forEach((star, index) => {
-    if (index < displayRating) {
-      star.classList.add("active");
-    } else {
-      star.classList.remove("active");
-    }
+function previewDimRating(dim, value) {
+  const container = document.getElementById(`stars${dim}`);
+  if (!container) return;
+  container.querySelectorAll(".star").forEach((s, i) => {
+    s.classList.toggle("active", i < value);
   });
 }
+
+function updateDimStars(dim, displayValue) {
+  const val = displayValue !== undefined ? displayValue : selectedDimRatings[dim];
+  const container = document.getElementById(`stars${dim}`);
+  if (!container) return;
+  container.querySelectorAll(".star").forEach((s, i) => {
+    s.classList.toggle("active", i < val);
+  });
+}
+
+// Legacy wrappers (kept for safety)
+function setRating(rating) { selectedRating = rating; }
+function previewRating(rating) {}
+function updateStarDisplay() {}
 
 // Submit review
 async function submitReview(event) {
@@ -3273,8 +3330,9 @@ async function submitReview(event) {
     return;
   }
 
-  if (selectedRating === 0) {
-    alert("Please select a rating.");
+  if (selectedDimRatings.Quality === 0 || selectedDimRatings.Sweetness === 0 ||
+      selectedDimRatings.Coolness === 0 || selectedDimRatings.Solidity === 0) {
+    alert("Please rate all four dimensions.");
     return;
   }
 
@@ -3285,7 +3343,10 @@ async function submitReview(event) {
     const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
       method: "POST",
       body: JSON.stringify({
-        rating: selectedRating,
+        ratingQuality: selectedDimRatings.Quality,
+        ratingSweetness: selectedDimRatings.Sweetness,
+        ratingCoolness: selectedDimRatings.Coolness,
+        ratingSolidity: selectedDimRatings.Solidity,
         text: reviewText,
         language: "English",
       }),
