@@ -177,6 +177,14 @@ def create_app():
             db.session.execute(
                 text("ALTER TABLE Review ADD COLUMN is_visible BOOLEAN DEFAULT 1")
             )
+        if "ratingQuality" not in columns:
+            db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingQuality INTEGER"))
+        if "ratingSweetness" not in columns:
+            db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingSweetness INTEGER"))
+        if "ratingCoolness" not in columns:
+            db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingCoolness INTEGER"))
+        if "ratingSolidity" not in columns:
+            db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingSolidity INTEGER"))
         db.session.commit()
 
         rows = Review.query.filter((Review.reaction_counts.is_(None)) | (Review.reaction_counts == ""))
@@ -451,6 +459,10 @@ def create_app():
                 "gender": author.gender if author else "undisclosed",
             },
             "rating": review.rating,
+            "ratingQuality": review.rating_quality,
+            "ratingSweetness": review.rating_sweetness,
+            "ratingCoolness": review.rating_coolness,
+            "ratingSolidity": review.rating_solidity,
             "date": review.created_at.strftime("%Y-%m-%d"),
             "sectionLabel": section_label,
             "language": review.language or "English",
@@ -1211,14 +1223,25 @@ def create_app():
 
         section_id = section.section_id
         rating = None
+        rating_quality = rating_sweetness = rating_coolness = rating_solidity = None
         if parent_id is None:
-            rating_raw = str(payload.get("rating", request.form.get("rating", ""))).strip()
-            try:
-                rating = int(rating_raw)
-            except ValueError:
-                return jsonify({"error": "Rating must be a number between 1 and 5."}), 400
-            if rating < 1 or rating > 5:
-                return jsonify({"error": "Rating must be between 1 and 5."}), 400
+            def parse_rating(key):
+                val = str(payload.get(key, request.form.get(key, ""))).strip()
+                try:
+                    v = int(val)
+                    return v if 1 <= v <= 5 else None
+                except ValueError:
+                    return None
+
+            rating_quality   = parse_rating("ratingQuality")
+            rating_sweetness = parse_rating("ratingSweetness")
+            rating_coolness  = parse_rating("ratingCoolness")
+            rating_solidity  = parse_rating("ratingSolidity")
+
+            scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
+            if not scores:
+                return jsonify({"error": "Please rate all four dimensions."}), 400
+            rating = round(sum(scores) / len(scores))
         else:
             parent_review = Review.query.get(parent_id)
             if parent_review is None:
@@ -1232,6 +1255,10 @@ def create_app():
             user_id=current_user.id,
             parent_id=parent_id,
             rating=rating,
+            rating_quality=rating_quality,
+            rating_sweetness=rating_sweetness,
+            rating_coolness=rating_coolness,
+            rating_solidity=rating_solidity,
             text=comment,
         )
         db.session.add(review)
@@ -1431,23 +1458,35 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         data = request.get_json(silent=True) or request.form
         comment = str(data.get("comment", data.get("text", ""))).strip()
-        language = str(data.get("language", "English")).strip() or "English"
         section = course.latest_section
         if not section:
             return jsonify({"error": "This course has no section to review."}), 400
 
-        try:
-            rating = int(data.get("rating", ""))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Rating must be a number between 1 and 5."}), 400
+        def parse_dim(key):
+            try:
+                v = int(data.get(key, ""))
+                return v if 1 <= v <= 5 else None
+            except (TypeError, ValueError):
+                return None
 
-        if rating < 1 or rating > 5:
-            return jsonify({"error": "Rating must be between 1 and 5."}), 400
+        rating_quality   = parse_dim("ratingQuality")
+        rating_sweetness = parse_dim("ratingSweetness")
+        rating_coolness  = parse_dim("ratingCoolness")
+        rating_solidity  = parse_dim("ratingSolidity")
+
+        scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
+        if not scores:
+            return jsonify({"error": "Please rate all four dimensions."}), 400
+        rating = round(sum(scores) / len(scores))
 
         review = Review(
             section_id=section.section_id,
             user_id=current_user.id,
             rating=rating,
+            rating_quality=rating_quality,
+            rating_sweetness=rating_sweetness,
+            rating_coolness=rating_coolness,
+            rating_solidity=rating_solidity,
             text=comment,
         )
         db.session.add(review)

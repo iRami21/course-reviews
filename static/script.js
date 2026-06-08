@@ -6,6 +6,7 @@ let currentViewMode = 'browse';
 // favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
 let favoritesCache = [];
 let selectedRating = 0;
+const selectedDimRatings = { Quality: 0, Sweetness: 0, Coolness: 0, Solidity: 0 };
 const expandedReplyGroups = new Set();
 const expandedTextItems = new Set();
 const TEXT_PREVIEW_LIMIT = 200;
@@ -2694,9 +2695,44 @@ function renderRatingBreakdown(reviews) {
       </div>
       <span class="rating-breakdown-count">${count}</span>
     `;
-
     breakdown.appendChild(row);
   }
+
+  renderDimBreakdown(reviews);
+}
+
+function renderDimBreakdown(reviews) {
+  const container = document.getElementById("dimBreakdown");
+  if (!container) return;
+
+  const dims = [
+    { key: "ratingQuality",   label: "品質", img: "/static/icons/award.png" },
+    { key: "ratingSweetness", label: "甜度", img: "/static/icons/candy.png" },
+    { key: "ratingCoolness",  label: "涼度", img: "/static/icons/cool.png"  },
+    { key: "ratingSolidity",  label: "紮實", img: "/static/icons/bicep.png" },
+  ];
+
+  const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
+  if (rated.length === 0) { container.innerHTML = ""; return; }
+
+  container.innerHTML = `
+    <div class="dim-breakdown-title">Dimension Averages</div>
+    ${dims.map(d => {
+      const avg = rated.reduce((s, r) => s + (r[d.key] || 0), 0) / rated.length;
+      const pct = (avg / 5) * 100;
+      const iconHtml = d.emoji
+        ? `<span class="dim-bar-emoji">${d.emoji}</span>`
+        : `<img src="${d.img}" class="dim-bar-icon">`;
+      return `
+        <div class="dim-breakdown-row">
+          <span class="dim-bar-label">${iconHtml} ${d.label}</span>
+          <div class="dim-bar-track">
+            <span class="dim-bar-fill" style="width:${pct}%"></span>
+          </div>
+          <span class="dim-bar-score">${avg.toFixed(1)}</span>
+        </div>`;
+    }).join("")}
+  `;
 }
 
 // Load reviews
@@ -2718,7 +2754,29 @@ function loadReviews(courseId) {
     const reviewItem = document.createElement("div");
     reviewItem.className = "review-item";
 
-    const starsHtml = generateStars(review.rating);
+    const starsHtml = generateStars(review.rating || 0);
+    const DIM_ICONS = {
+      ratingQuality:   { img: "/static/icons/award.png" },
+      ratingSweetness: { img: "/static/icons/candy.png" },
+      ratingCoolness:  { img: "/static/icons/cool.png" },
+      ratingSolidity:  { img: "/static/icons/bicep.png" },
+    };
+    const DIM_LABELS = { ratingQuality: "Quality", ratingSweetness: "Sweeetness", ratingCoolness: "Coolness", ratingSolidity: "Solidity" };
+
+    const dimRatingsHtml = (review.ratingQuality || review.ratingSweetness || review.ratingCoolness || review.ratingSolidity) ? `
+      <div class="review-dim-ratings">
+        ${Object.entries(DIM_LABELS).map(([key, label]) => {
+          const v = review[key] || 0;
+          const icon = DIM_ICONS[key];
+          const iconHtml = icon.emoji
+            ? `<span class="dim-icon-unit dim-emoji-unit">${icon.emoji}</span>`
+            : `<img src="${icon.img}" class="dim-icon-unit">`;
+          const iconsRow = Array.from({length: 5}, (_, i) =>
+            `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}">${iconHtml}</span>`
+          ).join("");
+          return `<div class="dim-row"><div class="dim-label"><span class="dim-label">${label}</span></div><div class="dim-icon"><span class="dim-icons-row">${iconsRow}</span></div></div>`;
+        }).join("")}
+      </div>` : "";
     const replies = review.replies || [];
     const totalReplies = replies.length;
     const replyCountText =
@@ -2752,8 +2810,9 @@ function loadReviews(courseId) {
             
             <div class="review-rating-line">
                 <span class="review-rating">${starsHtml}</span>
-                <span class="review-score">${review.rating.toFixed(1)}</span>
+                <span class="review-score">${(review.rating || 0).toFixed(1)}</span>
             </div>
+            ${dimRatingsHtml}
             
             <div id="text-display-${review.id}">
               ${renderExpandableText(review.text, `review-${review.id}`, "review-text")}
@@ -3195,8 +3254,8 @@ function openReviewForm() {
   }
   document.getElementById("reviewForm").style.display = "flex";
   selectedRating = 0;
+  Object.keys(selectedDimRatings).forEach(d => { selectedDimRatings[d] = 0; updateDimStars(d); });
   document.getElementById("reviewForm").reset();
-  updateStarDisplay();
   document.getElementById("reviewText").focus();
 }
 
@@ -3204,30 +3263,36 @@ function closeReviewModal() {
   document.getElementById("reviewForm").style.display = "none";
   document.getElementById("reviewForm").reset();
   selectedRating = 0;
-  updateStarDisplay();
+  Object.keys(selectedDimRatings).forEach(d => { selectedDimRatings[d] = 0; updateDimStars(d); });
 }
 
-// Set rating
-function setRating(rating) {
-  selectedRating = rating;
-  document.getElementById("ratingInput").value = rating;
-  updateStarDisplay();
+// Set rating for a single dimension
+function setDimRating(dim, value) {
+  selectedDimRatings[dim] = value;
+  updateDimStars(dim);
 }
 
-function previewRating(rating) {
-  updateStarDisplay(rating);
-}
-
-function updateStarDisplay(displayRating = selectedRating) {
-  const stars = document.querySelectorAll(".star-rating .star");
-  stars.forEach((star, index) => {
-    if (index < displayRating) {
-      star.classList.add("active");
-    } else {
-      star.classList.remove("active");
-    }
+function previewDimRating(dim, value) {
+  const container = document.getElementById(`stars${dim}`);
+  if (!container) return;
+  container.querySelectorAll(".star").forEach((s, i) => {
+    s.classList.toggle("active", i < value);
   });
 }
+
+function updateDimStars(dim, displayValue) {
+  const val = displayValue !== undefined ? displayValue : selectedDimRatings[dim];
+  const container = document.getElementById(`stars${dim}`);
+  if (!container) return;
+  container.querySelectorAll(".star").forEach((s, i) => {
+    s.classList.toggle("active", i < val);
+  });
+}
+
+// Legacy wrappers (kept for safety)
+function setRating(rating) { selectedRating = rating; }
+function previewRating(rating) {}
+function updateStarDisplay() {}
 
 // Submit review
 async function submitReview(event) {
@@ -3238,8 +3303,9 @@ async function submitReview(event) {
     return;
   }
 
-  if (selectedRating === 0) {
-    alert("Please select a rating.");
+  if (selectedDimRatings.Quality === 0 || selectedDimRatings.Sweetness === 0 ||
+      selectedDimRatings.Coolness === 0 || selectedDimRatings.Solidity === 0) {
+    alert("Please rate all four dimensions.");
     return;
   }
 
@@ -3250,7 +3316,10 @@ async function submitReview(event) {
     const result = await apiRequest(`/api/courses/${currentCourseId}/review`, {
       method: "POST",
       body: JSON.stringify({
-        rating: selectedRating,
+        ratingQuality: selectedDimRatings.Quality,
+        ratingSweetness: selectedDimRatings.Sweetness,
+        ratingCoolness: selectedDimRatings.Coolness,
+        ratingSolidity: selectedDimRatings.Solidity,
         text: reviewText,
         language: "English",
       }),

@@ -5103,3 +5103,188 @@ body.schedule-open #scheduleToggleBtn {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+/* ── Multi-dimension Rating Form ── */
+.multi-rating-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin-top: 6px;
+}
+
+.rating-dimension {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rating-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.rating-dimension .star-rating {
+  display: flex;
+  gap: 3px;
+}
+
+/* icon button base */
+.rating-dimension .star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px;
+  line-height: 1;
+  transition: transform 0.12s;
+  display: flex;
+  align-items: center;
+}
+
+.rating-dimension .star:hover {
+  transform: scale(1.2);
+}
+
+/* PNG icons in form — greyscale when inactive, full color when active */
+.rating-dimension .star .dim-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  opacity: 0.25;
+  transition: filter 0.15s;
+}
+
+.rating-dimension .star.active .dim-icon,
+.rating-dimension .star:hover .dim-icon {
+  opacity: 1;
+}
+
+/* emoji icons in form */
+.rating-dimension .star .dim-emoji {
+  font-size: 1.3rem;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+
+.rating-dimension .star.active .dim-emoji,
+.rating-dimension .star:hover .dim-emoji {
+  opacity: 1;
+}
+
+/* ── Dimension Ratings in Review Card ── */
+.review-dim-ratings {
+  display: grid;
+  grid-template-columns: 0.2fr 0.2fr;
+  gap: 5px 16px;
+  margin: 6px 0 10px;
+}
+
+.dim-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-around;+
+}
+
+.dim-label {
+  font-size: 1rem;
+  color: var(--text-muted, #6b7280);
+  font-weight: 600;
+  min-width: 28px;
+}
+
+.dim-icons-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.dim-icon-wrap {
+  display: inline-flex;
+}
+
+.dim-icon-wrap .dim-icon-unit {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+  transition: filter 0.1s, opacity 0.1s;
+}
+
+.dim-icon-wrap.inactive .dim-icon-unit {
+  opacity: 0.25;
+}
+
+.dim-icon-wrap .dim-emoji-unit {
+  font-size: 1rem;
+  transition: opacity 0.1s;
+}
+
+.dim-icon-wrap.inactive .dim-emoji-unit {
+  opacity: 0.25;
+}
+
+/* ── Dimension Breakdown in Detail Card ── */
+.dim-breakdown {
+  margin-top: 14px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 12px;
+}
+
+.dim-breakdown-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.dim-breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dim-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text, #1f2937);
+  min-width: 56px;
+}
+
+.dim-bar-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.dim-bar-emoji {
+  font-size: 0.95rem;
+}
+
+.dim-bar-track {
+  flex: 1;
+  height: 7px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dim-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4f67b1, #7b93d3);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.dim-bar-score {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+  min-width: 24px;
+  text-align: right;
+}
