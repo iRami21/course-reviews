@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import sqlite3
+from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import (
@@ -35,6 +37,7 @@ from utils.course_utils import (
     format_grade_tag,
     is_valid_email,
     parse_sport_activity,
+    parse_term_from_filename,
 )
 from utils.department_filters import (
     DEPARTMENT_CATEGORY_ORDER,
@@ -403,7 +406,8 @@ def create_app():
             "department": course.department or "General",
             "credits": course.credits or 0,
             "grade": course.grade or "",
-            "requirement": course.requirement or "",
+            "requirement": course.requirement or course.course_type or "",
+            "courseType": course.course_type or "",
             "englishTaught": bool(course.english_taught),
             "rating": round(float(average_rating or 0), 1),
             "reviewCount": int(review_count or 0),
@@ -425,6 +429,175 @@ def create_app():
             ],
             "description": getattr(course, "description", None) or "No description available.",
         }
+
+    raw_course_meeting_cache = {}
+
+    def parse_course_room(raw_room):
+        room_text = str(raw_room or "").strip()
+        if not room_text:
+            return "", ""
+
+        match = re.match(r"^([^()]+?)(?:\(([^()]*)\))?$", room_text)
+        if not match:
+            return room_text, ""
+
+        time_text = re.sub(r"^([一二三四五六日])", r"\1 ", match.group(1).strip())
+        location_text = (match.group(2) or "").strip()
+        return time_text, location_text
+
+    def get_raw_course_meeting(code, year, semester):
+        if not (code and year and semester):
+            return {"classTime": "", "location": "", "rawRoom": ""}
+
+        cache_key = (str(code), int(year), int(semester))
+        if cache_key in raw_course_meeting_cache:
+            return raw_course_meeting_cache[cache_key]
+
+        result = {"classTime": "", "location": "", "rawRoom": ""}
+        base_dir = Path(app.root_path) / "NSYSU Course Database"
+        if not base_dir.exists():
+            raw_course_meeting_cache[cache_key] = result
+            return result
+
+        for db_file in sorted(base_dir.glob("NSYSU_Course_*.db")):
+            file_year, file_semester = parse_term_from_filename(db_file)
+            if file_year != int(year) or file_semester != int(semester):
+                continue
+            conn = None
+            try:
+                conn = sqlite3.connect(db_file)
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT room, classTime FROM course_list WHERE id = ? LIMIT 1",
+                    (str(code),),
+                ).fetchone()
+            except sqlite3.Error:
+                row = None
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            if row:
+                parsed_time, parsed_location = parse_course_room(row["room"])
+                result = {
+                    "classTime": parsed_time or str(row["classTime"] or "").strip(),
+                    "location": parsed_location,
+                    "rawRoom": str(row["room"] or "").strip(),
+                }
+                break
+
+        raw_course_meeting_cache[cache_key] = result
+        return result
+
+    def display_course_group_key(course):
+        title_key = re.sub(r"\s+", " ", (course.title or course.name or "").strip()).casefold()
+        professor_key = re.sub(r"\s+", " ", clean_professor_name(course.professor or "").strip()).casefold()
+        return (title_key, professor_key)
+
+    def build_course_display_groups(courses):
+        groups = []
+        group_lookup = {}
+        for course in courses:
+            key = display_course_group_key(course)
+            if key not in group_lookup:
+                group_lookup[key] = {"representative": course, "courses": [], "codes": []}
+                groups.append(group_lookup[key])
+            group = group_lookup[key]
+            group["courses"].append(course)
+            if course.code and course.code not in group["codes"]:
+                group["codes"].append(course.code)
+        return groups
+
+    def serialize_course_display_group(group, reviews_by_course=None, favorite_counts=None, favorite_course_ids=None):
+        representative = group["representative"]
+        course_ids = [course.course_id for course in group["courses"]]
+        payload = serialize_course(
+            representative,
+            favorite_counts=favorite_counts,
+            favorite_course_ids=favorite_course_ids,
+        )
+
+        all_ratings = []
+        total_reviews = 0
+        total_comments = 0
+        for course_id in course_ids:
+            serialized_reviews = (reviews_by_course or {}).get(str(course_id), [])
+            total_reviews += len(serialized_reviews)
+            for review in serialized_reviews:
+                total_comments += 1 + len(review.get("replies") or [])
+                rating = review.get("rating")
+                if rating:
+                    all_ratings.append(float(rating))
+
+        departments = []
+        term_details = {}
+        for grouped_course in group["courses"]:
+            for department in grouped_course.departments:
+                if department and department.name and department.name not in departments:
+                    departments.append(department.name)
+            for section in grouped_course.sections:
+                if not (section.roc_year and section.term):
+                    continue
+                term_key = (int(section.roc_year), int(section.term))
+                detail = term_details.setdefault(
+                    term_key,
+                    {"professors": [], "classTimes": [], "locations": [], "rawRooms": []},
+                )
+                for instructor in section.instructors:
+                    professor_name = clean_professor_name(instructor.name if instructor else "")
+                    if professor_name and professor_name not in detail["professors"]:
+                        detail["professors"].append(professor_name)
+                meeting = get_raw_course_meeting(grouped_course.code, term_key[0], term_key[1])
+                if meeting["classTime"] and meeting["classTime"] not in detail["classTimes"]:
+                    detail["classTimes"].append(meeting["classTime"])
+                if meeting["location"] and meeting["location"] not in detail["locations"]:
+                    detail["locations"].append(meeting["location"])
+                if meeting["rawRoom"] and meeting["rawRoom"] not in detail["rawRooms"]:
+                    detail["rawRooms"].append(meeting["rawRoom"])
+
+        history_terms = []
+        for year, term in sorted(term_details.keys(), key=lambda item: (item[0], item[1]), reverse=True):
+            detail = term_details[(year, term)]
+            history_terms.append(
+                {
+                    "year": year,
+                    "semester": term,
+                    "label": f"{year}-S{term}",
+                    "searchValue": f"{year} S{term}",
+                    "professors": detail["professors"],
+                    "professorText": "、".join(detail["professors"]) or "-",
+                    "classTime": "、".join(detail["classTimes"]) or "-",
+                    "location": "、".join(detail["locations"]) or "-",
+                    "rawRoom": "、".join(detail["rawRooms"]),
+                }
+            )
+        latest_term = history_terms[0] if history_terms else None
+
+        payload["codes"] = group["codes"]
+        payload["groupCourseIds"] = course_ids
+        payload["code"] = group["codes"][0] if group["codes"] else payload.get("code", "")
+        if latest_term:
+            payload["year"] = latest_term["year"]
+            payload["semester"] = latest_term["semester"]
+            payload["latestTerm"] = latest_term["label"]
+            payload["professor"] = latest_term["professorText"]
+
+            payload["classTime"] = latest_term["classTime"]
+            payload["location"] = latest_term["location"]
+            payload["rawRoom"] = latest_term["rawRoom"]
+        payload["historyTerms"] = history_terms
+        if departments:
+            payload["department"] = "、".join(departments)
+            existing_tags = payload.get("tags") or []
+            payload["tags"] = [*departments, *[tag for tag in existing_tags if tag not in departments]]
+        payload["reviewCount"] = total_reviews
+        payload["commentTotal"] = total_comments
+        payload["rating"] = round(sum(all_ratings) / len(all_ratings), 1) if all_ratings else 0
+        payload["saveCount"] = int(sum((favorite_counts or {}).get(course_id, 0) for course_id in course_ids))
+        payload["followed"] = any(course_id in (favorite_course_ids or set()) for course_id in course_ids)
+        return payload
 
     def summarize_reactions(reactions):
         counts = {}
@@ -797,29 +970,34 @@ def create_app():
             
         
 
-        total = courses_query.count()
+        all_matching_courses = courses_query.all()
+        course_groups = build_course_display_groups(all_matching_courses)
+        total = len(course_groups)
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = min(page, total_pages)
-        courses_list = courses_query.offset((page - 1) * per_page).limit(per_page).all()
+        page_groups = course_groups[(page - 1) * per_page: page * per_page]
+        courses_list = [course for group in page_groups for course in group["courses"]]
 
         reviews_by_course = {}
         course_ids = [course.course_id for course in courses_list]
+        representative_ids = {group["representative"].course_id for group in page_groups}
         favorite_counts = {}
         favorite_ids = set()
         if course_ids:
+            current_user_id = current_user.id if current_user.is_authenticated else None
             for review in (
                 Review.query
                 .join(Section, Review.section_id == Section.section_id)
                 .filter(
                     Section.course_id.in_(course_ids),
                     Review.parent_id.is_(None),
-                    Review.is_visible.isnot(False),  # FIX: 過濾管理員隱藏的留言
+                    Review.is_visible.isnot(False),
                 )
                 .order_by(Review.created_at.desc())
                 .all()
             ):
                 reviews_by_course.setdefault(str(review.course_id), []).append(
-                    serialize_review(review)
+                    serialize_review(review, current_user_id=current_user_id)
                 )
             favorite_counts = {
                 course_id: total
@@ -843,12 +1021,22 @@ def create_app():
                     )
                 }
 
+        representative_reviews = {
+            str(course_id): reviews_by_course.get(str(course_id), [])
+            for course_id in representative_ids
+        }
+
         return {
             "courses": [
-                serialize_course(course, favorite_counts=favorite_counts, favorite_course_ids=favorite_ids)
-                for course in courses_list
+                serialize_course_display_group(
+                    group,
+                    reviews_by_course=reviews_by_course,
+                    favorite_counts=favorite_counts,
+                    favorite_course_ids=favorite_ids,
+                )
+                for group in page_groups
             ],
-            "reviews": reviews_by_course,
+            "reviews": representative_reviews,
             "pagination": {
                 "page": page,
                 "perPage": per_page,
