@@ -15,206 +15,35 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import Course, Department, Favorite, Instructor, Notification, Offer, Review, ReviewReaction, ReviewReply, Section, Teach, User, db
-
-
-DEPARTMENT_CATEGORY_ORDER = [
-    "通識",
-    "大學部",
-    "碩士班",
-    "碩專班",
-    "博士班",
-    "校際",
-    "其他",
-]
-
-DEPARTMENT_GROUP_FILTERS = {
-    "跨院選修": lambda dept: dept.startswith("跨院選修"),
-    "博雅": lambda dept: dept.startswith("博雅"),
-    "跨院EAP/ESP": lambda dept: dept in {"跨院EAP", "跨院ESP"},
-    "運動健康": lambda dept: dept.startswith("運動健康") or dept.startswith("運動進階"),
-    "英文": lambda dept: dept.startswith("英文"),
-}
-
-OTHER_DEPARTMENT_ORDER = [
-    "AI聯盟(學)",
-    "AI聯盟(碩)",
-    "中學學程",
-    "普通物理小組",
-    "外籍華語",
-    "應用性課程",
-    "西灣學院",
-]
-
-HIDDEN_PROFESSOR_NAMES = {
-    "待聘",
-    "AI聯盟教師",
-    "IGER跨校通識聯盟教師",
-    "華語中心兼任教師",
-    "校際選課",
-}
-
-
-def parse_term_from_filename(path):
-    match = re.search(r"_(\d{4})\.db$", path.name)
-    if not match:
-        return None, None
-
-    term = match.group(1)
-    roc_year = int(term[:3])
-    semester = int(term[3])
-    return roc_year, semester
-
-
-def split_course_name(raw):
-    if not raw:
-        return "", ""
-
-    parts = [part.strip() for part in str(raw).splitlines() if part.strip()]
-    if not parts:
-        return "", ""
-
-    if len(parts) == 1:
-        return parts[0], ""
-
-    return " ".join(parts[1:]), parts[0]
-
-
-def parse_credits(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return int(float(text))
-    except ValueError:
-        return None
-
-
-def is_valid_email(email):
-    return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or "") is not None
-
-
-def parse_sport_activity(title_zh):
-    if not title_zh:
-        return ""
-
-    parts = re.split(r"[：:]", str(title_zh), maxsplit=1)
-    return parts[1].strip() if len(parts) > 1 else str(title_zh).strip()
-
-
-def normalize_grade(value):
-    grade = str(value or "").strip()
-    return grade if grade and grade != "0" else None
-
-
-def parse_requirement(value):
-    if value is None:
-        return None
-
-    try:
-        return "必修" if bool(int(value)) else "選修"
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_bool(value):
-    if value is None:
-        return False
-
-    try:
-        return bool(int(value))
-    except (TypeError, ValueError):
-        return str(value).strip().lower() in {"true", "yes", "y", "1"}
-
-
-def format_grade_tag(grade):
-    if not grade:
-        return None
-
-    return f"{grade}年級" if str(grade).isdigit() else str(grade)
-
-
-def clean_professor_name(professor):
-    names = [
-        name.strip()
-        for name in re.split(r"[,，、]", professor or "")
-        if name.strip()
-    ]
-    visible_names = [
-        name for name in names if name not in HIDDEN_PROFESSOR_NAMES
-    ]
-    return ",".join(visible_names)
-
-
-def split_professor_names(professor):
-    names = [
-        name.strip()
-        for name in re.split(r"[,，、/]+", professor or "")
-        if name.strip()
-    ]
-    return [name for name in dict.fromkeys(names) if name not in HIDDEN_PROFESSOR_NAMES]
-
-
-def classify_department(department):
-    dept = department or ""
-    if dept.startswith("校際"):
-        return "校際"
-
-    if "AI聯盟" in dept or dept == "中學學程":
-        return "其他"
-
-    if dept in {"普通物理小組", "外籍華語", "應用性課程", "西灣學院"}:
-        return "其他"
-
-    if dept == "國際經營學程":
-        return "大學部"
-
-    if dept == "前瞻應材":
-        return "碩士班"
-
-    general_terms = [
-        "博雅",
-        "中文思辨",
-        "英文初級",
-        "英文中級",
-        "英文中高級",
-        "英文高級",
-        "服務學習",
-        "運動健康",
-        "運動進階",
-        "跨院選修",
-        "跨院EAP",
-        "跨院ESP",
-    ]
-    if any(term in dept for term in general_terms):
-        return "通識"
-
-    if "碩專" in dept or "EMBA" in dept or "EMPP" in dept:
-        return "碩專班"
-
-    if "博" in dept or "博士" in dept:
-        return "博士班"
-
-    master_terms = ["碩", "所", "研究所", "產碩", "碩程", "(碩)", "（碩）"]
-    if any(term in dept for term in master_terms):
-        return "碩士班"
-
-    undergrad_terms = [
-        "系",
-        "學士",
-        "學士學程",
-        "人科學程",
-        "(學)",
-        "（學）",
-        "全英班",
-        "院",
-    ]
-    if any(term in dept for term in undergrad_terms):
-        return "大學部"
-
-    return "其他"
+from models import (
+    Course,
+    Department,
+    Favorite,
+    Instructor,
+    Notification,
+    Offer,
+    Review,
+    ReviewReaction,
+    ReviewReply,
+    Section,
+    Teach,
+    User,
+    db,
+)
+from utils.course_utils import (
+    clean_professor_name,
+    format_grade_tag,
+    is_valid_email,
+    parse_sport_activity,
+)
+from utils.department_filters import (
+    DEPARTMENT_CATEGORY_ORDER,
+    DEPARTMENT_GROUP_FILTERS,
+    OTHER_DEPARTMENT_ORDER,
+    PROGRAM_COLLEGE_DEPARTMENTS,
+    UNDERGRAD_COLLEGE_DEPARTMENTS,
+    classify_department,
+)
 
 
 def create_app():
@@ -344,6 +173,10 @@ def create_app():
             db.session.execute(
                 text("ALTER TABLE Review ADD COLUMN reactionCounts TEXT NOT NULL DEFAULT '{}'")
             )
+        if "is_visible" not in columns:
+            db.session.execute(
+                text("ALTER TABLE Review ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+            )
         db.session.commit()
 
         rows = Review.query.filter((Review.reaction_counts.is_(None)) | (Review.reaction_counts == ""))
@@ -364,6 +197,10 @@ def create_app():
             db.session.execute(
                 text("ALTER TABLE ReviewReply ADD COLUMN userReactions TEXT NOT NULL DEFAULT '{}'")
             )
+        if "is_visible" not in reply_columns:
+            db.session.execute(
+                text("ALTER TABLE ReviewReply ADD COLUMN is_visible BOOLEAN DEFAULT 1")
+            )
         db.session.commit()
 
     with app.app_context():
@@ -372,7 +209,7 @@ def create_app():
 
     @app.route("/")
     def index():
-        payload = get_courses_payload(page=1, per_page=100)
+        payload = get_courses_payload(page=1, per_page=60)
         return render_template(
             "index.html",
             courses_json=payload["courses"],
@@ -423,6 +260,29 @@ def create_app():
         ]
 
     def get_departments_by_group(department_group):
+        department_names = {
+            item["name"]
+            for items in get_department_groups().values()
+            for item in items
+        }
+
+        if department_group in UNDERGRAD_COLLEGE_DEPARTMENTS:
+            return [
+                department
+                for department in UNDERGRAD_COLLEGE_DEPARTMENTS[department_group]
+                if department in department_names
+            ]
+
+        if ":" in department_group:
+            category, college = department_group.split(":", 1)
+            college_departments = PROGRAM_COLLEGE_DEPARTMENTS.get(category, {}).get(college)
+            if college_departments is not None:
+                return [
+                    department
+                    for department in college_departments
+                    if department in department_names
+                ]
+
         matcher = DEPARTMENT_GROUP_FILTERS.get(department_group)
         if not matcher:
             return []
@@ -785,7 +645,7 @@ def create_app():
 
     def get_courses_payload(page=None, per_page=None):
         page = max(1, int(page or request.args.get("page", 1)))
-        per_page = min(100, max(1, int(per_page or request.args.get("per_page", 100))))
+        per_page = min(60, max(1, int(per_page or request.args.get("per_page", 60))))
         query_text = str(request.args.get("q", "")).strip()
         year = str(request.args.get("year", "")).strip()
         department_category = str(request.args.get("department_category", "")).strip()
