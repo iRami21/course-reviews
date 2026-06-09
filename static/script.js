@@ -3241,6 +3241,31 @@ function replaceCourseInState(course) {
   const index = allCourses.findIndex((item) => String(item.id) === String(course.id));
   if (index >= 0) {
     allCourses[index] = { ...allCourses[index], ...course };
+    // 更新畫面上的課程卡片與明細（若正在檢視）
+    updateCourseCardDisplay(allCourses[index]);
+    if (String(currentCourseId) === String(course.id)) {
+      refreshDetailRatingSummary(course.id);
+      renderDetailTags(allCourses[index]);
+    }
+  }
+}
+
+function updateCourseCardDisplay(course) {
+  if (!course) return;
+  // 更新卡片上的 inline 評分
+  const card = document.querySelector(`[data-course-id="${CSS.escape(String(course.id))}"]`);
+  if (card) {
+    const ratingEl = card.querySelector('.course-rating-inline');
+    if (ratingEl && typeof course.rating === 'number') {
+      ratingEl.innerHTML = `${starIcon()}${Number(course.rating).toFixed(1)}`;
+    }
+    const commentEl = card.querySelector('.course-reviews-count .stat-comment');
+    if (commentEl) {
+      const commentTotal = typeof course.commentTotal !== 'undefined' ? course.commentTotal : getCourseCommentTotal(course.id);
+      commentEl.innerHTML = `${commentIcon()} ${commentTotal}`;
+    }
+    const saveCountEl = card.querySelector('.save-count-num');
+    if (saveCountEl) saveCountEl.textContent = course.saveCount ?? 0;
   }
 }
 
@@ -3435,8 +3460,8 @@ async function submitReview(event) {
     }
     courseReviews[currentCourseId].unshift(result.review);
 
-    if (course && result.course) {
-      Object.assign(course, result.course);
+    if (result.course) {
+      replaceCourseInState(result.course);
     }
 
     alert("Review submitted successfully!");

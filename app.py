@@ -432,6 +432,7 @@ def create_app():
             "englishTaught": bool(course.english_taught),
             "rating": round(float(average_rating or 0), 1),
             "reviewCount": int(review_count or 0),
+            "commentTotal": int(review_count or 0),
             "followed": followed,
             "saveCount": int(save_count or 0),
             "year": course.year or 0,
@@ -1797,10 +1798,11 @@ def create_app():
         if not section:
             return jsonify({"error": "This course has no section to review."}), 400
 
-        # 💡 核心安全檢查：去資料庫查這個人是不是已經投過票了
-        existing_review = Review.query.filter_by(
-            section_id=section.section_id,
-            user_id=current_user.id
+      
+        existing_review = Review.query.filter(
+            Review.section_id == section.section_id,
+            Review.user_id == current_user.id,
+            Review.is_visible.isnot(False),
         ).first()
         
         if existing_review:
@@ -1882,13 +1884,11 @@ def create_app():
     @login_required
     def api_delete_review(review_id):
         review = Review.query.get_or_404(review_id)
-        if not review.is_visible:
-            return jsonify({"ok": True})
         if not can_modify_review(review):
             return jsonify({"error": "You can only delete your own reviews."}), 403
 
         course = review.course
-        review.is_visible = False
+        db.session.delete(review)
         db.session.commit()
         return jsonify({
             "ok": True,
@@ -2071,7 +2071,6 @@ def create_app():
         # ReviewReaction 目前有 (reviewId, userId) unique constraint，
         # 我們借用它，但用 review_id=None 無法插入，故直接在 reply.reaction_counts JSON 記錄
         # 並用獨立欄位追蹤「此 user 對此 reply 的 reaction」
-        # 簡易方案：reaction_counts JSON 同時存 user 清單，key = emoji, value = count
         # user 選擇記錄在額外的 user_reactions key 裡
         try:
             user_reactions = json.loads(reply.user_reactions or "{}")
@@ -2580,64 +2579,11 @@ def create_app():
 
     @app.cli.command("seed-nsysu")
     def seed_nsysu():
-# 💡 採用後端同學的提示：目前專案已切換至整合完畢的 12354.db 主資料庫
+
         print("12354.db already contains the normalized NSYSU course data.")
         print("Run `flask init-db` only if you need Flask to create missing tables.")
 
-        # =========================================================================
-        # 備用資產：如果你未來需要重新從 "NSYSU Course Database" 資料夾解析原始檔案，
-        # 可以將下方你寫的精準解析引擎解除註解（請注意：執行時會清空現有 Review 與 Course 資料）
-        # =========================================================================
-        # base_dir = Path(app.root_path) / "NSYSU Course Database"
-        # db_files = sorted(base_dir.glob("NSYSU_Course_*.db"))
-        # if not db_files:
-        #     print("No NSYSU database files found.")
-        #     return
-        #
-        # with app.app_context():
-        #     db.create_all()
-        #     Review.query.delete()
-        #     Course.query.delete()
-        #     db.session.commit()
-        #
-        #     seen = set()
-        #     for db_file in db_files:
-        #         year, semester = parse_term_from_filename(db_file)
-        #         conn = sqlite3.connect(db_file)
-        #         conn.row_factory = sqlite3.Row
-        #         cur = conn.cursor()
-        #         cur.execute(
-        #             "SELECT id, name, department, teacher, credit, grade, compulsory, english, description FROM course_list"
-        #         )
-        #         for row in cur.fetchall():
-        #             code = str(row["id"] or "").strip()
-        #             if not code:
-        #                 continue
-        #             key = (code, year, semester)
-        #             if key in seen:
-        #                 continue
-        #             title, title_zh = split_course_name(row["name"])
-        #             course = Course(
-        #                 code=code,
-        #                 title=title or title_zh or code,
-        #                 title_zh=title_zh or None,
-        #                 professor=str(row["teacher"] or "").strip() or None,
-        #                 department=str(row["department"] or "").strip() or None,
-        #                 credits=parse_credits(row["credit"]),
-        #                 year=year,
-        #                 semester=semester,
-        #                 grade=normalize_grade(row["grade"]),
-        #                 requirement=parse_requirement(row["compulsory"]),
-        #                 english_taught=parse_bool(row["english"]),
-        #                 description=str(row["description"] or "").strip() or None,
-        #             )
-        #             db.session.add(course)
-        #             seen.add(key)
-        #         conn.close()
-        #
-        #     db.session.commit()
-        #     print(f"Seeded {len(seen)} courses from {len(db_files)} files.")
-
+        
     return app
 
 
