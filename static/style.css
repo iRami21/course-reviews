@@ -5655,3 +5655,41 @@ body.schedule-open #scheduleToggleBtn {
     border-top: 2px dotted rgba(79, 103, 177, 0.36);
   }
 }
+
+/* ── Review edited tag ── */
+.review-edited-tag {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* ── Reply emoji palette 放大 ── */
+.reaction-palette button.reply-emoji-btn {
+  font-size: 26px;
+}
+.reaction-palette button.reply-emoji-btn:hover {
+  transform: scale(1.35) translateY(-5px);
+}
+
+/* ── Dim editing state ── */
+.review-dim-ratings.editing {
+  outline: 2px dashed #4f67b1 !important;
+}
+.review-dim-ratings.editing .dim-icon-wrap {
+  cursor: pointer !important;
+  transition: transform 0.1s !important;
+}
+.review-dim-ratings.editing .dim-icon-wrap:hover {
+  transform: scale(1.25) !important;
+}
+
+/* ── Dim pop animation ── */
+@keyframes dimPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.5) rotate(-8deg); }
+  70%  { transform: scale(1.2) rotate(4deg); }
+  100% { transform: scale(1); }
+}
+.dim-icon-wrap.dim-pop {
+  animation: dimPop 0.35s ease;
+}

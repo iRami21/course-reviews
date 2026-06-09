@@ -504,9 +504,10 @@ function reactionIcon(reaction) {
 // 修改 script_2.js 中的 renderReactionControl 函式
 function renderReactionControl(item, reviewId, replyId = null) {
   const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
+  const isReply = !!replyId;
   const paletteButtons = REACTION_OPTIONS.map(
     (reaction) =>
-      `<button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
+      `<button type="button" class="${isReply ? 'reply-emoji-btn' : ''}" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
   ).join("");
 
   return `
@@ -2953,7 +2954,7 @@ function loadReviews(courseId) {
 
     // 💡 精美排版：保留原有 #daecff 與 width 結構，但在各維度圖示最上方增加英文標註 DIMENSION RATINGS
     const dimRatingsHtml = (review.ratingQuality || review.ratingSweetness || review.ratingCoolness || review.ratingSolidity) ? `
-      <div class="review-dim-ratings">
+      <div class="review-dim-ratings" id="dim-box-${review.id}">
         <div class="review-dim-header-label">DIMENSION RATINGS</div>
         <div class="review-dim-body-grid">
           ${Object.entries(DIM_LABELS).map(([key, label]) => {
@@ -2963,9 +2964,12 @@ function loadReviews(courseId) {
               ? `<span class="dim-icon-unit dim-emoji-unit">${icon.emoji}</span>`
               : `<img src="${icon.img}" class="dim-icon-unit">`;
             const iconsRow = Array.from({length: 5}, (_, i) =>
-              `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}">${iconHtml}</span>`
+              `<span class="dim-icon-wrap ${i < v ? "active" : "inactive"}"
+                data-review="${review.id}" data-dim="${key}" data-val="${i+1}"
+                onclick="handleDimClick(event, '${review.id}', '${key}', ${i+1})"
+                style="cursor:default;">${iconHtml}</span>`
             ).join("");
-            return `<div class="dim-row"><span class="dim-label">${label}</span><span class="dim-icons-row">${iconsRow}</span></div>`;
+            return `<div class="dim-row"><span class="dim-label">${label}</span><span class="dim-icons-row" id="dim-row-${review.id}-${key}">${iconsRow}</span></div>`;
           }).join("")}
         </div>
       </div>` : "";
@@ -2992,7 +2996,7 @@ function loadReviews(courseId) {
                   <span class="review-avatar ${getGenderClass(review.avatar?.gender)}">${avatarIcon(review.avatar || getDefaultProfile(review.author))}</span>
                   <span class="review-author">${escapeHtml(review.author)}</span>
                   <span class="review-dot"></span>
-                  <span class="review-date">${escapeHtml(review.date)}</span>
+                  <span class="review-date">${escapeHtml(review.date)}${review.updatedAt ? `<span class="review-edited-tag"> · Edited at ${review.updatedAt}</span>` : ''}</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   ${myActionsHtml}
@@ -3096,7 +3100,7 @@ function renderReplies(replies = [], reviewId) {
               <div class="reply-meta" style="display: flex; align-items: center; width: 100%;">
                 <span class="reply-avatar ${getGenderClass(reply.avatar?.gender)}">${avatarIcon(reply.avatar || getDefaultProfile(reply.author))}</span>
                 <strong>${escapeHtml(reply.author)}</strong>
-                <span style="margin-left: 8px;">${escapeHtml(reply.date)}</span>
+                <span style="margin-left: 8px;">${escapeHtml(reply.date)}${reply.updatedAt ? `<span class="review-edited-tag"> · 編輯於 ${reply.updatedAt}</span>` : ''}</span>
                 ${myReplyActionsHtml}
               </div>
               
@@ -3280,9 +3284,10 @@ function renderReactionStack(item) {
 // script.js 找到這一段並修改
 function renderReactionControl(item, reviewId, replyId = null) {
   const targetArgs = replyId ? `'${reviewId}', '${replyId}'` : `'${reviewId}'`;
+  const isReply = !!replyId;
   const paletteButtons = REACTION_OPTIONS.map(
     (reaction) =>
-      `<button type="button" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
+      `<button type="button" class="${isReply ? 'reply-emoji-btn' : ''}" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
   ).join("");
 
   return `
@@ -3746,15 +3751,75 @@ window.deleteReview = async function(reviewId) {
 };
 
 // === 開啟編輯模式 ===
+const _editDimBackup = {};
+
 window.editReview = function(reviewId) {
   document.getElementById(`text-display-${reviewId}`).style.display = 'none';
   document.getElementById(`edit-form-${reviewId}`).style.display = 'block';
+
+  const dimBox = document.getElementById(`dim-box-${reviewId}`);
+  if (dimBox) {
+    dimBox.classList.add('editing');
+    _editDimBackup[reviewId] = {};
+    dimBox.querySelectorAll('.dim-icon-wrap').forEach(el => {
+      const dim = el.dataset.dim;
+      if (!_editDimBackup[reviewId][dim]) {
+        const row = document.getElementById(`dim-row-${reviewId}-${dim}`);
+        if (row) _editDimBackup[reviewId][dim] = row.querySelectorAll('.active').length;
+      }
+      el.style.cursor = 'pointer';
+    });
+  }
 };
 
 // === 取消編輯模式 ===
 window.cancelEdit = function(reviewId) {
   document.getElementById(`text-display-${reviewId}`).style.display = 'block';
   document.getElementById(`edit-form-${reviewId}`).style.display = 'none';
+
+  const backup = _editDimBackup[reviewId] || {};
+  const dimBox = document.getElementById(`dim-box-${reviewId}`);
+  if (dimBox) {
+    dimBox.classList.remove('editing');
+    Object.entries(backup).forEach(([dim, v]) => {
+      const row = document.getElementById(`dim-row-${reviewId}-${dim}`);
+      if (row) {
+        row.querySelectorAll('.dim-icon-wrap').forEach((el, i) => {
+          el.classList.toggle('active', i < v);
+          el.classList.toggle('inactive', i >= v);
+          el.style.cursor = 'default';
+          delete el.dataset.currentVal;
+        });
+        delete row.dataset.editVal;
+      }
+    });
+  }
+  delete _editDimBackup[reviewId];
+};
+
+// === dim icon 點擊（編輯模式）===
+window.handleDimClick = function(event, reviewId, dim, val) {
+  const dimBox = document.getElementById(`dim-box-${reviewId}`);
+  if (!dimBox || !dimBox.classList.contains('editing')) return;
+
+  const row = document.getElementById(`dim-row-${reviewId}-${dim}`);
+  if (!row) return;
+
+  row.querySelectorAll('.dim-icon-wrap').forEach((el, i) => {
+    const wasActive = el.classList.contains('active');
+    const willActive = i < val;
+    el.classList.toggle('active', willActive);
+    el.classList.toggle('inactive', !willActive);
+
+    // pop 特效：新點亮的 icon
+    if (willActive && !wasActive) {
+      el.classList.remove('dim-pop');
+      void el.offsetWidth;
+      el.classList.add('dim-pop');
+      el.addEventListener('animationend', () => el.classList.remove('dim-pop'), { once: true });
+    }
+  });
+  row.dataset.editVal = val;
 };
 
 // === 儲存修改的內容 ===
@@ -3766,10 +3831,18 @@ window.saveEdit = async function(reviewId) {
     return;
   }
 
+  // 收集有改動的維度評分
+  const dims = ["ratingQuality", "ratingSweetness", "ratingCoolness", "ratingSolidity"];
+  const ratings = {};
+  dims.forEach(dim => {
+    const row = document.getElementById(`dim-row-${reviewId}-${dim}`);
+    if (row && row.dataset.editVal) ratings[dim] = parseInt(row.dataset.editVal);
+  });
+
   try {
     const result = await apiRequest(`/api/reviews/${reviewId}`, {
       method: "PATCH",
-      body: JSON.stringify({ text: newText }),
+      body: JSON.stringify({ text: newText, ...ratings }),
     });
 
     if (result.review) replaceReviewInState(result.review);

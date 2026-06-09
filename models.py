@@ -243,6 +243,7 @@ class Review(db.Model):
     )
     parent_id = db.Column("parentId", db.Integer, db.ForeignKey("Review.reviewId"))
     created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column("updatedAt", db.DateTime, nullable=True)
     rating = db.Column(db.Integer)
     rating_quality = db.Column("ratingQuality", db.Integer)
     rating_sweetness = db.Column("ratingSweetness", db.Integer)

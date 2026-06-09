@@ -188,6 +188,8 @@ def create_app():
             db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingCoolness INTEGER"))
         if "ratingSolidity" not in columns:
             db.session.execute(text("ALTER TABLE Review ADD COLUMN ratingSolidity INTEGER"))
+        if "updatedAt" not in columns:
+            db.session.execute(text("ALTER TABLE Review ADD COLUMN updatedAt DATETIME"))
         db.session.commit()
 
         rows = Review.query.filter((Review.reaction_counts.is_(None)) | (Review.reaction_counts == ""))
@@ -680,7 +682,8 @@ def create_app():
             "ratingSweetness": review.rating_sweetness,
             "ratingCoolness": review.rating_coolness,
             "ratingSolidity": review.rating_solidity,
-            "date": review.created_at.strftime("%Y-%m-%d %H:%M"),
+            "date": (review.created_at + __import__("datetime").timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if review.created_at else "",
+            "updatedAt": (review.updated_at + __import__("datetime").timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if review.updated_at and review.updated_at != review.created_at else None,
             "sectionLabel": section_label,
             "language": review.language or "English",
             "text": review.text,
@@ -724,7 +727,7 @@ def create_app():
                 "gender": author.gender if author else "undisclosed",
             },
             "text": reply.text,
-            "date": reply.created_at.strftime("%Y-%m-%d %H:%M") if reply.created_at else "",
+            "date": (reply.created_at + __import__("datetime").timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if reply.created_at else "",
             "reviewId": str(reply.review_id),
             "likes": total_likes,
             "liked": bool(user_reaction),
@@ -1586,6 +1589,7 @@ def create_app():
             return jsonify({"error": "Review text is required."}), 400
 
         review.text = new_text
+        review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
 
         reviews = reviews_for_course(course_id).all()
@@ -1821,6 +1825,7 @@ def create_app():
             return jsonify({"error": "Review text is required."}), 400
 
         review.text = text_value
+        review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
         return jsonify({
             "review": serialize_review(review),
