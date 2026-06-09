@@ -282,6 +282,11 @@
         <button type="button" class="sort-text-btn active" data-sort="popular">Hottest</button>
         <button type="button" class="sort-text-btn" data-sort="latest">Latest</button>
         <button type="button" class="sort-text-btn" data-sort="rating">Ratings</button>
+        <label class="latest-year-toggle" for="latestYearOnlyToggle">
+          <input type="checkbox" id="latestYearOnlyToggle" />
+          <span class="latest-year-slider" aria-hidden="true"></span>
+          <span class="latest-year-text">僅顯示最新年份課程 (<span id="latestYearToggleLabel">114</span>)</span>
+        </label>
       </div>
 
       <div class="filter-panel" id="filterPanel" style="display: none;">
@@ -416,12 +421,12 @@
 
             <div class="detail-meta-grid">
               <div>
-                <span>Professor</span>
-                <strong id="detailCourseProfessor"></strong>
-              </div>
-              <div>
                 <span>Department</span>
                 <strong id="detailCourseDepartment"></strong>
+              </div>
+              <div>
+                <span>Professor</span>
+                <strong id="detailCourseProfessor"></strong>
               </div>
               <div>
                 <span>Credits</span>
@@ -429,9 +434,30 @@
               </div>
             </div>
 
-            <div class="detail-description">
-              <span>Description</span>
-              <p id="detailCourseDescription"></p>
+            <div class="detail-class-grid">
+              <div>
+                <span>Class Time</span>
+                <strong id="detailClassTime"></strong>
+              </div>
+              <div>
+                <span>Room</span>
+                <strong id="detailClassLocation"></strong>
+              </div>
+              <div>
+                <span>Type</span>
+                <strong id="detailCourseRequirement"></strong>
+              </div>
+            </div>
+
+            <div class="detail-mega-grid">
+              <div>
+                <span>Latest Offering</span>
+                <strong id="detailLatestTerm"></strong>
+              </div>
+              <div>
+                <span>History</span>
+                <div class="detail-history-pills" id="detailHistoryTerms"></div>
+              </div>
             </div>
             <div class="detail-tag-list" id="detailTagList"></div>
             <div class="detail-social-row">
@@ -559,6 +585,7 @@
       window.__COURSE_PAGINATION__ = {{ course_pagination_json | default({}) | tojson }};
       window.__DEPARTMENT_GROUPS__ = {{ department_groups | default({}) | tojson }};
       window.__SPORT_ACTIVITY_OPTIONS__ = {{ sport_activity_options | default([]) | tojson }};
+      window.__LATEST_COURSE_YEAR__ = {{ latest_course_year | default(0) | tojson }};
       window.__CURRENT_USER__ = {{ current_user_json | default(none) | tojson }};
     </script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
