@@ -5,14 +5,12 @@
   font-family: "Comic Relief", system-ui;
 }
 
-/* 全站基礎英數與一般文字設定 */
 body, input, select, button {
   font-family: "Comic Relief", system-ui;
   font-weight: 400;
   font-style: normal;
 }
 
-/* 針對需要特別加粗、放大凸顯的可愛元素（如：課名、大星星旁的 4.5） */
 h1, h2, h3, .course-title, .rating-number {
   font-family: "Comic Relief", system-ui;
   font-weight: 450;
@@ -160,17 +158,17 @@ body {
 
 .search_img {
   position: relative;
-  display: inline-block; 
+  display: inline-block;
 }
 
 .search-icon {
   position: absolute;
-  left: 20px;          
-  top: 50%;            
-  transform: translateY(-50%); 
-  width: 20px;   
-  height: 20px; 
-  pointer-events: none; 
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
 }
 
 .search-box {
@@ -193,15 +191,13 @@ body {
   align-items: center;
 }
 
-/* 確保導覽列的頭像永遠在最上層，且滑鼠滑過去一定能正確點擊 */
 .user-avatar {
   position: relative;
   z-index: 10000 !important;
   cursor: pointer !important;
-  pointer-events: auto !important; /* 強制開啟滑鼠事件 */
+  pointer-events: auto !important;
 }
 
-/* 確保下拉選單容器不會被旁邊的元件壓扁 */
 .avatar-dropdown-container {
   display: flex;
   align-items: center;
@@ -292,7 +288,7 @@ body {
   background-color: #c82333;
 }
 
-/* === Welcome and auth entry === */
+/* Welcome and auth entry */
 .login-page-overlay {
   position: fixed;
   inset: 0;
@@ -328,7 +324,7 @@ body {
   }
 }
 
-/* Logo slide animation - move entire logo area to left half when login modal opens */
+/* Logo slide animation for the auth entry state. */
 .navbar.logo-shifted .nav-logo {
   position: absolute;
   left: 0;
@@ -585,13 +581,11 @@ body {
   transform: scale(1.08);
 }
 
-/* 簡單的淡入動畫 */
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
 
-/* 左右並排分頁標籤 */
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -674,19 +668,17 @@ body {
   padding: 0;
 }
 
-/* 確保左下角收藏和留言橫向排開 */
 .course-reviews-count {
   display: flex;
   align-items: center;
-  gap: 12px; /* 兩個數據中間的可愛小空隙 */
+  gap: 12px;
 }
 
-/* 讓 Browse 統計 icon 和數字垂直置中對齊 */
 .stat-save-display,
 .stat-comment {
   display: flex;
   align-items: center;
-  gap: 4px; /* 圖標跟數字之間的距離 */
+  gap: 4px;
   font-family: "Sniglet", system-ui;
   font-weight: 400;
   font-style: normal;
@@ -817,7 +809,6 @@ body {
   flex-wrap: wrap;
 }
 
-
 .btn-follow-tag {
   display: inline-flex;
   align-items: center;
@@ -915,7 +906,6 @@ body {
 .close:hover {
   color: #000;
 }
-
 
 /* Login Form */
 .modal-content h2 {
@@ -1058,31 +1048,27 @@ body {
   stroke-linejoin: round;
 }
 
-/* 讓複合按鈕容器可以作為彈出面板的定位基準 */
 .reaction-container {
   position: relative;
   display: inline-block;
 }
 
-
 .reaction-container:hover .reaction-palette {
-  display: none; 
+  display: none;
 }
 
-/* 改為使用 .open class 來控制顯示 */
 .reaction-container.open .reaction-palette {
   display: flex !important;
 }
 
-/* 確保面板基本樣式正確 */
 .reaction-palette {
-  display: none; 
+  display: none;
   position: absolute;
-  bottom: calc(100% + 8px); 
+  bottom: calc(100% + 8px);
   left: 0;
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 30px; 
+  border-radius: 30px;
   padding: 6px 10px;
   box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.12);
   gap: 10px;
@@ -1094,15 +1080,13 @@ body {
   100% { transform: translateY(-6px) scale(1); opacity: 1; }
 }
 
-/* 表情堆疊包裹容器：用 flex 讓它們橫排 */
 .emoji-stack {
   display: inline-flex;
   align-items: center;
-  flex-direction: row-reverse; /* 關鍵：讓最新的表情蓋在最上層 */
-  margin-right: 4px; 
+  flex-direction: row-reverse;
+  margin-right: 4px;
 }
 
-/* 每個獨立的小表情 */
 .emoji-item {
   display: flex;
   align-items: center;
@@ -1113,13 +1097,12 @@ body {
   background-color: transparent;
   border: 0;
   border-radius: 0;
-  
-  /* 🌟 核心魔法：負邊距！讓後面的表情跟前面的貼貼在一起 */
-  margin-left: -6px; 
+
+
+  margin-left: -6px;
   box-shadow: none;
 }
 
-/* 讓最新被點出來的那個表情，進場時有個軟萌的放大動畫 */
 .emoji-item.active-pop {
   animation: emojiPopIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -1129,50 +1112,44 @@ body {
   100% { transform: scale(1); }
 }
 
-/* ---------------------------------
-   底下這幾段是維持之前寫好的 Hover 面板定位，不用改動
---------------------------------- */
 .reaction-container {
   position: relative;
   display: inline-block;
 }
 
-/* 1. 先微調選單本體的位置，確保它跟按鈕有舒適的留白 */
 .reaction-palette {
-  display: none; 
+  display: none;
   position: absolute;
-  
-  /* 🌟 重點：把它釘在按鈕上方 8px 的位置，留白很好看 */
-  bottom: calc(100% + 8px); 
+
+
+  bottom: calc(100% + 8px);
   left: 0;
-  
+
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 30px; 
+  border-radius: 30px;
   padding: 6px 10px;
   box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.12);
   gap: 10px;
-  z-index: 999; /* 確保絕對不會被遮擋 */
+  z-index: 999;
 }
 
-/* 🌟 2. 【核心魔法】：幫選單建造一條隱形的「安全通道橋樑」 */
 .reaction-palette::before {
   content: "";
   position: absolute;
-  
-  /* 讓這個隱形區塊跟選單一樣寬 */
+
+
   left: 0;
   right: 0;
-  
-  /* 🌟 關鍵：從選單的底部，往下延伸 15px 的「隱形感應黏著區」 */
+
+
   top: 100%;
-  height: 15px; 
-  
-  /* 雖然看起來是透明的空氣，但滑鼠滑過去時，瀏覽器會判定你「還在選單範圍內」 */
-  background: transparent; 
+  height: 15px;
+
+
+  background: transparent;
 }
 
-/* 當點擊容器時，依然正常現身 */
 .reaction-container.open .reaction-palette {
   display: flex;
 }
@@ -2314,8 +2291,6 @@ button {
   background-color: var(--surface-soft);
 }
 
-
-
 .nav-menu .btn-login {
   display: inline-flex;
   align-items: center;
@@ -2969,7 +2944,7 @@ button {
 /* Colorful Auth Modal */
 #loginModal,
 #profileModal {
-  background-color:#4f67b1 !important;  
+  background-color:#4f67b1 !important;
 }
 
 #loginModal .modal-content,
@@ -3100,18 +3075,12 @@ button {
   background-color: #ffdca0;
 }
 
-/* === 純文字排序選單 === */
-/* === 搜尋框與 Filter 一體化膠囊按鈕設計 === */
-
-/* 1. 外層大膠囊容器 */
-/* === 純圖示按鈕風格 (Hami Video 風格) === */
 .nav-search-group {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
 }
 
-/* 1. 共用的圓形純圖示按鈕 (給 Filter 用的) */
 .icon-btn {
   display: flex !important;
   align-items: center !important;
@@ -3139,7 +3108,6 @@ button {
   box-shadow: 0 10px 22px rgba(17, 24, 39, 0.18);
   transform: translateY(-3px) scale(1.08);
 }
-
 
 .icon-btn:focus,
 .icon-btn:active,
@@ -3188,39 +3156,35 @@ button {
   }
 }
 
-/* 2. 伸縮搜尋列 (平時偽裝成 icon-btn) */
 .expandable-search {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-/* 放大鏡圖示永遠固定在左邊 */
 .expandable-search .search-icon {
   position: absolute;
   left: 12px;
   width: 20px;
   height: 20px;
-  pointer-events: none; /* 讓點擊可以穿透到下方的 input */
+  pointer-events: none;
   z-index: 2;
 }
 
-/* 輸入框本體 (預設縮成一顆圓球) */
 .expandable-search .search-box {
-  width: 44px; /* 預設寬度跟 Filter 按鈕一樣大 */
+  width: 44px;
   height: 44px;
   border-radius: 22px;
   border: 1px solid transparent;
   background-color: #fefaf0;
   padding: 8px 10px 8px 38px;
-  color: transparent; /* 沒展開時把輸入文字藏起來 */
+  color: transparent;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 滑順的伸縮動畫 */
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none !important;
   box-shadow: none !important;
 }
 
-/* 隱藏預設的 placeholder 文字 */
 .expandable-search .search-box::placeholder {
   color: transparent;
 }
@@ -3242,29 +3206,25 @@ button {
   color: #999999;
 }
 
-/* 3. 內嵌在右側的 Filter 按鈕 */
 .btn-filter-toggle {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 6px;
-  background-color: #4f67b1; /* 用深藍色當按鈕底，跳色顯眼 */
+  background-color: #4f67b1;
   color: #ffffff;
   border: none;
-  border-radius: 999px; /* 按鈕自己也是圓角 */
+  border-radius: 999px;
   padding: 8px 16px;
   font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-/* Filter 按鈕滑鼠移過去的特效 */
 .btn-filter-toggle:hover {
   background-color: #3b508f;
   transform: scale(1.02);
 }
-
-/* === 電影分類風格的 Filter 面板 === */
 
 .filter-panel {
   background-color: #fefaf0;
@@ -3275,70 +3235,64 @@ button {
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-
-/* === Horizontal Scrollable Filter Bar Fix === */
+/* Horizontal Scrollable Filter Bar Fix */
 
 .filter-row {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap !important; /* Forces items into a single row */
-  gap: 0.75rem;                 /* Adds healthy spacing between the label and buttons */
+  flex-wrap: nowrap !important;
+  gap: 0.75rem;
   width: 100%;
-  overflow-x: auto;            /* Enables horizontal scrolling */
-  overflow-y: hidden; 
-  -webkit-overflow-scrolling: touch; 
-  padding: 0.5rem 0;           /* Gives padding so button shadows don't get cut off */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.5rem 0;
 }
 
 /* Ensure the label text doesn't shrink or get overlapped */
 .filter-label {
-  flex: 0 0 auto !important;   /* Prevents the text "Department |" from getting crushed */
+  flex: 0 0 auto !important;
   position: sticky;
   left: 0;
   z-index: 2;
   font-weight: 1000;
   color: #000409;
   font-size: 1.3rem;
-  margin-right: 0.5rem;        /* Forces a clear boundary before the first button */
+  margin-right: 0.5rem;
   padding: 0.3rem 0.75rem 0.3rem 0;
   background: #fefaf0;
   white-space: nowrap;
 }
 
-/* COMPLETE RESET: Wipes out the ugly default browser button style */
 .filter-tag-btn {
-  flex: 0 0 auto !important;   /* Prevents buttons from squishing */
-  white-space: nowrap !important; 
-  
-  /* Resetting browser native styles */
-  background: transparent;     /* Wipes default gray background */
-  border: none !important;     /* Wipes default boxy border */
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+
+  background: transparent;
+  border: none !important;
   outline: none;
   margin: 0;
-  padding: 0.4rem 1rem;        /* Adds comfortable inner padding */
-  
-  /* Custom typography matching your other filters */
+  padding: 0.4rem 1rem;
+
   font-family: "Comic Relief", system-ui;
   font-size: 1.1rem;
   font-weight: 600;
-  color: #5b6472;              /* Matches your --text-muted color */
-  border-radius: 20px;         /* Rounded capsule shape */
+  color: #5b6472;
+  border-radius: 20px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-/* Hover State */
 .filter-tag-btn:hover {
   color: #111827;
-  background-color: rgba(16, 24, 40, 0.05) !important; /* Gentle hover highlight */
+  background-color: rgba(16, 24, 40, 0.05) !important;
 }
 
-/* Active Selected State (Matches your beautiful blue capsule color) */
 .filter-tag-btn.active {
-  background-color: #c74d30 !important; /* Your signature navbar blue */
-  color: #ffffff !important;           /* Clear white text */
+  background-color: #c74d30 !important;
+  color: #ffffff !important;
   font-weight: 700;
-  box-shadow: 0 4px 10px rgba(79, 103, 177, 0.25); /* Cute glow effect */
+  box-shadow: 0 4px 10px rgba(79, 103, 177, 0.25);
 }
 
 .department-subfilter-select {
@@ -3370,7 +3324,7 @@ button {
   background: transparent;
 }
 .filter-row {
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
 }
 
 .filter-options {
@@ -3395,32 +3349,28 @@ button {
   background-color: #f1f3f6;
 }
 
-/* 被選中時的樣式 (類似你截圖中亮起的綠字黑底) */
 .filter-pill.active {
   background-color: #c74d30;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(79, 103, 177, 0.3);
 }
 
-/* === 按鈕風格排序選單 === */
 .quick-sort-menu {
   display: flex;
   align-items: center;
-  gap: 12px; /* 按鈕之間的間距 */
+  gap: 12px;
   margin-bottom: 2rem;
 }
 
-/* 直接把原本的垂直線隱藏，這樣就不用回去改 HTML 了！ */
 .sort-divider {
-  display: none !important; 
+  display: none !important;
 }
 
-/* 按鈕的預設外觀 (未選中) */
 .sort-text-btn {
-  background-color: #ffe9f7; 
+  background-color: #ffe9f7;
   border: 1px solid #ffe9f7;
-  border-radius: 999px; /* 完美的圓角膠囊形狀 */
-  color: #7b8494; /* 預設灰字 */
+  border-radius: 999px;
+  color: #7b8494;
   font-size: 1.05rem;
   font-weight: 800;
   cursor: pointer;
@@ -3430,20 +3380,18 @@ button {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
-/* 滑鼠移過去的特效 */
 .sort-text-btn:hover {
   background-color: #edf2ff;
   border-color: #ff99b5;
   color: #ff99b5;
-  transform: translateY(-2px); /* 滑鼠游標移上去時會稍微浮起來 */
+  transform: translateY(-2px);
 }
 
-/* 被選中 (Active) 時的樣式 */
 .sort-text-btn.active {
-  background-color: #ff99b5; /* 變成你們專案的粉藍主題色 */
+  background-color: #ff99b5;
   border-color: #ff99b5;
-  color: #ffffff; /* 文字反白 */
-  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3); /* 加上發光陰影，強調它被選中了 */
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 103, 177, 0.3);
 }
 
 .profile-modal-content {
@@ -4045,16 +3993,15 @@ button {
   }
 }
 
-/* === 熱門搜尋面板 (Zero-State Search) === */
 .search-dropdown-card {
   position: absolute;
-  top: calc(100% + 12px); /* 釘在搜尋框正下方 */
+  top: calc(100% + 12px);
   left: 0;
-  width: 320px; 
+  width: 320px;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12); /* 立體陰影 */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
   padding: 1.25rem;
   z-index: 10000;
   animation: dropdownPop 0.2s ease;
@@ -4067,19 +4014,17 @@ button {
   margin-bottom: 0.85rem;
 }
 
-/* 標籤容器：自動換行排版 */
 .trending-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
 }
 
-/* 標籤按鈕本體 */
 .trending-tag-btn {
-  background: #f3f4f6; /* 淺灰底色 */
+  background: #f3f4f6;
   border: 1px solid transparent;
   padding: 0.4rem 0.75rem;
-  border-radius: 6px; /* 俐落的微圓角方形 */
+  border-radius: 6px;
   font-family: "Comic Relief", system-ui;
   font-size: 0.9rem;
   color: #374151;
@@ -4087,7 +4032,6 @@ button {
   transition: all 0.2s ease;
 }
 
-/* 滑鼠滑過的點擊回饋 */
 .trending-tag-btn:hover {
   background: #e5e7eb;
   border-color: #d1d5db;
@@ -4095,14 +4039,13 @@ button {
   transform: translateY(-1px);
 }
 
-/* === 空白狀態提示卡片 (Empty State) === */
 .empty-state-card {
   background: #ffffff;
   border-radius: var(--radius-md);
   padding: 4rem 2rem;
   text-align: center;
   width: 100%;
-  grid-column: 1 / -1; /* 確保它在網格排版中能置中並佔滿整排 */
+  grid-column: 1 / -1;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
   margin-top: 1rem;
 }
@@ -4127,7 +4070,6 @@ button {
   font-size: 1.05rem;
 }
 
-/* === 評論編輯與刪除功能 === */
 .my-review-actions {
   display: flex;
   gap: 0.5rem;
@@ -4167,8 +4109,6 @@ button {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* === 通知系統 UI === */
-/* ── Notification Badge ── */
 .notification-badge {
   position: absolute;
   top: 0;
@@ -4190,7 +4130,6 @@ button {
   pointer-events: none;
 }
 
-/* ── Dropdown Shell ── */
 .notification-dropdown-card {
   position: absolute;
   top: calc(100% + 10px);
@@ -4206,7 +4145,6 @@ button {
   text-align: left;
 }
 
-/* ── Header ── */
 .notification-header {
   display: flex;
   justify-content: space-between;
@@ -4242,7 +4180,6 @@ button {
   color: var(--text);
 }
 
-/* ── Scrollable List ── */
 .notification-list {
   max-height: 360px;
   overflow-y: auto;
@@ -4265,7 +4202,6 @@ button {
   color: #9ca3af;
 }
 
-/* ── Individual Item ── */
 .noti-item {
   display: flex;
   align-items: flex-start;
@@ -4293,7 +4229,7 @@ button {
   background: #e8effe;
 }
 
-/* left accent bar for unread */
+/* Unread notification accent. */
 .noti-item.unread::before {
   content: "";
   position: absolute;
@@ -4347,7 +4283,6 @@ button {
   margin-top: 5px;
 }
 
-/* ── Tab buttons (kept for future use) ── */
 .notification-tab-group {
   display: flex;
   gap: 0.5rem;
@@ -4373,7 +4308,6 @@ button {
   background: #eff6ff;
 }
 
-/* Activity 頁面版面 */
 .favorites-page {
   padding: 0;
 }
@@ -4387,8 +4321,6 @@ button {
   overflow: hidden;
   background: #fff;
 }
-
-/* (notification-item and notification-card-item styles moved to the notification section above) */
 
 .back-to-top-btn {
   position: fixed;
@@ -4457,10 +4389,7 @@ button {
   background-color: #ffffff;
 }
 
-/* ============================================================
-   SCHEDULE SIDEBAR — Right-side collapsible weekly timetable
-   ============================================================ */
- 
+
 /* Toggle button: sticks to the right edge, vertically centered */
 #scheduleToggleBtn {
   position: fixed;
@@ -4507,9 +4436,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  display: none; /* hidden when 0 */
+  display: none;
 }
- 
+
 /* Sidebar panel */
 .schedule-sidebar {
   position: fixed;
@@ -4529,13 +4458,13 @@ button {
 .schedule-sidebar.open {
   transform: translateX(0);
 }
- 
+
 /* When sidebar is open, nudge the toggle button left */
 .schedule-sidebar.open ~ #scheduleToggleBtn,
 body.schedule-open #scheduleToggleBtn {
   right: 420px;
 }
- 
+
 /* Header */
 .schedule-sidebar-header {
   display: flex;
@@ -4583,7 +4512,7 @@ body.schedule-open #scheduleToggleBtn {
   transition: background 0.18s;
 }
 .schedule-close-btn:hover { background: rgba(255,255,255,0.22); }
- 
+
 /* Credits summary bar */
 .schedule-credits-bar {
   background: #edf2ff;
@@ -4597,7 +4526,7 @@ body.schedule-open #scheduleToggleBtn {
   align-items: center;
   gap: 6px;
 }
- 
+
 /* Scrollable grid area */
 .schedule-grid-wrapper {
   flex: 1;
@@ -4605,18 +4534,17 @@ body.schedule-open #scheduleToggleBtn {
   overflow-x: auto;
   padding: 10px 10px 16px;
 }
- 
+
 /* The timetable grid */
 .schedule-grid {
   display: grid;
-  /* col 0: period label, col 1-6: Mon-Sat */
   grid-template-columns: 34px repeat(6, 1fr);
   border-left: 1px solid #dde3f0;
   border-top: 1px solid #dde3f0;
   min-width: 340px;
   font-size: 0.68rem;
 }
- 
+
 /* Header row cells */
 .sched-header-cell {
   border-right: 1px solid #dde3f0;
@@ -4631,7 +4559,7 @@ body.schedule-open #scheduleToggleBtn {
 .sched-header-cell.period-col {
   background: #3a52a0;
 }
- 
+
 /* Period label cells (left column) */
 .sched-period-cell {
   border-right: 1px solid #dde3f0;
@@ -4654,7 +4582,7 @@ body.schedule-open #scheduleToggleBtn {
   font-weight: 400;
   display: block;
 }
- 
+
 /* Regular empty cells */
 .sched-cell {
   border-right: 1px solid #dde3f0;
@@ -4665,7 +4593,7 @@ body.schedule-open #scheduleToggleBtn {
   transition: background 0.15s;
 }
 .sched-cell:hover { background: #f5f7ff; }
- 
+
 /* Cell filled with a course */
 .sched-cell.has-course {
   background: #4f67b1 !important;
@@ -4704,14 +4632,14 @@ body.schedule-open #scheduleToggleBtn {
 .sched-cell.has-course .cell-remove-btn:hover {
   background: rgba(217, 45, 80, 0.75);
 }
- 
+
 /* Conflict state */
 .sched-cell.conflict {
   background: #fff1f4 !important;
   border-color: #d92d50;
 }
 .sched-cell.conflict .cell-course-name { color: #d92d50; }
- 
+
 /* Different color palette for multiple courses */
 .sched-cell.course-color-1.has-course { background: #4f67b1 !important; border-color: #3a52a0; }
 .sched-cell.course-color-2.has-course { background: #2a8f6f !important; border-color: #1e6e54; }
@@ -4721,7 +4649,7 @@ body.schedule-open #scheduleToggleBtn {
 .sched-cell.course-color-6.has-course { background: #9d5c0d !important; border-color: #7d490a; }
 .sched-cell.course-color-7.has-course { background: #b02473 !important; border-color: #8e1c5c; }
 .sched-cell.course-color-8.has-course { background: #374151 !important; border-color: #1f2937; }
- 
+
 /* Course list beneath the grid */
 .schedule-course-list {
   padding: 0 10px 8px;
@@ -4768,7 +4696,7 @@ body.schedule-open #scheduleToggleBtn {
   transition: background 0.15s;
 }
 .schedule-course-chip .chip-remove:hover { background: rgba(217,45,80,0.7); }
- 
+
 /* Empty state inside sidebar */
 .schedule-empty-state {
   text-align: center;
@@ -4778,7 +4706,7 @@ body.schedule-open #scheduleToggleBtn {
   line-height: 1.6;
 }
 .schedule-empty-state .empty-icon { font-size: 2rem; margin-bottom: 8px; display: block; }
- 
+
 /* "Add to Schedule" button on course cards */
 .btn-add-schedule {
   background: #edf2ff;
@@ -4807,7 +4735,7 @@ body.schedule-open #scheduleToggleBtn {
   color: #d92d50;
   border-color: #fca5a5;
 }
- 
+
 /* Conflict toast */
 #scheduleConflictToast {
   position: fixed;
@@ -4825,7 +4753,7 @@ body.schedule-open #scheduleToggleBtn {
   max-width: 280px;
   line-height: 1.4;
 }
- 
+
 /* Overlay dim when sidebar is open on small screens */
 #scheduleOverlay {
   display: none;
@@ -4837,10 +4765,10 @@ body.schedule-open #scheduleToggleBtn {
 @media (max-width: 600px) {
   .schedule-sidebar { width: 100vw; }
   body.schedule-open #scheduleToggleBtn { right: 100vw; }
-  #scheduleOverlay { display: none; } /* shown via JS */
+  #scheduleOverlay { display: none; }
 }
- 
-/* --- Semester tab bar inside schedule sidebar --- */
+
+/* Semester tab bar inside schedule sidebar */
 .sched-tab-bar {
   display: flex;
   gap: 0;
@@ -4850,7 +4778,7 @@ body.schedule-open #scheduleToggleBtn {
   scrollbar-width: none;
 }
 .sched-tab-bar::-webkit-scrollbar { display: none; }
- 
+
 .sched-sem-tab {
   flex-shrink: 0;
   padding: 8px 14px;
@@ -4876,8 +4804,8 @@ body.schedule-open #scheduleToggleBtn {
   border-bottom-color: #f5b700;
   background: rgba(255,255,255,0.12);
 }
- 
-/* Small course-count badge inside the tab */
+
+/* Small course count badge inside the tab */
 .sched-sem-count {
   background: #f5b700;
   color: #111;
@@ -4888,16 +4816,12 @@ body.schedule-open #scheduleToggleBtn {
   line-height: 1.4;
 }
 
-/* === BEAUTIFIED ACTIVITY PAGE STYLES (Match other Banana Pages theme) === */
-
-/* 1. 頁面外觀：使用一致的 container 寬度和 margin */
 .activity-page {
-    max-width: var(--container); /* 運用現有變數 */
+    max-width: var(--container);
     margin: 2.75rem auto;
     padding: 0 2rem;
 }
 
-/* 2. 標題與 kicker 美編 (運用 Favorites 頁面風格) */
 .activity-page .page-heading {
     display: flex;
     align-items: center;
@@ -4922,21 +4846,13 @@ body.schedule-open #scheduleToggleBtn {
     text-transform: uppercase;
 }
 
-/* 3. 活動列表網格：使用與首頁一致的單行卡片排版 */
 .activity-list {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem; /* 卡片之間的間距 */
+    gap: 1rem;
 }
 
-/* 4. 精美的活動卡片 (Modern Card Style - Match course cards) */
-/* (old notification-card-item removed) *//* ================================================================
-   ACTIVITY PAGE — Dual-tab Panel
-   Add these rules to the end of style.css (or after the existing
-   "BEAUTIFIED ACTIVITY PAGE STYLES" block)
-   ================================================================ */
 
-/* ── Tab Bar ──────────────────────────────────────────────────── */
 .activity-tabs-bar {
   display: flex;
   gap: 0.5rem;
@@ -4994,7 +4910,6 @@ body.schedule-open #scheduleToggleBtn {
   line-height: 1;
 }
 
-/* ── Panel ────────────────────────────────────────────────────── */
 .activity-panel {
   animation: activityFadeIn 0.18s ease;
 }
@@ -5004,8 +4919,6 @@ body.schedule-open #scheduleToggleBtn {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Activity list grid ───────────────────────────────────────── */
-/* (overrides the earlier .activity-list rules) */
 .activity-panel .activity-list {
   display: flex;
   flex-direction: column;
@@ -5015,7 +4928,6 @@ body.schedule-open #scheduleToggleBtn {
   overflow: visible;
 }
 
-/* ── Individual Activity Card ─────────────────────────────────── */
 .activity-card {
   display: flex;
   align-items: flex-start;
@@ -5120,7 +5032,6 @@ body.schedule-open #scheduleToggleBtn {
   color: #4f67b1;
 }
 
-/* ── Type Badges ─────────────────────────────────────────────── */
 .activity-type-badge {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -5146,7 +5057,6 @@ body.schedule-open #scheduleToggleBtn {
   color: #831843;
 }
 
-/* ── Unread dot (interactions) ────────────────────────────────── */
 .activity-unread-dot {
   position: absolute;
   top: 0.85rem;
@@ -5157,7 +5067,6 @@ body.schedule-open #scheduleToggleBtn {
   background: #4f67b1;
 }
 
-/* ── Loading state ────────────────────────────────────────────── */
 .activity-loading {
   display: flex;
   align-items: center;
@@ -5269,7 +5178,7 @@ body.schedule-open #scheduleToggleBtn {
   outline: 3px solid rgba(255, 153, 181, 0.38);
   outline-offset: 3px;
 }
-/* ── Multi-dimension Rating Form ── */
+
 .multi-rating-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5294,7 +5203,7 @@ body.schedule-open #scheduleToggleBtn {
   gap: 3px;
 }
 
-/* icon button base */
+/* Rating form icon buttons. */
 .rating-dimension .star {
   background: none;
   border: none;
@@ -5310,7 +5219,6 @@ body.schedule-open #scheduleToggleBtn {
   transform: scale(1.2);
 }
 
-/* PNG icons in form — greyscale when inactive, full color when active */
 .rating-dimension .star .dim-icon {
   width: 26px;
   height: 26px;
@@ -5324,7 +5232,7 @@ body.schedule-open #scheduleToggleBtn {
   opacity: 1;
 }
 
-/* emoji icons in form */
+/* Emoji-style rating icons. */
 .rating-dimension .star .dim-emoji {
   font-size: 1.3rem;
   opacity: 0.3;
@@ -5336,17 +5244,16 @@ body.schedule-open #scheduleToggleBtn {
   opacity: 1;
 }
 
-/* ── Dimension Ratings in Review Card ── */
 .review-dim-ratings {
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
   margin: 12px 0 16px !important;
-  background-color: #ffefbe !important; /* 保留你原有的可愛淺藍底色 */
-  border: 1px solid #000000 !important;   /* 保留你原有的極簡黑邊 */
+  background-color: #ffefbe !important;
+  border: 1px solid #000000 !important;
   width: 100% !important;
-  max-width: 600px !important;          /* 保留 600px 寬度 */
-  min-height: 110px !important;         /* 稍微增加一點點高度以容納英文標註 */
+  max-width: 600px !important;
+  min-height: 110px !important;
   padding: 10px 14px !important;
   border-radius: 10px !important;
   justify-content: flex-start !important;
@@ -5355,8 +5262,8 @@ body.schedule-open #scheduleToggleBtn {
 .review-dim-header-label {
   font-size: 1rem !important;
   font-weight: 800 !important;
-  color: #4f67b1 !important;       
-  letter-spacing: 0.06em !important; 
+  color: #4f67b1 !important;
+  letter-spacing: 0.06em !important;
   padding-bottom: 4px !important;
   margin-bottom: 2px !important;
   width: 100% !important;
@@ -5364,7 +5271,7 @@ body.schedule-open #scheduleToggleBtn {
 
 .review-dim-body-grid {
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important; /* 完美切分左二右二 */
+  grid-template-columns: 1fr 1fr !important;
   gap: 6px 24px !important;
   width: 100% !important;
 }
@@ -5372,7 +5279,7 @@ body.schedule-open #scheduleToggleBtn {
 .dim-row {
   display: flex !important;
   align-items: center !important;
-  justify-content: space-between !important; /* 文字靠左，香蕉/星星圖示靠右 */
+  justify-content: space-between !important;
   width: 100% !important;
 }
 
@@ -5394,7 +5301,7 @@ body.schedule-open #scheduleToggleBtn {
 }
 
 .dim-icon-wrap .dim-icon-unit {
-  width: 22px !important; /* 微調圖示大小讓 2x2 格局更精美精緻 */
+  width: 22px !important;
   height: 22px !important;
   object-fit: contain !important;
   transition: filter 0.1s, opacity 0.1s !important;
@@ -5402,7 +5309,7 @@ body.schedule-open #scheduleToggleBtn {
 
 .dim-icon-wrap.inactive .dim-icon-unit {
   opacity: 0.22 !important;
-  filter: grayscale(1) !important; /* 未滿的分數稍微呈現灰色透明，視覺更有層次 */
+  filter: grayscale(1) !important;
 }
 
 .dim-icon-wrap .dim-emoji-unit {
@@ -5414,7 +5321,6 @@ body.schedule-open #scheduleToggleBtn {
   opacity: 0.25;
 }
 
-/* ── Dimension Breakdown in Detail Card ── */
 .dim-breakdown {
   border-top: 1px solid var(--border, #e5e7eb);
   padding-top: 12px;
@@ -5485,7 +5391,6 @@ body.schedule-open #scheduleToggleBtn {
   margin-top: -8px;
 }
 
-
 /* Course detail grouped metadata and history popovers. */
 .detail-meta-grid,
 .detail-class-grid,
@@ -5506,7 +5411,7 @@ body.schedule-open #scheduleToggleBtn {
 }
 
 .detail-mega-grid {
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   overflow: visible;
 }
 
