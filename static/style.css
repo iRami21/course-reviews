@@ -205,7 +205,38 @@ body {
 }
 
 .user-avatar:hover {
-  transform: scale(1.1);
+  transform: scale(1.08);
+  transition: transform 0.15s ease;
+}
+
+.user-avatar:active {
+  transform: scale(0.93);
+  transition: transform 0.08s ease;
+}
+
+@keyframes avatarClickPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.90); }
+  75%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.user-avatar.avatar-click-pop {
+  animation: avatarClickPop 0.28s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+}
+
+@keyframes avatarRipple {
+  0%   { box-shadow: 0 0 0 0px rgba(79, 103, 177, 0.4); }
+  100% { box-shadow: 0 0 0 10px rgba(79, 103, 177, 0); }
+}
+
+.user-avatar.avatar-ripple::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: avatarRipple 0.4s ease-out forwards;
+  pointer-events: none;
 }
 
 .user-dropdown {
@@ -4417,450 +4448,24 @@ button {
 }
 
 
-/* Toggle button: sticks to the right edge, vertically centered */
-#scheduleToggleBtn {
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  width: 200px;
-  transform: translateY(-50%);
-  background: #4f67b1;
-  color: #fff;
-  width: 36px;
-  padding: 14px 6px;
-  border-radius: 10px 0 0 10px;
-  cursor: pointer;
-  z-index: 1100;
-  font-size: 1.1rem;
-  line-height: 1;
-  box-shadow: -3px 0 10px rgba(0,0,0,0.18);
-  transition: right 0.32s ease, background 0.2s;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  user-select: none;
-  border: none;
-}
-#scheduleToggleBtn:hover { background: #3a52a0; }
-#scheduleToggleBtn .schedule-toggle-label {
-  writing-mode: vertical-rl;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.9;
-}
-/* Badge showing how many courses are in the schedule */
-#scheduleToggleBtn .schedule-badge {
-  background: #f5b700;
-  color: #111;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  display: none;
-}
-
-/* Sidebar panel */
-.schedule-sidebar {
-  position: fixed;
-  right: 0;
-  top: 0;
-  height: 100vh;
-  width: 420px;
-  background: #fefaf0;
-  box-shadow: -6px 0 28px rgba(16, 24, 40, 0.13);
-  z-index: 1099;
-  transform: translateX(100%);
-  transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.schedule-sidebar.open {
-  transform: translateX(0);
-}
-
-/* When sidebar is open, nudge the toggle button left */
-.schedule-sidebar.open ~ #scheduleToggleBtn,
-body.schedule-open #scheduleToggleBtn {
-  right: 420px;
-}
-
-/* Header */
-.schedule-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 10px;
-  background: #4f67b1;
-  color: #fff;
-  flex-shrink: 0;
-}
-.schedule-sidebar-header h3 {
-  font-size: 1rem;
-  font-weight: 800;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.schedule-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.schedule-clear-btn {
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.35);
-  color: #fff;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.18s;
-}
-.schedule-clear-btn:hover { background: rgba(255,255,255,0.32); }
-.schedule-close-btn {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 1.3rem;
-  cursor: pointer;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: background 0.18s;
-}
-.schedule-close-btn:hover { background: rgba(255,255,255,0.22); }
-
-/* Credits summary bar */
-.schedule-credits-bar {
-  background: #edf2ff;
-  padding: 8px 16px;
-  font-size: 0.82rem;
-  color: #4f67b1;
-  font-weight: 700;
-  border-bottom: 1px solid #dde3f0;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Scrollable grid area */
-.schedule-grid-wrapper {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: 10px 10px 16px;
-}
-
-/* The timetable grid */
-.schedule-grid {
-  display: grid;
-  grid-template-columns: 34px repeat(6, 1fr);
-  border-left: 1px solid #dde3f0;
-  border-top: 1px solid #dde3f0;
-  min-width: 340px;
-  font-size: 0.68rem;
-}
-
-/* Header row cells */
-.sched-header-cell {
-  border-right: 1px solid #dde3f0;
-  border-bottom: 1px solid #dde3f0;
-  padding: 5px 2px;
-  text-align: center;
-  font-weight: 800;
-  font-size: 0.7rem;
-  background: #4f67b1;
-  color: #fff;
-}
-.sched-header-cell.period-col {
-  background: #3a52a0;
-}
-
-/* Period label cells (left column) */
-.sched-period-cell {
-  border-right: 1px solid #dde3f0;
-  border-bottom: 1px solid #dde3f0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 1px;
-  background: #f5f7ff;
-  color: #4f67b1;
-  font-weight: 800;
-  font-size: 0.65rem;
-  text-align: center;
-  line-height: 1.2;
-}
-.sched-period-time {
-  font-size: 0.55rem;
-  color: #7b8494;
-  font-weight: 400;
-  display: block;
-}
-
-/* Regular empty cells */
-.sched-cell {
-  border-right: 1px solid #dde3f0;
-  border-bottom: 1px solid #dde3f0;
-  min-height: 38px;
-  position: relative;
-  background: #fff;
-  transition: background 0.15s;
-}
-.sched-cell:hover { background: #f5f7ff; }
-
-/* Cell filled with a course */
-.sched-cell.has-course {
-  background: #4f67b1 !important;
-  border-color: #3a52a0;
-  cursor: default;
-  padding: 2px 3px;
-  overflow: hidden;
-}
-.sched-cell.has-course .cell-course-name {
-  color: #fff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1.25;
-  word-break: break-word;
-  hyphens: auto;
-}
-.sched-cell.has-course .cell-remove-btn {
-  position: absolute;
-  top: 1px;
-  right: 2px;
-  background: rgba(255,255,255,0.25);
-  border: none;
-  color: #fff;
-  font-size: 0.58rem;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  line-height: 1;
-  transition: background 0.15s;
-}
-.sched-cell.has-course .cell-remove-btn:hover {
-  background: rgba(217, 45, 80, 0.75);
-}
-
-/* Conflict state */
-.sched-cell.conflict {
-  background: #fff1f4 !important;
-  border-color: #d92d50;
-}
-.sched-cell.conflict .cell-course-name { color: #d92d50; }
-
-/* Different color palette for multiple courses */
-.sched-cell.course-color-1.has-course { background: #4f67b1 !important; border-color: #3a52a0; }
-.sched-cell.course-color-2.has-course { background: #2a8f6f !important; border-color: #1e6e54; }
-.sched-cell.course-color-3.has-course { background: #c74d30 !important; border-color: #a33d24; }
-.sched-cell.course-color-4.has-course { background: #7c3aed !important; border-color: #6125d0; }
-.sched-cell.course-color-5.has-course { background: #0891b2 !important; border-color: #067490; }
-.sched-cell.course-color-6.has-course { background: #9d5c0d !important; border-color: #7d490a; }
-.sched-cell.course-color-7.has-course { background: #b02473 !important; border-color: #8e1c5c; }
-.sched-cell.course-color-8.has-course { background: #374151 !important; border-color: #1f2937; }
-
-/* Course list beneath the grid */
-.schedule-course-list {
-  padding: 0 10px 8px;
-  flex-shrink: 0;
-}
-.schedule-course-list h4 {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #4f67b1;
-  margin: 10px 0 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.schedule-course-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  margin-bottom: 5px;
-  font-size: 0.8rem;
-  color: #fff;
-  font-weight: 600;
-}
-.schedule-course-chip .chip-title { flex: 1; line-height: 1.3; }
-.schedule-course-chip .chip-credits {
-  font-size: 0.72rem;
-  opacity: 0.85;
-  white-space: nowrap;
-}
-.schedule-course-chip .chip-remove {
-  background: rgba(255,255,255,0.22);
-  border: none;
-  color: #fff;
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  font-size: 0.7rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-.schedule-course-chip .chip-remove:hover { background: rgba(217,45,80,0.7); }
-
-/* Empty state inside sidebar */
-.schedule-empty-state {
-  text-align: center;
-  padding: 28px 16px;
-  color: #7b8494;
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-.schedule-empty-state .empty-icon { font-size: 2rem; margin-bottom: 8px; display: block; }
-
-/* "Add to Schedule" button on course cards */
-.btn-add-schedule {
-  background: #edf2ff;
-  color: #4f67b1;
-  border: 1.5px solid #c7d4f5;
-  border-radius: 6px;
-  padding: 5px 11px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
-  white-space: nowrap;
-}
-.btn-add-schedule:hover {
-  background: #4f67b1;
-  color: #fff;
-  border-color: #4f67b1;
-}
-.btn-add-schedule.in-schedule {
-  background: #d1fae5;
-  color: #065f46;
-  border-color: #6ee7b7;
-}
-.btn-add-schedule.in-schedule:hover {
-  background: #fef2f2;
-  color: #d92d50;
-  border-color: #fca5a5;
-}
-
-/* Conflict toast */
-#scheduleConflictToast {
-  position: fixed;
-  bottom: 80px;
-  right: 24px;
-  background: #d92d50;
-  color: #fff;
-  padding: 11px 18px;
-  border-radius: 10px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  z-index: 2000;
-  box-shadow: 0 6px 20px rgba(217,45,80,0.35);
-  display: none;
-  max-width: 280px;
-  line-height: 1.4;
-}
-
-/* Overlay dim when sidebar is open on small screens */
-#scheduleOverlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
-  z-index: 1098;
-}
-@media (max-width: 600px) {
-  .schedule-sidebar { width: 100vw; }
-  body.schedule-open #scheduleToggleBtn { right: 100vw; }
-  #scheduleOverlay { display: none; }
-}
-
-/* Semester tab bar inside schedule sidebar */
-.sched-tab-bar {
-  display: flex;
-  gap: 0;
-  background: #2e3f80;
-  overflow-x: auto;
-  flex-shrink: 0;
-  scrollbar-width: none;
-}
-.sched-tab-bar::-webkit-scrollbar { display: none; }
-
-.sched-sem-tab {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: rgba(255,255,255,0.6);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-.sched-sem-tab:hover {
-  color: #fff;
-  background: rgba(255,255,255,0.08);
-}
-.sched-sem-tab.active {
-  color: #fff;
-  border-bottom-color: #f5b700;
-  background: rgba(255,255,255,0.12);
-}
-
-/* Small course count badge inside the tab */
-.sched-sem-count {
-  background: #f5b700;
-  color: #111;
-  border-radius: 9px;
-  padding: 1px 5px;
-  font-size: 0.65rem;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
 .activity-page {
     max-width: var(--container);
-    margin: 2.75rem auto;
-    padding: 0 2rem;
+    margin: 0 auto;
 }
 
 .activity-page .page-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+    margin-top: 1.5rem;
 }
 
 .activity-title-group h2 {
     color: var(--text);
-    font-size: clamp(2rem, 3vw, 3rem);
-    line-height: 1.08;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    line-height: 1.1;
 }
 
 .page-kicker {
@@ -5082,6 +4687,11 @@ body.schedule-open #scheduleToggleBtn {
 .badge-reaction {
   background: #fce7f3;
   color: #831843;
+}
+
+.badge-reply {
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .activity-unread-dot {
@@ -5701,13 +5311,27 @@ body.schedule-open #scheduleToggleBtn {
   transform: scale(1.25) !important;
 }
 
-/* ── Dim pop animation ── */
-@keyframes dimPop {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.5) rotate(-8deg); }
-  70%  { transform: scale(1.2) rotate(4deg); }
-  100% { transform: scale(1); }
+/* 🌟 點擊活動紀錄跳轉過來時，該則評論卡片的黃色漸淡高亮特效 */
+.review-highlight-flash {
+  animation: flashHighlight 3s ease-out forwards;
+  position: relative;
+  z-index: 1;
 }
-.dim-icon-wrap.dim-pop {
-  animation: dimPop 0.35s ease;
+
+@keyframes flashHighlight {
+  0% {
+    box-shadow: 0 0 0 3px rgba(255, 180, 50, 0.9), 0 0 20px 6px rgba(255, 180, 50, 0.4) !important;
+    background-color: #fffbee !important;
+    transform: scale(1.015);
+  }
+  30% {
+    box-shadow: 0 0 0 3px rgba(255, 180, 50, 0.8), 0 0 20px 6px rgba(255, 180, 50, 0.35) !important;
+    background-color: #fffbee !important;
+    transform: scale(1.015);
+  }
+  100% {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+    background-color: transparent !important;
+    transform: scale(1);
+  }
 }
