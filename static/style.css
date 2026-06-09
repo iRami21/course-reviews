@@ -1698,7 +1698,7 @@ body {
 }
 
 .rating-summary-count {
-  margin-bottom: 2.4rem;
+  margin-bottom: 0rem !important;
   color: #4b5565;
   font-size: 1.35rem;
   font-weight: 700;

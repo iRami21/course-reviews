@@ -1696,7 +1696,7 @@ function renderCourseCards(container, courses, emptyText, origin = 'browse') {
                     <span class="stat-save-display">
                         ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">${commentIcon()} ${course.commentTotal ?? getCourseCommentTotal(course.id)}</span>
+                    <span class="stat-comment">${commentIcon()} ${typeof course.commentTotal !== "undefined" ? course.commentTotal : getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
                   <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
@@ -1755,23 +1755,7 @@ document.addEventListener("DOMContentLoaded", function() {
 // === 新版：主頁面課程排序邏輯 ===
 function sortCourses(courses, sortBy) {
   const sorted = [...courses];
-
-  if (sortBy === "popular") {
-    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
-    sorted.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
-      return bPopularity - aPopularity;
-    });
-  } else if (sortBy === "latest") {
-    // Latest (最新開課): 依照年份與學期由新到舊排序
-    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
-  } else if (sortBy === "rating") {
-    // Ratings (評分最高): 依照星星數由高到低排序
-    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }
-
-  return sorted;
+  return [...courses];
 }
 
 // Toggle follow
@@ -1959,10 +1943,8 @@ function getCourseCommentTotal(courseId) {
   if (course && Number.isFinite(Number(course.commentTotal))) {
     return Number(course.commentTotal);
   }
-  return reviews.reduce(
-    (total, review) => total + 1 + (review.replies || []).length,
-    0,
-  );
+  // 🚨 嚴謹模式：只回傳獨立主評價的數量，完全不計算子回覆
+  return reviews.length;
 }
 
 function updateDetailSocialStats(courseId) {
@@ -1999,7 +1981,13 @@ function showFavorites() {
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
 
-  // 從後端取最新收藏清單（支援跨頁收藏）
+  // 已有快取就直接渲染，不重打 API（toggle favorite 時會清空 favoritesCache 觸發重新 fetch）
+  if (favoritesCache && favoritesCache.length > 0) {
+    renderFavorites();
+    return;
+  }
+
+  // 從後端取最新收藏清單
   const container = document.getElementById("favoritesContainer");
   if (container) container.innerHTML = '<p class="empty-state">Loading...</p>';
 
@@ -2049,8 +2037,14 @@ function showActivity() {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "block";
 
-  switchActivityTab("personal");
-  loadActivityData();
+  switchActivityTab(activityState.activeTab);
+  if (!activityState.loaded) {
+    loadActivityData();
+  } else {
+    renderPersonalActions();
+    renderInteractions();
+    updateActivityInteractionBadge();
+  }
 }
 
 function switchActivityTab(tab) {
@@ -2409,14 +2403,13 @@ function renderFavorites() {
   const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : "popular";
 
   if (sortBy === "popular") {
-    // 👈 修改這裡：計算「愛心數 + 總留言數」來排序
     favorites.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+      const aPopularity = (a.saveCount || 0) + (a.commentTotal || 0);
+      const bPopularity = (b.saveCount || 0) + (b.commentTotal || 0);
       return bPopularity - aPopularity;
     });
   } else if (sortBy === "latest") {
-    // Latest: 依據年份與學期由新到舊
+    // 依據開課學期與年份由新到舊
     favorites.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
   } else if (sortBy === "rating") {
     // Ratings: 依據評分由高到低
@@ -2748,8 +2741,40 @@ function openCourseDetail(courseId) {
       ${labelText}
     `;
     backBtn.onclick = closeCourseDetail;
-  }
-}
+    if (allReviews && allReviews[courseId]) {
+        renderReviewsList(allReviews[courseId]);
+    } else {
+        // 如果快取沒有，再去後端抓
+        fetch(`/api/courses/${courseId}/reviews`)
+            .then(res => res.json())
+            .then(data => {
+                renderReviewsList(data.reviews || []);
+            });
+    }
+
+    // 🚨 修正：確保優先讀取全域快取字典（後端傳來的 representative_reviews）
+    // 由於後端傳過來的字典 Key 是字串，必須強制 String(courseId)
+    const cachedId = String(courseId);
+    
+    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[cachedId]) {
+        renderReviewsList(window.__INITIAL_REVIEWS__[cachedId]);
+    } else if (courseReviews && courseReviews[cachedId]) {
+        renderReviewsList(courseReviews[cachedId]);
+    } else {
+        // 如果快取都沒有，老老實實去後端 API 抓取該群組的合併評論
+        fetch(`/api/courses/${courseId}/reviews`)
+            .then(res => res.json())
+            .then(data => {
+                // 將抓到的評論同步回全域快取，避免下次點開重複讀取
+                courseReviews[cachedId] = data.reviews || [];
+                renderReviewsList(data.reviews || []);
+            })
+            .catch(err => {
+                console.error("Fetch reviews failed:", err);
+                renderReviewsList([]);
+            });
+          }
+}}
 
 function restoreCourseListPosition() {
   const targetCard = courseReturnState.courseId
@@ -2827,6 +2852,18 @@ function renderRatingBreakdown(reviews) {
   const breakdown = document.getElementById("ratingBreakdown");
   const total = reviews.length;
   breakdown.innerHTML = "";
+
+  for (let rating = 5; rating >= 1; rating--) {
+    const count = reviews.filter((r) => r.rating === rating).length;
+    const percent = total > 0 ? (count / total) * 100 : 0;
+    const row = document.createElement("div");
+    row.className = "rating-breakdown-row";
+    row.innerHTML = `
+      
+    `;
+    breakdown.appendChild(row);
+  }
+
   renderDimBreakdown(reviews);
 }
 
