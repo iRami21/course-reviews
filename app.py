@@ -82,7 +82,6 @@ def create_app():
                 text("ALTER TABLE \"User\" ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
             )
             
-        # 👇 新增這兩段：如果資料庫沒有這兩個欄位，就自動幫它加進去
         if "avatarAnimal" not in user_columns:
             db.session.execute(
                 text("ALTER TABLE \"User\" ADD COLUMN avatarAnimal TEXT DEFAULT 'question'")
@@ -555,7 +554,7 @@ def create_app():
         return matched_codes
 
     def display_course_group_key(course):
-        # 1. 整理出這門課所有的教授陣容
+  
         prof_names = []
         for s in course.sections:
             for i in s.instructors:
@@ -564,19 +563,15 @@ def create_app():
                     if cleaned and cleaned not in prof_names:
                         prof_names.append(cleaned)
         prof_names.sort()
-        
-        # 2. 徹底清理課名文字
+  
         title_key = re.sub(r"\s+", " ", (course.title or course.name or "").strip()).casefold()
         prof_key = "|".join(prof_names).casefold()
         
-        # 3. 🚨 終極防禦：如果是校際課程，或者根本沒有教授
-        #    我們直接綁定它在資料庫的唯一身分證 `course.course_id`
-        #    這會強制讓「民法」、「日文」、「電腦英語」擁有完全不同的 Key，在記憶體分組時絕對不會撞車！
         dept_str = course.department or ""
         if "校際" in dept_str or not prof_key:
             return (f"unique_course_{course.course_id}_{title_key}", "none")
             
-        # 4. 一般校內課程：相同課名 + 相同教授群才允許合併
+       
         return (title_key, prof_key)
     
     def build_course_display_groups(courses):
@@ -613,7 +608,7 @@ def create_app():
                 if rating:
                     all_ratings.append(float(rating))
 
-        # ── 🚨 這裡就是被省略掉、現在完整補回來的歷史學期與系所邏輯 ──
+
         departments = []
         history_terms = []
         program_tags = []
@@ -628,13 +623,13 @@ def create_app():
                     
                 term_label = f"{section.roc_year} S{section.term}"
                 
-                # 取得上課時間、地點與學程標籤
+               
                 meeting_data = get_raw_course_meeting(c.code, section.roc_year, section.term)
                 for tag in meeting_data.get("programTags", []):
                     if tag not in program_tags:
                         program_tags.append(tag)
                 
-                # 取得該學期的教授名單
+
                 prof_names = [clean_professor_name(i.name) for i in section.instructors if i and i.name]
                 prof_text = "、".join(dict.fromkeys(n for n in prof_names if n))
                 
@@ -649,7 +644,7 @@ def create_app():
                     "searchValue": term_label
                 }
                 
-                # 避免重複加入相同學期
+
                 if not any(t["year"] == section.roc_year and t["semester"] == section.term for t in history_terms):
                     history_terms.append(term_info)
                     
@@ -718,7 +713,7 @@ def create_app():
         return {
             "id": str(review.id),
             "author": author.username if author else "Anonymous",
-            # 💡 完美救回被後端刪除的頭像結構，防止前端大頭貼破圖！
+            
             "avatar": {
                 "avatarAnimal": author.avatar_animal if author else "question",
                 "gender": author.gender if author else "undisclosed",
@@ -745,9 +740,7 @@ def create_app():
             ],
         }
 
-    # =========================================================================
-    # 🔽 以下完整保留後端同學寫的效能優化與子查詢函式，確保後端運算不崩潰
-    # =========================================================================
+    
 
     def serialize_reply(reply, current_user_id=None):
         author = reply.author
@@ -889,9 +882,7 @@ def create_app():
             .order_by(Review.created_at.desc())
         )
 
-    # =========================================================================
-    # 🔽 完美守住你 HEAD 原有的通知功能、搜尋資料包與 API 路由，防止功能人間蒸發
-    # =========================================================================
+ 
 
     def save_notification(user_id, message, link="", category="notification"):
         if not user_id or not message:
@@ -934,7 +925,6 @@ def create_app():
         semester = str(request.args.get("semester", "")).strip()
         min_rating_raw = str(request.args.get("min_rating", "")).strip()
         
-        # 🚨 確保 sort_by 第一時間被宣告
         sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
 
         from models import Section, Review
@@ -1080,7 +1070,7 @@ def create_app():
                 if stats["rev_cnt"] > 0:
                     g["ratings_list"].append(stats["avg_rat"])
 
-        # ── 🎯 完美對齊 Python cmp_to_key 的終極權重比較器 ──
+    
         def compare_hottest(k1, k2):
             g1, g2 = group_lookup[k1], group_lookup[k2]
             score1 = g1["total_rev"] + g1["total_fav"]
