@@ -222,7 +222,10 @@ class Favorite(db.Model):
 
 class Review(db.Model):
     __tablename__ = "Review"
-
+    
+    __table_args__ = (
+        db.UniqueConstraint("sectionId", "userId", name="uq_user_section_review"),
+    )
     review_id = db.Column("reviewId", db.Integer, primary_key=True)
     section_id = db.Column(
         "sectionId",
@@ -240,7 +243,12 @@ class Review(db.Model):
     )
     parent_id = db.Column("parentId", db.Integer, db.ForeignKey("Review.reviewId"))
     created_at = db.Column("timestamp", db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column("updatedAt", db.DateTime, nullable=True)
     rating = db.Column(db.Integer)
+    rating_quality = db.Column("ratingQuality", db.Integer)
+    rating_sweetness = db.Column("ratingSweetness", db.Integer)
+    rating_coolness = db.Column("ratingCoolness", db.Integer)
+    rating_solidity = db.Column("ratingSolidity", db.Integer)
     text = db.Column("reviewContent", db.Text, nullable=False)
     reaction_counts = db.Column("reactionCounts", db.Text, nullable=False, default="{}")
     is_visible = db.Column(db.Boolean, default=True)
