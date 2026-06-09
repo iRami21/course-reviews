@@ -437,7 +437,6 @@ def create_app():
             "saveCount": int(save_count or 0),
             "year": course.year or 0,
             "semester": course.semester or 0,
-            # 💡 完美保留你精心設計的豐富標籤，讓前端的標籤搜尋功能可以繼續點擊！
 
             "tags": [
                 tag
