@@ -396,7 +396,8 @@ def create_app():
                 and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None
             )
             
-        grade_tag = format_grade_tag(course.grade)
+        grade_value = course.grade or (str(course.year_level) if course.year_level else "")
+        grade_tag = format_grade_tag(grade_value)
 
         # 校際課程直接顯示「校際課程」，不顯示教授名
         dept_str = course.department or ""
@@ -426,7 +427,7 @@ def create_app():
             "professor": professor_name,
             "department": course.department or "General",
             "credits": course.credits or 0,
-            "grade": course.grade or "",
+            "grade": grade_value,
             "requirement": course.requirement or course.course_type or "",
             "courseType": course.course_type or "",
             "englishTaught": bool(course.english_taught),
@@ -924,6 +925,7 @@ def create_app():
         per_page = min(60, max(1, int(per_page or request.args.get("per_page", 60))))
         query_text = str(request.args.get("q", "")).strip()
         year = str(request.args.get("year", "")).strip()
+        grade = str(request.args.get("grade", "")).strip()
         department_category = str(request.args.get("department_category", "")).strip()
         department_group = str(request.args.get("department_group", "")).strip()
         department = str(request.args.get("department", "")).strip()
@@ -977,7 +979,7 @@ def create_app():
             elif query_text == "全英授課":
                 search_filters.append(Course.english_taught.is_(True))
             elif re.fullmatch(r"\d+年級", query_text):
-                search_filters.append(Course.grade == query_text.replace("年級", ""))
+                search_filters.append(Course.year_level == int(query_text.replace("年級", "")))
             else:
                 for token in tokens:
                     lower = token.lower()
@@ -1009,6 +1011,8 @@ def create_app():
 
         if year:
             filters.append(Course.sections.any(Section.roc_year == int(year)))
+        if grade:
+            filters.append(Course.year_level == int(grade))
         if department_category:
             cat_depts = get_departments_by_category(department_category)
             filters.append(Course.offers.any(Offer.department.has(Department.name.in_(cat_depts))) if cat_depts else Course.course_id == -1)
