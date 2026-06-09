@@ -3,7 +3,6 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import (
     LoginManager,
@@ -16,6 +15,7 @@ from sqlalchemy import and_, func, inspect, or_, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
+from functools import cmp_to_key
 
 from models import (
     Course,
@@ -338,6 +338,8 @@ def create_app():
                 activity,
             ),
         )
+        
+    
 
     def serialize_user(user):
         return {
@@ -392,9 +394,26 @@ def create_app():
                 and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None
             )
             
-        # 💡 完美保留你原本寫的：把丟給前端的文字做清洗與格式化，這樣你的前端排版才不會壞掉！
         grade_tag = format_grade_tag(course.grade)
-        professor_name = clean_professor_name(course.professor)
+
+        # 校際課程直接顯示「校際課程」，不顯示教授名
+        dept_str = course.department or ""
+        is_intercollegiate = "校際" in dept_str
+
+        if is_intercollegiate:
+            professor_name = "校際課程"
+        else:
+            # 只取最新 section 的教授，避免把所有學期的教授全部串在一起
+            latest = course.latest_section
+            if latest:
+                names = [
+                    clean_professor_name(i.name)
+                    for i in latest.instructors
+                    if i and i.name
+                ]
+                professor_name = "、".join(dict.fromkeys(n for n in names if n))
+            else:
+                professor_name = ""
 
 
         return {
@@ -492,10 +511,30 @@ def create_app():
         return result
 
     def display_course_group_key(course):
+        # 1. 整理出這門課所有的教授陣容
+        prof_names = []
+        for s in course.sections:
+            for i in s.instructors:
+                if i and i.name:
+                    cleaned = clean_professor_name(i.name)
+                    if cleaned and cleaned not in prof_names:
+                        prof_names.append(cleaned)
+        prof_names.sort()
+        
+        # 2. 徹底清理課名文字
         title_key = re.sub(r"\s+", " ", (course.title or course.name or "").strip()).casefold()
-        professor_key = re.sub(r"\s+", " ", clean_professor_name(course.professor or "").strip()).casefold()
-        return (title_key, professor_key)
-
+        prof_key = "|".join(prof_names).casefold()
+        
+        # 3. 🚨 終極防禦：如果是校際課程，或者根本沒有教授
+        #    我們直接綁定它在資料庫的唯一身分證 `course.course_id`
+        #    這會強制讓「民法」、「日文」、「電腦英語」擁有完全不同的 Key，在記憶體分組時絕對不會撞車！
+        dept_str = course.department or ""
+        if "校際" in dept_str or not prof_key:
+            return (f"unique_course_{course.course_id}_{title_key}", "none")
+            
+        # 4. 一般校內課程：相同課名 + 相同教授群才允許合併
+        return (title_key, prof_key)
+    
     def build_course_display_groups(courses):
         groups = []
         group_lookup = {}
@@ -521,84 +560,85 @@ def create_app():
 
         all_ratings = []
         total_reviews = 0
-        total_comments = 0
+        
         for course_id in course_ids:
             serialized_reviews = (reviews_by_course or {}).get(str(course_id), [])
             total_reviews += len(serialized_reviews)
             for review in serialized_reviews:
-                total_comments += 1 + len(review.get("replies") or [])
                 rating = review.get("rating")
                 if rating:
                     all_ratings.append(float(rating))
 
+        # ── 🚨 這裡就是被省略掉、現在完整補回來的歷史學期與系所邏輯 ──
         departments = []
-        term_details = {}
-        for grouped_course in group["courses"]:
-            for department in grouped_course.departments:
-                if department and department.name and department.name not in departments:
-                    departments.append(department.name)
-            for section in grouped_course.sections:
-                if not (section.roc_year and section.term):
-                    continue
-                term_key = (int(section.roc_year), int(section.term))
-                detail = term_details.setdefault(
-                    term_key,
-                    {"professors": [], "classTimes": [], "locations": [], "rawRooms": []},
-                )
-                for instructor in section.instructors:
-                    professor_name = clean_professor_name(instructor.name if instructor else "")
-                    if professor_name and professor_name not in detail["professors"]:
-                        detail["professors"].append(professor_name)
-                meeting = get_raw_course_meeting(grouped_course.code, term_key[0], term_key[1])
-                if meeting["classTime"] and meeting["classTime"] not in detail["classTimes"]:
-                    detail["classTimes"].append(meeting["classTime"])
-                if meeting["location"] and meeting["location"] not in detail["locations"]:
-                    detail["locations"].append(meeting["location"])
-                if meeting["rawRoom"] and meeting["rawRoom"] not in detail["rawRooms"]:
-                    detail["rawRooms"].append(meeting["rawRoom"])
-
         history_terms = []
-        for year, term in sorted(term_details.keys(), key=lambda item: (item[0], item[1]), reverse=True):
-            detail = term_details[(year, term)]
-            history_terms.append(
-                {
-                    "year": year,
-                    "semester": term,
-                    "label": f"{year}-S{term}",
-                    "searchValue": f"{year} S{term}",
-                    "professors": detail["professors"],
-                    "professorText": "、".join(detail["professors"]) or "-",
-                    "classTime": "、".join(detail["classTimes"]) or "-",
-                    "location": "、".join(detail["locations"]) or "-",
-                    "rawRoom": "、".join(detail["rawRooms"]),
+        
+        for c in group["courses"]:
+            if c.department and c.department not in departments:
+                departments.append(c.department)
+                
+            for section in c.sections:
+                if not section.roc_year or not section.term:
+                    continue
+                    
+                term_label = f"{section.roc_year} S{section.term}"
+                
+                # 取得上課時間與地點
+                meeting_data = get_raw_course_meeting(c.code, section.roc_year, section.term)
+                
+                # 取得該學期的教授名單
+                prof_names = [clean_professor_name(i.name) for i in section.instructors if i and i.name]
+                prof_text = "、".join(dict.fromkeys(n for n in prof_names if n))
+                
+                term_info = {
+                    "year": section.roc_year,
+                    "semester": section.term,
+                    "label": term_label,
+                    "professorText": prof_text,
+                    "classTime": meeting_data.get("classTime", ""),
+                    "location": meeting_data.get("location", ""),
+                    "rawRoom": meeting_data.get("rawRoom", ""),
+                    "searchValue": term_label
                 }
-            )
+                
+                # 避免重複加入相同學期
+                if not any(t["year"] == section.roc_year and t["semester"] == section.term for t in history_terms):
+                    history_terms.append(term_info)
+                    
+        # 依年份和學期由新到舊排序，抓出最新的一學期
+        history_terms.sort(key=lambda x: (x["year"], x["semester"]), reverse=True)
         latest_term = history_terms[0] if history_terms else None
+        # ────────────────────────────────────────────────
 
         payload["codes"] = group["codes"]
         payload["groupCourseIds"] = course_ids
         payload["code"] = group["codes"][0] if group["codes"] else payload.get("code", "")
+        
         if latest_term:
             payload["year"] = latest_term["year"]
             payload["semester"] = latest_term["semester"]
             payload["latestTerm"] = latest_term["label"]
             payload["professor"] = latest_term["professorText"]
-
             payload["classTime"] = latest_term["classTime"]
             payload["location"] = latest_term["location"]
             payload["rawRoom"] = latest_term["rawRoom"]
+            
         payload["historyTerms"] = history_terms
+        
         if departments:
             payload["department"] = "、".join(departments)
             existing_tags = payload.get("tags") or []
             payload["tags"] = [*departments, *[tag for tag in existing_tags if tag not in departments]]
+            
         payload["reviewCount"] = total_reviews
-        payload["commentTotal"] = total_comments
+        # 嚴謹模式：留言總數等於主評價數量
+        payload["commentTotal"] = total_reviews 
         payload["rating"] = round(sum(all_ratings) / len(all_ratings), 1) if all_ratings else 0
         payload["saveCount"] = int(sum((favorite_counts or {}).get(course_id, 0) for course_id in course_ids))
         payload["followed"] = any(course_id in (favorite_course_ids or set()) for course_id in course_ids)
+        
         return payload
-
+    
     def summarize_reactions(reactions):
         counts = {}
         for reaction in reactions or []:
@@ -640,7 +680,7 @@ def create_app():
             "ratingSweetness": review.rating_sweetness,
             "ratingCoolness": review.rating_coolness,
             "ratingSolidity": review.rating_solidity,
-            "date": review.created_at.strftime("%Y-%m-%d"),
+            "date": review.created_at.strftime("%Y-%m-%d %H:%M"),
             "sectionLabel": section_label,
             "language": review.language or "English",
             "text": review.text,
@@ -684,7 +724,7 @@ def create_app():
                 "gender": author.gender if author else "undisclosed",
             },
             "text": reply.text,
-            "date": reply.created_at.strftime("%Y-%m-%d") if reply.created_at else "",
+            "date": reply.created_at.strftime("%Y-%m-%d %H:%M") if reply.created_at else "",
             "reviewId": str(reply.review_id),
             "likes": total_likes,
             "liked": bool(user_reaction),
@@ -843,34 +883,42 @@ def create_app():
         sport_activity = str(request.args.get("sport_activity", "")).strip()
         semester = str(request.args.get("semester", "")).strip()
         min_rating_raw = str(request.args.get("min_rating", "")).strip()
+        
+        # 🚨 確保 sort_by 第一時間被宣告
         sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
 
-        from models import Section
-        # 只計算頂層、可見的留言（排除 reply 和管理員隱藏的留言）
+        from models import Section, Review
+        
         visible_review_cond = and_(
             Review.parent_id.is_(None),
             Review.is_visible.isnot(False),
         )
+        
+        # 建立精確的基礎計分欄位（只看主評價）
         avg_rating = func.coalesce(func.avg(Review.rating).filter(visible_review_cond), 0)
         review_count = func.count(Review.review_id).filter(visible_review_cond)
+        latest_review_time = func.coalesce(func.max(Review.created_at).filter(visible_review_cond), "1970-01-01 00:00:00")
         
-        # 👇 確保這行有加進來！先呼叫子查詢
         fav_sq = favorite_stats_subquery()
 
-        courses_query = (
-            Course.query
-            .options(
-                selectinload(Course.offers).selectinload(Offer.department),
-                selectinload(Course.sections)
-                .selectinload(Section.teaches)
-                .selectinload(Teach.instructor),
+        # 基礎統計查詢（不 JOIN 子回覆表，維持嚴謹模式）
+        id_query = (
+            db.session.query(
+                Course.course_id, 
+                Course.code, 
+                Course.name,
+                review_count.label("rev_cnt"),
+                avg_rating.label("avg_rat"),
+                func.coalesce(fav_sq.c.save_count, 0).label("fav_cnt"),
+                latest_review_time.label("lat_rev")
             )
             .outerjoin(Section, Section.course_id == Course.course_id)
             .outerjoin(Review, Review.section_id == Section.section_id)
-            .outerjoin(fav_sq, fav_sq.c.course_id == Course.course_id)  # 👈 還有這行也要連進來
+            .outerjoin(fav_sq, fav_sq.c.course_id == Course.course_id)
             .group_by(Course.course_id)
         )
 
+        # 注入過濾條件
         filters = []
         if query_text:
             search_filters = []
@@ -886,14 +934,13 @@ def create_app():
             else:
                 for token in tokens:
                     lower = token.lower()
-                    if lower.isdigit():
-                        if len(lower) == 3:
-                            search_filters.append(Course.sections.any(Section.roc_year == int(lower)))
+                    if lower.isdigit() and len(lower) == 3:
+                        search_filters.append(Course.sections.any(Section.roc_year == int(lower)))
                         continue
-                    if lower in {"s1", "sem1", "semester1", "semester-1", "semester_1"}:
+                    if lower in {"s1", "sem1", "semester1"}:
                         search_filters.append(Course.sections.any(Section.term == 1))
                         continue
-                    if lower in {"s2", "sem2", "semester2", "semester-2", "semester_2"}:
+                    if lower in {"s2", "sem2", "semester2"}:
                         search_filters.append(Course.sections.any(Section.term == 2))
                         continue
                     text_terms.append(token)
@@ -904,138 +951,182 @@ def create_app():
                         or_(
                             Course.name.ilike(pattern),
                             Course.code.ilike(pattern),
-                            Course.requirement.ilike(pattern),
-                            Course.offers.any(
-                                Offer.department.has(Department.name.ilike(pattern))
-                            ),
-                            Course.sections.any(
-                                Section.teaches.any(
-                                    Teach.instructor.has(Instructor.name.ilike(pattern))
-                                )
-                            ),
+                            Course.offers.any(Offer.department.has(Department.name.ilike(pattern))),
+                            Course.sections.any(Section.teaches.any(Teach.instructor.has(Instructor.name.ilike(pattern)))),
                         )
                     )
-
             if search_filters:
                 filters.extend(search_filters)
 
         if year:
             filters.append(Course.sections.any(Section.roc_year == int(year)))
         if department_category:
-            category_departments = get_departments_by_category(department_category)
-            if category_departments:
-                filters.append(
-                    Course.offers.any(
-                        Offer.department.has(Department.name.in_(category_departments))
-                    )
-                )
-            else:
-                filters.append(Course.course_id == -1)
+            cat_depts = get_departments_by_category(department_category)
+            filters.append(Course.offers.any(Offer.department.has(Department.name.in_(cat_depts))) if cat_depts else Course.course_id == -1)
         if department_group:
-            group_departments = get_departments_by_group(department_group)
-            if group_departments:
-                filters.append(
-                    Course.offers.any(
-                        Offer.department.has(Department.name.in_(group_departments))
-                    )
-                )
-            else:
-                filters.append(Course.course_id == -1)
+            grp_depts = get_departments_by_group(department_group)
+            filters.append(Course.offers.any(Offer.department.has(Department.name.in_(grp_depts))) if grp_depts else Course.course_id == -1)
         if department:
-            filters.append(
-                Course.offers.any(
-                    Offer.department.has(Department.name == department)
-                )
-            )
+            filters.append(Course.offers.any(Offer.department.has(Department.name == department)))
         if sport_activity:
             filters.append(Course.name.ilike(f"%{sport_activity}%"))
         if semester:
             filters.append(Course.sections.any(Section.term == int(semester)))
-        if filters:
-            courses_query = courses_query.filter(and_(*filters))
-        if min_rating_raw:
-            courses_query = courses_query.having(avg_rating >= float(min_rating_raw))
-
-        if sort_by == "latest":
-            courses_query = courses_query.order_by(
-                func.max(Section.roc_year * 10 + Section.term).desc(),
-                Course.code.asc(),
-            )
-        elif sort_by == "rating":
-            courses_query = courses_query.order_by(avg_rating.desc(), Course.code.asc())
-        else:
-            # 👇 這裡的 fav_sq 就找得到上面的定義了！
-            total_hot = review_count + func.coalesce(fav_sq.c.save_count, 0)
-            courses_query = courses_query.order_by(total_hot.desc(), Course.code.asc())
-            
         
+        if filters:
+            id_query = id_query.filter(and_(*filters))
+        if min_rating_raw:
+            id_query = id_query.having(avg_rating >= float(min_rating_raw))
 
-        all_matching_courses = courses_query.all()
-        course_groups = build_course_display_groups(all_matching_courses)
-        total = len(course_groups)
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        page = min(page, total_pages)
-        page_groups = course_groups[(page - 1) * per_page: page * per_page]
-        courses_list = [course for group in page_groups for course in group["courses"]]
+        id_rows = id_query.all()
+        all_id_set = [row.course_id for row in id_rows]
 
-        reviews_by_course = {}
-        course_ids = [course.course_id for course in courses_list]
-        representative_ids = {group["representative"].course_id for group in page_groups}
-        favorite_counts = {}
-        favorite_ids = set()
-        if course_ids:
-            current_user_id = current_user.id if current_user.is_authenticated else None
-            for review in (
-                Review.query
-                .join(Section, Review.section_id == Section.section_id)
-                .filter(
-                    Section.course_id.in_(course_ids),
-                    Review.parent_id.is_(None),
-                    Review.is_visible.isnot(False),
-                )
-                .order_by(Review.created_at.desc())
-                .all()
-            ):
-                reviews_by_course.setdefault(str(review.course_id), []).append(
-                    serialize_review(review, current_user_id=current_user_id)
-                )
-            favorite_counts = {
-                course_id: total
-                for course_id, total in (
-                    db.session.query(Favorite.course_id, func.count(Favorite.id))
-                    .filter(Favorite.course_id.in_(course_ids))
-                    .group_by(Favorite.course_id)
-                    .all()
-                )
-            }
-            if current_user.is_authenticated:
-                favorite_ids = {
-                    course_id
-                    for (course_id,) in (
-                        db.session.query(Favorite.course_id)
-                        .filter(
-                            Favorite.user_id == current_user.id,
-                            Favorite.course_id.in_(course_ids),
-                        )
-                        .all()
-                    )
-                }
+        all_courses_for_group = (
+            Course.query
+            .options(
+                selectinload(Course.offers).selectinload(Offer.department),
+                selectinload(Course.sections).selectinload(Section.teaches).selectinload(Teach.instructor),
+            )
+            .filter(Course.course_id.in_(all_id_set))
+            .all()
+        )
 
-        representative_reviews = {
-            str(course_id): reviews_by_course.get(str(course_id), [])
-            for course_id in representative_ids
+        stat_map = {
+            row.course_id: {
+                "rev_cnt": row.rev_cnt,
+                "avg_rat": row.avg_rat,
+                "fav_cnt": row.fav_cnt,
+                "lat_rev": row.lat_rev
+            } for row in id_rows
         }
 
-        return {
-            "courses": [
+        group_lookup = {}
+        ordered_keys = []
+        
+        for course in all_courses_for_group:
+            key = display_course_group_key(course)
+            stats = stat_map.get(course.course_id, {"rev_cnt": 0, "avg_rat": 0, "fav_cnt": 0, "lat_rev": "1970-01-01 00:00:00"})
+            
+            if key not in group_lookup:
+                group_lookup[key] = {
+                    "courses": [course],
+                    "total_rev": stats["rev_cnt"],
+                    "total_fav": stats["fav_cnt"],
+                    "max_lat_rev": stats["lat_rev"],
+                    "ratings_list": [stats["avg_rat"]] if stats["rev_cnt"] > 0 else []
+                }
+                ordered_keys.append(key)
+            else:
+                g = group_lookup[key]
+                g["courses"].append(course)
+                g["total_rev"] += stats["rev_cnt"]
+                g["total_fav"] += stats["fav_cnt"]
+                if stats["lat_rev"] > g["max_lat_rev"]:
+                    g["max_lat_rev"] = stats["lat_rev"]
+                if stats["rev_cnt"] > 0:
+                    g["ratings_list"].append(stats["avg_rat"])
+
+        # ── 🎯 完美對齊 Python cmp_to_key 的終極權重比較器 ──
+        def compare_hottest(k1, k2):
+            g1, g2 = group_lookup[k1], group_lookup[k2]
+            score1 = g1["total_rev"] + g1["total_fav"]
+            score2 = g2["total_rev"] + g2["total_fav"]
+            
+            if score1 != score2:
+                return -1 if score1 > score2 else 1
+            if g1["max_lat_rev"] != g2["max_lat_rev"]:
+                return -1 if g1["max_lat_rev"] > g2["max_lat_rev"] else 1
+            return -1 if g1["courses"][0].course_id < g2["courses"][0].course_id else 1
+
+        def compare_latest(k1, k2):
+            g1, g2 = group_lookup[k1], group_lookup[k2]
+            if g1["max_lat_rev"] != g2["max_lat_rev"]:
+                return -1 if g1["max_lat_rev"] > g2["max_lat_rev"] else 1
+            
+            score1 = g1["total_rev"] + g1["total_fav"]
+            score2 = g2["total_rev"] + g2["total_fav"]
+            if score1 != score2:
+                return -1 if score1 > score2 else 1
+            return -1 if g1["courses"][0].course_id < g2["courses"][0].course_id else 1
+
+        def compare_rating(k1, k2):
+            g1, g2 = group_lookup[k1], group_lookup[k2]
+            def get_avg(lst):
+                return sum(lst) / len(lst) if lst else 0
+            avg1 = get_avg(g1["ratings_list"])
+            avg2 = get_avg(g2["ratings_list"])
+            
+            if avg1 != avg2:
+                return -1 if avg1 > avg2 else 1
+            if g1["total_rev"] != g2["total_rev"]:
+                return -1 if g1["total_rev"] > g2["total_rev"] else 1
+            return -1 if g1["courses"][0].course_id < g2["courses"][0].course_id else 1
+
+        # ── 執行精確排序 ──
+        if sort_by == "latest":
+            ordered_keys.sort(key=cmp_to_key(compare_latest))
+        elif sort_by == "rating":
+            ordered_keys.sort(key=cmp_to_key(compare_rating))
+        else:
+            ordered_keys.sort(key=cmp_to_key(compare_hottest))
+
+        # ── 這裡就是上一輪被截斷的結尾：處理分頁與回傳 Payload ──
+        total = len(ordered_keys)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        
+        page_keys = ordered_keys[(page - 1) * per_page: page * per_page]
+        
+        serialized_groups = []
+        reviews_by_course = {}
+        
+        page_all_cids = []
+        for k in page_keys:
+            page_all_cids.extend([c.course_id for c in group_lookup[k]["courses"]])
+
+        favorite_counts = {}
+        favorite_ids = set()
+        if page_all_cids:
+            favorite_counts = {cid: count for cid, count in db.session.query(Favorite.course_id, func.count(Favorite.id)).filter(Favorite.course_id.in_(page_all_cids)).group_by(Favorite.course_id).all()}
+            if current_user.is_authenticated:
+                favorite_ids = {cid for (cid,) in db.session.query(Favorite.course_id).filter(Favorite.user_id == current_user.id, Favorite.course_id.in_(page_all_cids)).all()}
+
+            current_user_id = current_user.id if current_user.is_authenticated else None
+            for r in Review.query.join(Section).filter(Section.course_id.in_(page_all_cids), visible_review_cond).order_by(Review.created_at.desc()).all():
+                reviews_by_course.setdefault(str(r.course_id), []).append(serialize_review(r, current_user_id=current_user_id))
+
+        for k in page_keys:
+            g_data = group_lookup[k]
+            fake_group = {
+                "representative": g_data["courses"][0],
+                "courses": g_data["courses"],
+                "codes": list(dict.fromkeys([c.code for c in g_data["courses"] if c.code]))
+            }
+            serialized_groups.append(
                 serialize_course_display_group(
-                    group,
+                    fake_group,
                     reviews_by_course=reviews_by_course,
                     favorite_counts=favorite_counts,
-                    favorite_course_ids=favorite_ids,
+                    favorite_course_ids=favorite_ids
                 )
-                for group in page_groups
-            ],
+            )
+
+        representative_reviews = {}
+        for k in page_keys:
+            g_data = group_lookup[k]
+            rep_id = str(g_data["courses"][0].course_id)
+            
+            combined_reviews = []
+            for sub_course in g_data["courses"]:
+                sub_id = str(sub_course.course_id)
+                if sub_id in reviews_by_course:
+                    combined_reviews.extend(reviews_by_course[sub_id])
+            
+            combined_reviews.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            representative_reviews[rep_id] = combined_reviews
+
+        return {
+            "courses": serialized_groups,
             "reviews": representative_reviews,
             "pagination": {
                 "page": page,
@@ -1044,7 +1135,7 @@ def create_app():
                 "totalPages": total_pages,
             },
         }
-
+                    
     @app.route("/courses")
     def courses():
         query = request.args.get("q", "").strip()
@@ -1196,7 +1287,14 @@ def create_app():
         ).get_or_404(course_id)
         fav_counts = {course_id: Favorite.query.filter_by(course_id=course_id).count()}
         fav_ids = user_favorite_course_ids([course_id])
-        return jsonify({"course": serialize_course(course, favorite_counts=fav_counts, favorite_course_ids=fav_ids)})
+        # Use serialize_course_display_group so historyTerms is included
+        group = {"representative": course, "courses": [course], "codes": [course.code]}
+        serialized = serialize_course_display_group(
+            group,
+            favorite_counts=fav_counts,
+            favorite_course_ids=fav_ids,
+        )
+        return jsonify({"course": serialized})
 
     @app.route("/api/user/activity")
     @login_required
@@ -1373,11 +1471,8 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         try:
             reviews = reviews_for_course(course_id).all()
-            average_rating = (
-                sum(review.rating for review in reviews if review.rating) / len(reviews)
-                if reviews
-                else 0
-            )
+            rated = [r for r in reviews if r.rating]
+            average_rating = sum(r.rating for r in rated) / len(rated) if rated else 0
             current_user_id = current_user.id if current_user.is_authenticated else None
             return jsonify(
                 {
@@ -1458,8 +1553,8 @@ def create_app():
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
-            sum(review.rating for review in reviews if review.rating) / len(reviews)
-            if reviews
+            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
+            if any(r.rating for r in reviews)
             else 0
         )
         current_user_id = current_user.id if current_user.is_authenticated else None
@@ -1495,8 +1590,8 @@ def create_app():
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
-            sum(review_item.rating for review_item in reviews if review_item.rating) / len(reviews)
-            if reviews
+            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
+            if any(r.rating for r in reviews)
             else 0
         )
         current_user_id = current_user.id if current_user.is_authenticated else None
@@ -1527,8 +1622,8 @@ def create_app():
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
-            sum(review_item.rating for review_item in reviews if review_item.rating) / len(reviews)
-            if reviews
+            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
+            if any(r.rating for r in reviews)
             else 0
         )
         current_user_id = current_user.id if current_user.is_authenticated else None

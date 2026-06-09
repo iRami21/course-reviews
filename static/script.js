@@ -4,6 +4,7 @@ let currentCourseId = null;
 let courseReturnState = { courseId: null, scrollY: 0 };
 let allCourses = [];
 let currentViewMode = 'browse';
+let courseDetailOrigin = 'browse'; // 'browse' | 'favorites' | 'activity'
 // favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
 let favoritesCache = [];
 let selectedRating = 0;
@@ -1595,8 +1596,8 @@ function goToCoursePage(page) {
 
 function renderCourseCodeTags(course) {
   const codes = (course.codes && course.codes.length ? course.codes : [course.code]).filter(Boolean);
-  const visibleCodes = codes.slice(0, 2);
-  const hiddenCodes = codes.slice(2);
+  const visibleCodes = codes.slice(0, 1);
+  const hiddenCodes = codes.slice(1);
   const codeTags = visibleCodes
     .map((code) => tagSearchButton(code, "course-code course-tag-btn"))
     .join("");
@@ -1606,7 +1607,7 @@ function renderCourseCodeTags(course) {
   return `${codeTags}<span class="course-code course-code-more" title="${escapeHtml(hiddenCodes.join("、"))}">+${hiddenCodes.length}</span>`;
 }
 
-function renderCourseCards(container, courses, emptyText) {
+function renderCourseCards(container, courses, emptyText, origin = 'browse') {
 
   container.innerHTML = "";
 
@@ -1619,12 +1620,19 @@ function renderCourseCards(container, courses, emptyText) {
     const courseCard = document.createElement("div");
     courseCard.className = `course-card ${isCurrentUserAdmin() ? "admin-course-card" : ""}`.trim();
     courseCard.dataset.courseId = String(course.id);
-    courseCard.onclick = () => openCourseDetail(course.id);
+    courseCard.onclick = () => {
+      courseDetailOrigin = origin;
+      openCourseDetail(course.id);
+    };
 
     const semesterText = `${course.year} S${course.semester}`;
-    const showProfessor = Boolean(course.professor);
+    const isIntercollegiate = (course.department || "").includes("校際");
+    const professorDisplay = isIntercollegiate
+      ? "校際課程"
+      : (course.professor || "");
+    const showProfessor = Boolean(professorDisplay);
     const professorLine = showProfessor
-      ? `<div class="course-professor-name">${escapeHtml(course.professor)}</div>`
+      ? `<div class="course-professor-name">${escapeHtml(professorDisplay)}</div>`
       : "";
     const titlePartsBelongTogether =
       course.titleZh && !containsCjk(course.titleZh) && !containsCjk(course.title);
@@ -1688,7 +1696,7 @@ function renderCourseCards(container, courses, emptyText) {
                     <span class="stat-save-display">
                         ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">${commentIcon()} ${course.commentTotal ?? getCourseCommentTotal(course.id)}</span>
+                    <span class="stat-comment">${commentIcon()} ${typeof course.commentTotal !== "undefined" ? course.commentTotal : getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
                   <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
@@ -1747,23 +1755,7 @@ document.addEventListener("DOMContentLoaded", function() {
 // === 新版：主頁面課程排序邏輯 ===
 function sortCourses(courses, sortBy) {
   const sorted = [...courses];
-
-  if (sortBy === "popular") {
-    // Hottest (人氣最高): 依照「收藏數 + 留言數」的總和由多到少排序
-    sorted.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
-      return bPopularity - aPopularity;
-    });
-  } else if (sortBy === "latest") {
-    // Latest (最新開課): 依照年份與學期由新到舊排序
-    sorted.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
-  } else if (sortBy === "rating") {
-    // Ratings (評分最高): 依照星星數由高到低排序
-    sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }
-
-  return sorted;
+  return [...courses];
 }
 
 // Toggle follow
@@ -1876,6 +1868,7 @@ function formatCourseType(value) {
 }
 
 function renderDetailOfferingHistory(course) {
+  const isIntercollegiate = (course.department || "").includes("校際");
   const latestTermEl = document.getElementById("detailLatestTerm");
   const historyEl = document.getElementById("detailHistoryTerms");
   const historyTerms = Array.isArray(course.historyTerms) ? course.historyTerms : [];
@@ -1914,7 +1907,7 @@ function renderDetailOfferingHistory(course) {
                 <span class="detail-history-popover" role="tooltip">
                   <span class="detail-history-popover-row">
                     <span class="detail-history-popover-title">Professor</span>
-                    <span>${escapeHtml(term.professorText || "-")}</span>
+                    <span>${isIntercollegiate ? "校際課程" : escapeHtml(term.professorText || "-")}</span>
                   </span>
                   ${classTimeRow}
                   ${locationRow}
@@ -1950,10 +1943,8 @@ function getCourseCommentTotal(courseId) {
   if (course && Number.isFinite(Number(course.commentTotal))) {
     return Number(course.commentTotal);
   }
-  return reviews.reduce(
-    (total, review) => total + 1 + (review.replies || []).length,
-    0,
-  );
+  // 🚨 嚴謹模式：只回傳獨立主評價的數量，完全不計算子回覆
+  return reviews.length;
 }
 
 function updateDetailSocialStats(courseId) {
@@ -1990,7 +1981,13 @@ function showFavorites() {
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("favoritesPage").style.display = "block";
 
-  // 從後端取最新收藏清單（支援跨頁收藏）
+  // 已有快取就直接渲染，不重打 API（toggle favorite 時會清空 favoritesCache 觸發重新 fetch）
+  if (favoritesCache && favoritesCache.length > 0) {
+    renderFavorites();
+    return;
+  }
+
+  // 從後端取最新收藏清單
   const container = document.getElementById("favoritesContainer");
   if (container) container.innerHTML = '<p class="empty-state">Loading...</p>';
 
@@ -2040,8 +2037,14 @@ function showActivity() {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "block";
 
-  switchActivityTab("personal");
-  loadActivityData();
+  switchActivityTab(activityState.activeTab);
+  if (!activityState.loaded) {
+    loadActivityData();
+  } else {
+    renderPersonalActions();
+    renderInteractions();
+    updateActivityInteractionBadge();
+  }
 }
 
 function switchActivityTab(tab) {
@@ -2164,6 +2167,7 @@ function handleInteractionCardClick(el) {
 }
 
 async function navigateToCourseFromActivity(courseId) {
+  courseDetailOrigin = 'activity';
   // 先隱藏 Activity 頁面
   document.getElementById("activityPage").style.display = "none";
 
@@ -2237,28 +2241,29 @@ function showBrowseCourses() {
   document.getElementById("pageHeading").style.display = "";
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
   
-  // 3. 關鍵修正：強制清空搜尋框的文字
-  const searchBox = document.getElementById("searchBox");
-  if (searchBox) {
-    searchBox.value = ""; 
-  }
-  
-  // 4. 強制更新標題 (變回 All Courses) 與隱藏「Back to Browse」按鈕
-  updatePageTitle(); 
-
-  // 5. 確保隱藏篩選面板 (依據您之前的需求)
+  // 3. 確保隱藏篩選面板
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
-  // 6. 顯示課程列表
+  // 4. 顯示課程列表
   document.getElementById("coursesContainer").style.display = "";
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "";
   
-  // 7. 移除 body 的 detail-open class (防止排版卡住)
+  // 5. 移除 body 的 detail-open class
   document.body.classList.remove("detail-open");
-  
-  // 8. 重新載入完整的課程列表 (因為 searchBox 已經是空的，所以會撈出所有課程)
-  filterCourses();
+
+  // 6. 只有在搜尋框有值（使用者主動搜尋後返回）才重新 filter
+  //    其他情況課程列表已渲染，直接還原捲軸位置即可
+  const searchBox = document.getElementById("searchBox");
+  const hasSearch = searchBox && searchBox.value.trim() !== "";
+  if (hasSearch) {
+    searchBox.value = "";
+    updatePageTitle();
+    filterCourses();
+  } else {
+    updatePageTitle();
+    restoreCourseListPosition();
+  }
 }
 
 function showHomePage() {
@@ -2398,14 +2403,13 @@ function renderFavorites() {
   const sortBy = activeSortBtn ? activeSortBtn.dataset.sort : "popular";
 
   if (sortBy === "popular") {
-    // 👈 修改這裡：計算「愛心數 + 總留言數」來排序
     favorites.sort((a, b) => {
-      const aPopularity = (a.saveCount || 0) + getCourseCommentTotal(a.id);
-      const bPopularity = (b.saveCount || 0) + getCourseCommentTotal(b.id);
+      const aPopularity = (a.saveCount || 0) + (a.commentTotal || 0);
+      const bPopularity = (b.saveCount || 0) + (b.commentTotal || 0);
       return bPopularity - aPopularity;
     });
   } else if (sortBy === "latest") {
-    // Latest: 依據年份與學期由新到舊
+    // 依據開課學期與年份由新到舊
     favorites.sort((a, b) => (b.year - a.year) || (b.semester - a.semester));
   } else if (sortBy === "rating") {
     // Ratings: 依據評分由高到低
@@ -2417,7 +2421,8 @@ function renderFavorites() {
     renderCourseCards(
       container, 
       favorites, 
-      "No favorite courses yet"
+      "No favorite courses yet",
+      "favorites"
     );
   }
 }
@@ -2687,7 +2692,8 @@ function openCourseDetail(courseId) {
   document.getElementById("detailCourseTitle").textContent = course.title;
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
-  document.getElementById("detailCourseProfessor").textContent = course.professor || "-";
+  const isIntercollegiate = (course.department || "").includes("校際");
+  document.getElementById("detailCourseProfessor").textContent = isIntercollegiate ? "校際課程" : (course.professor || "-");
   document.getElementById("detailCourseDepartment").textContent = course.department;
   document.getElementById("detailCourseCredits").textContent = course.credits;
   renderDetailOfferingHistory(course);
@@ -2697,7 +2703,8 @@ function openCourseDetail(courseId) {
   renderDetailTags(course);
   updateDetailSocialStats(courseId);
   document.getElementById("detailRatingValue").textContent = averageRating.toFixed(1);
-  document.getElementById("detailStars").innerHTML = generateStars(averageRating);
+  const detailStarsEl = document.getElementById("detailStars");
+  if (detailStarsEl) detailStarsEl.innerHTML = generateStars(averageRating);
   document.getElementById("detailReviewCount").textContent = `Based on ${reviews.length} review${reviews.length !== 1 ? "s" : ""}`;
 
   renderRatingBreakdown(reviews);
@@ -2708,11 +2715,9 @@ function openCourseDetail(courseId) {
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Back to courses");
   document.getElementById("pageHeading").style.display = "none";
   
-  // 🔴 修正：隱藏全新的排序與標籤面板
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
   
-  // Hide admin panels when viewing course detail
   if (document.getElementById("adminAddCoursePanel")) document.getElementById("adminAddCoursePanel").style.display = "none";
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
   
@@ -2722,18 +2727,53 @@ function openCourseDetail(courseId) {
   document.getElementById("courseDetailPage").style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
 
-  // 找到按鈕元素 (如果你的 HTML ID 是 back-button 則選用該 class)
-  const backBtn = document.querySelector(".back-button"); 
+  const backBtn = document.querySelector(".back-button");
   if (backBtn) {
-      // 根據模式顯示文字，並保留你的 SVG 圖示
-      const labelText = (currentViewMode === 'search') ? "Back to Search" : "Back to Browse";
-      backBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M19 12H5"></path>
-          <path d="m12 19-7-7 7-7"></path>
-        </svg>
-        ${labelText}
-      `;
+    let labelText = "Back to Browse";
+    if (courseDetailOrigin === "favorites") labelText = "Back to Favorites";
+    else if (courseDetailOrigin === "activity") labelText = "Back to Activity";
+    else if (currentViewMode === "search") labelText = "Back to Search";
+    backBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 12H5"></path>
+        <path d="m12 19-7-7 7-7"></path>
+      </svg>
+      ${labelText}
+    `;
+    backBtn.onclick = closeCourseDetail;
+    if (allReviews && allReviews[courseId]) {
+        renderReviewsList(allReviews[courseId]);
+    } else {
+        // 如果快取沒有，再去後端抓
+        fetch(`/api/courses/${courseId}/reviews`)
+            .then(res => res.json())
+            .then(data => {
+                renderReviewsList(data.reviews || []);
+            });
+    }
+
+    // 🚨 修正：確保優先讀取全域快取字典（後端傳來的 representative_reviews）
+    // 由於後端傳過來的字典 Key 是字串，必須強制 String(courseId)
+    const cachedId = String(courseId);
+    
+    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[cachedId]) {
+        renderReviewsList(window.__INITIAL_REVIEWS__[cachedId]);
+    } else if (courseReviews && courseReviews[cachedId]) {
+        renderReviewsList(courseReviews[cachedId]);
+    } else {
+        // 如果快取都沒有，老老實實去後端 API 抓取該群組的合併評論
+        fetch(`/api/courses/${courseId}/reviews`)
+            .then(res => res.json())
+            .then(data => {
+                // 將抓到的評論同步回全域快取，避免下次點開重複讀取
+                courseReviews[cachedId] = data.reviews || [];
+                renderReviewsList(data.reviews || []);
+            })
+            .catch(err => {
+                console.error("Fetch reviews failed:", err);
+                renderReviewsList([]);
+            });
+          }
 }}
 
 function restoreCourseListPosition() {
@@ -2769,13 +2809,7 @@ function closeCourseDetail() {
   document.body.classList.remove("detail-open");
   const navLogoBtn = document.getElementById("navLogoBtn");
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Course Review Platform");
-  document.getElementById("pageHeading").style.display = "";
-  
-  // 🟢 修正：回到主頁時，把排序面板顯示回來，過濾面板維持收合
-  if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
-  if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
 
-  // Restore admin panels when returning to main page
   if (document.getElementById("adminAddCoursePanel")) {
     document.getElementById("adminAddCoursePanel").style.display = isCurrentUserAdmin() ? "block" : "none";
   }
@@ -2783,12 +2817,25 @@ function closeCourseDetail() {
     document.getElementById("adminEditCoursePanel").style.display = "none";
   }
 
-  document.getElementById("coursesContainer").style.display = "";
-  const pagination = document.getElementById("coursesPagination");
-  if (pagination) pagination.style.display = "";
   currentCourseId = null;
   renderAdminCoursePanel(null);
-  requestAnimationFrame(restoreCourseListPosition);
+
+  if (courseDetailOrigin === 'favorites') {
+    courseDetailOrigin = 'browse';
+    showFavorites();
+  } else if (courseDetailOrigin === 'activity') {
+    courseDetailOrigin = 'browse';
+    showActivity();
+  } else {
+    courseDetailOrigin = 'browse';
+    document.getElementById("pageHeading").style.display = "";
+    if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "";
+    if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
+    document.getElementById("coursesContainer").style.display = "";
+    const pagination = document.getElementById("coursesPagination");
+    if (pagination) pagination.style.display = "";
+    requestAnimationFrame(restoreCourseListPosition);
+  }
 }
 
 function getReviewsForCourse(courseId) {
@@ -2805,6 +2852,18 @@ function renderRatingBreakdown(reviews) {
   const breakdown = document.getElementById("ratingBreakdown");
   const total = reviews.length;
   breakdown.innerHTML = "";
+
+  for (let rating = 5; rating >= 1; rating--) {
+    const count = reviews.filter((r) => r.rating === rating).length;
+    const percent = total > 0 ? (count / total) * 100 : 0;
+    const row = document.createElement("div");
+    row.className = "rating-breakdown-row";
+    row.innerHTML = `
+      
+    `;
+    breakdown.appendChild(row);
+  }
+
   renderDimBreakdown(reviews);
 }
 
@@ -2820,16 +2879,17 @@ function renderDimBreakdown(reviews) {
   ];
 
   const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
-  if (rated.length === 0) { container.innerHTML = ""; return; }
 
+  // 即使沒有評分，仍要顯示四個維度欄（顯示空 bar）
   container.innerHTML = `
     <div class="dim-breakdown-title">Dimension Averages</div>
     ${dims.map(d => {
-      const avg = rated.reduce((s, r) => s + (r[d.key] || 0), 0) / rated.length;
+      const avg = rated.length > 0 ? rated.reduce((s, r) => s + (r[d.key] || 0), 0) / rated.length : 0;
       const pct = (avg / 5) * 100;
       const iconHtml = d.emoji
         ? `<span class="dim-bar-emoji">${d.emoji}</span>`
         : `<img src="${d.img}" class="dim-bar-icon">`;
+      const scoreText = rated.length > 0 ? avg.toFixed(1) : "-";
       return `
         <div class="dim-breakdown-row">
           <span class="dim-bar-label">${iconHtml} ${d.label}</span>
@@ -2837,7 +2897,7 @@ function renderDimBreakdown(reviews) {
             <div class="dim-bar-track">
               <span class="dim-bar-fill" style="width:${pct}%"></span>
             </div>
-            <span class="dim-bar-score">${avg.toFixed(1)}</span>
+            <span class="dim-bar-score">${scoreText}</span>
           </div>
         </div>`;
     }).join("")}
