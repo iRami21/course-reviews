@@ -452,6 +452,7 @@ def create_app():
         }
 
     raw_course_meeting_cache = {}
+    raw_program_tag_search_cache = {}
 
     def parse_course_room(raw_room):
         room_text = str(raw_room or "").strip()
@@ -468,13 +469,13 @@ def create_app():
 
     def get_raw_course_meeting(code, year, semester):
         if not (code and year and semester):
-            return {"classTime": "", "location": "", "rawRoom": ""}
+            return {"classTime": "", "location": "", "rawRoom": "", "programTags": []}
 
         cache_key = (str(code), int(year), int(semester))
         if cache_key in raw_course_meeting_cache:
             return raw_course_meeting_cache[cache_key]
 
-        result = {"classTime": "", "location": "", "rawRoom": ""}
+        result = {"classTime": "", "location": "", "rawRoom": "", "programTags": []}
         base_dir = Path(app.root_path) / "NSYSU Course Database"
         if not base_dir.exists():
             raw_course_meeting_cache[cache_key] = result
@@ -489,7 +490,7 @@ def create_app():
                 conn = sqlite3.connect(db_file)
                 conn.row_factory = sqlite3.Row
                 row = conn.execute(
-                    "SELECT room, classTime FROM course_list WHERE id = ? LIMIT 1",
+                    "SELECT room, classTime, tags FROM course_list WHERE id = ? LIMIT 1",
                     (str(code),),
                 ).fetchone()
             except sqlite3.Error:
@@ -502,15 +503,54 @@ def create_app():
                         pass
             if row:
                 parsed_time, parsed_location = parse_course_room(row["room"])
+                raw_tags = str(row["tags"] or "").strip()
                 result = {
                     "classTime": parsed_time or str(row["classTime"] or "").strip(),
                     "location": parsed_location,
                     "rawRoom": str(row["room"] or "").strip(),
+                    "programTags": [tag.strip() for tag in raw_tags.split(",") if tag.strip()],
                 }
                 break
 
         raw_course_meeting_cache[cache_key] = result
         return result
+
+
+    def find_course_codes_by_program_tag(term):
+        cleaned = str(term or "").strip()
+        if not cleaned:
+            return set()
+        if cleaned in raw_program_tag_search_cache:
+            return raw_program_tag_search_cache[cleaned]
+
+        matched_codes = set()
+        base_dir = Path(app.root_path) / "NSYSU Course Database"
+        if not base_dir.exists():
+            raw_program_tag_search_cache[cleaned] = matched_codes
+            return matched_codes
+
+        for db_file in sorted(base_dir.glob("NSYSU_Course_*.db")):
+            conn = None
+            try:
+                conn = sqlite3.connect(db_file)
+                rows = conn.execute(
+                    "SELECT id FROM course_list WHERE tags LIKE ?",
+                    (f"%{cleaned}%",),
+                ).fetchall()
+            except sqlite3.Error:
+                rows = []
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            for row in rows:
+                if row and row[0]:
+                    matched_codes.add(str(row[0]).strip())
+
+        raw_program_tag_search_cache[cleaned] = matched_codes
+        return matched_codes
 
     def display_course_group_key(course):
         # 1. 整理出這門課所有的教授陣容
@@ -574,6 +614,7 @@ def create_app():
         # ── 🚨 這裡就是被省略掉、現在完整補回來的歷史學期與系所邏輯 ──
         departments = []
         history_terms = []
+        program_tags = []
         
         for c in group["courses"]:
             if c.department and c.department not in departments:
@@ -585,8 +626,11 @@ def create_app():
                     
                 term_label = f"{section.roc_year} S{section.term}"
                 
-                # 取得上課時間與地點
+                # 取得上課時間、地點與學程標籤
                 meeting_data = get_raw_course_meeting(c.code, section.roc_year, section.term)
+                for tag in meeting_data.get("programTags", []):
+                    if tag not in program_tags:
+                        program_tags.append(tag)
                 
                 # 取得該學期的教授名單
                 prof_names = [clean_professor_name(i.name) for i in section.instructors if i and i.name]
@@ -629,8 +673,8 @@ def create_app():
         
         if departments:
             payload["department"] = "、".join(departments)
-            existing_tags = payload.get("tags") or []
-            payload["tags"] = [*departments, *[tag for tag in existing_tags if tag not in departments]]
+
+        payload["tags"] = program_tags
             
         payload["reviewCount"] = total_reviews
         # 嚴謹模式：留言總數等於主評價數量
@@ -950,14 +994,16 @@ def create_app():
 
                 for term in text_terms:
                     pattern = f"%{term}%"
-                    search_filters.append(
-                        or_(
-                            Course.name.ilike(pattern),
-                            Course.code.ilike(pattern),
-                            Course.offers.any(Offer.department.has(Department.name.ilike(pattern))),
-                            Course.sections.any(Section.teaches.any(Teach.instructor.has(Instructor.name.ilike(pattern)))),
-                        )
-                    )
+                    program_codes = find_course_codes_by_program_tag(term)
+                    search_targets = [
+                        Course.name.ilike(pattern),
+                        Course.code.ilike(pattern),
+                        Course.offers.any(Offer.department.has(Department.name.ilike(pattern))),
+                        Course.sections.any(Section.teaches.any(Teach.instructor.has(Instructor.name.ilike(pattern)))),
+                    ]
+                    if program_codes:
+                        search_targets.append(Course.code.in_(program_codes))
+                    search_filters.append(or_(*search_targets))
             if search_filters:
                 filters.extend(search_filters)
 
