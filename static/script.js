@@ -1280,7 +1280,7 @@ function setupEventListeners() {
     });
   }
 
-  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'ratingFilterRow', 'sortFilterRow', 'semesterFilterRow'];
+  const filterRows = ['deptCategoryFilterRow', 'gradeFilterRow', 'yearFilterRow', 'semesterFilterRow', 'ratingFilterRow', 'sortFilterRow'];
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
@@ -1451,6 +1451,7 @@ function setFilterRowActiveValue(rowId, value) {
 function getActiveCourseFilters() {
   const searchTerm = document.getElementById("searchBox")?.value.trim() || "";
   const yearActiveBtn = document.querySelector("#yearFilterRow .filter-tag-btn.active");
+  const gradeActiveBtn = document.querySelector("#gradeFilterRow .filter-tag-btn.active");
   const deptCategoryActiveBtn = document.querySelector("#deptCategoryFilterRow .filter-tag-btn.active");
   const deptActiveBtn = document.querySelector("#deptFilterRow .filter-tag-btn.active");
   const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
@@ -1472,6 +1473,7 @@ function getActiveCourseFilters() {
   return {
     q: searchTerm,
     year: selectedYear,
+    grade: gradeActiveBtn?.dataset.value || "",
     department_category: deptCategoryActiveBtn?.dataset.value || "",
     department_group: selectedDepartmentGroup,
     department: selectedDepartment,
@@ -1889,7 +1891,7 @@ function renderDetailOfferingHistory(course) {
             const classTimeRow = classTimeChanged
               ? `
                 <span class="detail-history-popover-row">
-                  <span class="detail-history-popover-title">上課時間</span>
+                  <span class="detail-history-popover-title">Class Time</span>
                   <span>${escapeHtml(term.classTime || "-")}</span>
                 </span>
               `
@@ -1897,7 +1899,7 @@ function renderDetailOfferingHistory(course) {
             const locationRow = locationChanged
               ? `
                 <span class="detail-history-popover-row">
-                  <span class="detail-history-popover-title">地點</span>
+                  <span class="detail-history-popover-title">Room</span>
                   <span>${escapeHtml(term.location || "-")}</span>
                 </span>
               `
@@ -1920,6 +1922,48 @@ function renderDetailOfferingHistory(course) {
           .join("")
       : `<span class="detail-history-empty">-</span>`;
   }
+}
+
+function splitProfessorNames(professorText) {
+  return String(professorText || "")
+    .split(/[、,，]/)
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function renderDetailProfessor(professorText, expanded = false) {
+  const professorEl = document.getElementById("detailCourseProfessor");
+  if (!professorEl) return;
+
+  const names = splitProfessorNames(professorText);
+  if (!names.length) {
+    professorEl.classList.remove("is-expanded");
+    professorEl.textContent = "-";
+    return;
+  }
+
+  if (names.length <= 2) {
+    professorEl.classList.remove("is-expanded");
+    professorEl.textContent = names.join("、");
+    return;
+  }
+
+  const visibleNames = expanded ? names : names.slice(0, 2);
+  const buttonLabel = expanded ? "Show less" : `+${names.length - 2}`;
+  professorEl.innerHTML = `
+    <span class="detail-professor-names">${escapeHtml(visibleNames.join("、"))}</span>
+    <button type="button" class="detail-professor-more-btn" onclick="toggleDetailProfessor(event)">${escapeHtml(buttonLabel)}</button>
+  `;
+  professorEl.classList.toggle("is-expanded", expanded);
+  professorEl.dataset.fullProfessor = professorText;
+  professorEl.dataset.expanded = expanded ? "true" : "false";
+}
+
+function toggleDetailProfessor(event) {
+  event.stopPropagation();
+  const professorEl = document.getElementById("detailCourseProfessor");
+  if (!professorEl) return;
+  renderDetailProfessor(professorEl.dataset.fullProfessor || professorEl.textContent, professorEl.dataset.expanded !== "true");
 }
 
 function renderDetailTags(course) {
@@ -2715,9 +2759,10 @@ function openCourseDetail(courseId) {
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
   const isIntercollegiate = (course.department || "").includes("校際");
-  document.getElementById("detailCourseProfessor").textContent = isIntercollegiate ? "校際課程" : (course.professor || "-");
+  renderDetailProfessor(isIntercollegiate ? "校際課程" : (course.professor || "-"));
   document.getElementById("detailCourseDepartment").textContent = course.department;
   document.getElementById("detailCourseCredits").textContent = course.credits;
+  document.getElementById("detailCourseGrade").textContent = course.grade ? `${course.grade}年級` : "-";
   renderDetailOfferingHistory(course);
   document.getElementById("detailClassTime").textContent = course.classTime || "-";
   document.getElementById("detailClassLocation").textContent = course.location || "-";
@@ -3399,6 +3444,31 @@ function replaceCourseInState(course) {
   const index = allCourses.findIndex((item) => String(item.id) === String(course.id));
   if (index >= 0) {
     allCourses[index] = { ...allCourses[index], ...course };
+    // 更新畫面上的課程卡片與明細（若正在檢視）
+    updateCourseCardDisplay(allCourses[index]);
+    if (String(currentCourseId) === String(course.id)) {
+      refreshDetailRatingSummary(course.id);
+      renderDetailTags(allCourses[index]);
+    }
+  }
+}
+
+function updateCourseCardDisplay(course) {
+  if (!course) return;
+  // 更新卡片上的 inline 評分
+  const card = document.querySelector(`[data-course-id="${CSS.escape(String(course.id))}"]`);
+  if (card) {
+    const ratingEl = card.querySelector('.course-rating-inline');
+    if (ratingEl && typeof course.rating === 'number') {
+      ratingEl.innerHTML = `${starIcon()}${Number(course.rating).toFixed(1)}`;
+    }
+    const commentEl = card.querySelector('.course-reviews-count .stat-comment');
+    if (commentEl) {
+      const commentTotal = typeof course.commentTotal !== 'undefined' ? course.commentTotal : getCourseCommentTotal(course.id);
+      commentEl.innerHTML = `${commentIcon()} ${commentTotal}`;
+    }
+    const saveCountEl = card.querySelector('.save-count-num');
+    if (saveCountEl) saveCountEl.textContent = course.saveCount ?? 0;
   }
 }
 
@@ -3593,8 +3663,8 @@ async function submitReview(event) {
     }
     courseReviews[currentCourseId].unshift(result.review);
 
-    if (course && result.course) {
-      Object.assign(course, result.course);
+    if (result.course) {
+      replaceCourseInState(result.course);
     }
 
     alert("Review submitted successfully!");
@@ -3714,6 +3784,9 @@ window.toggleFilterPanel = function() {
   if (panel) {
     if (wasOnOtherPage) {
       panel.style.display = 'block';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+      });
     } else {
       const isCurrentlyOpen = panel.style.display !== 'none';
 
@@ -3730,7 +3803,7 @@ window.toggleFilterPanel = function() {
 window.resetAllFilters = function() {
   renderDepartmentFilter("");
   renderDepartmentSubFilter("");
-  const filterRows = ['yearFilterRow', 'deptCategoryFilterRow', 'deptFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
+  const filterRows = ['deptCategoryFilterRow', 'deptFilterRow', 'gradeFilterRow', 'yearFilterRow', 'semesterFilterRow', 'ratingFilterRow'];
 
   filterRows.forEach(rowId => {
     const row = document.getElementById(rowId);

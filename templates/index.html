@@ -304,6 +304,15 @@
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
         </div>
 
+        <div class="filter-row" id="gradeFilterRow">
+          <span class="filter-label">Grade │</span>
+          <button type="button" class="filter-tag-btn active" data-value="">All</button>
+          <button type="button" class="filter-tag-btn" data-value="1">1年級</button>
+          <button type="button" class="filter-tag-btn" data-value="2">2年級</button>
+          <button type="button" class="filter-tag-btn" data-value="3">3年級</button>
+          <button type="button" class="filter-tag-btn" data-value="4">4年級</button>
+        </div>
+
         <div class="filter-row" id="yearFilterRow">
           <span class="filter-label">Year │</span>
           <button type="button" class="filter-tag-btn active" data-value="">All</button>
@@ -328,6 +337,10 @@
           <button type="button" class="filter-tag-btn" data-value="3">3+ Stars</button>
           <button type="button" class="filter-tag-btn" data-value="2">2+ Stars</button>
           <button type="button" class="filter-tag-btn" data-value="1">1+ Stars</button>
+        </div>
+
+        <div class="filter-actions-row">
+          <button type="button" class="clear-filters-btn" onclick="resetAllFilters()">Clear Filters</button>
         </div>
         
       </div>
@@ -421,10 +434,6 @@
 
             <div class="detail-meta-grid">
               <div>
-                <span>Department</span>
-                <strong id="detailCourseDepartment"></strong>
-              </div>
-              <div>
                 <span>Professor</span>
                 <strong id="detailCourseProfessor"></strong>
               </div>
@@ -432,9 +441,6 @@
                 <span>Credits</span>
                 <strong id="detailCourseCredits"></strong>
               </div>
-            </div>
-
-            <div class="detail-class-grid">
               <div>
                 <span>Class Time</span>
                 <strong id="detailClassTime"></strong>
@@ -443,9 +449,20 @@
                 <span>Room</span>
                 <strong id="detailClassLocation"></strong>
               </div>
+            </div>
+
+            <div class="detail-class-grid">
+              <div>
+                <span>Department</span>
+                <strong id="detailCourseDepartment"></strong>
+              </div>
               <div>
                 <span>Type</span>
                 <strong id="detailCourseRequirement"></strong>
+              </div>
+              <div>
+                <span>Grade</span>
+                <strong id="detailCourseGrade"></strong>
               </div>
             </div>
 

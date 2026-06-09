@@ -3326,6 +3326,33 @@ button {
   box-shadow: 0 4px 10px rgba(79, 103, 177, 0.25);
 }
 
+.filter-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.85rem;
+}
+
+.clear-filters-btn {
+  border: 0;
+  border-radius: 999px;
+  background-color: #4f67b1;
+  color: #ffffff;
+  cursor: pointer;
+  font-family: "Comic Relief", system-ui;
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0.62rem 1.15rem;
+  box-shadow: 0 6px 14px rgba(79, 103, 177, 0.22);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.clear-filters-btn:hover,
+.clear-filters-btn:focus-visible {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 18px rgba(79, 103, 177, 0.3);
+}
+
 .department-subfilter-select {
   flex: 0 0 auto;
   width: auto;
@@ -5016,8 +5043,15 @@ button {
 
 .detail-meta-grid,
 .detail-class-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
+}
+
+.detail-meta-grid {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 0.666fr));
+}
+
+.detail-class-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .detail-mega-grid {
@@ -5060,6 +5094,74 @@ button {
   font-size: 1.05rem;
   font-weight: 850;
   line-height: 1.35;
+}
+
+.detail-professor-names {
+  display: inline;
+  margin-bottom: 0;
+  color: #2b2f44;
+  font: inherit;
+}
+
+.detail-professor-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.4rem;
+  min-height: 1.55rem;
+  padding: 0.15rem 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background-color: #fefaf0;
+  color: #4f67b1;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 850;
+  line-height: 1;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.detail-professor-more-btn:hover,
+.detail-professor-more-btn:focus-visible {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+#detailCourseProfessor .detail-professor-names {
+  color: #2b2f44;
+}
+
+#detailCourseProfessor {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+#detailCourseProfessor .detail-professor-names {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#detailCourseProfessor .detail-professor-more-btn {
+  flex: 0 0 auto;
+  margin-left: 0.28rem;
+}
+
+#detailCourseProfessor.is-expanded {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+  white-space: normal;
+}
+
+#detailCourseProfessor.is-expanded .detail-professor-names {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .detail-history-pills {
@@ -5148,6 +5250,17 @@ button {
 .detail-history-pill:focus-visible .detail-history-popover {
   opacity: 1;
   transform: translate(-50%, 0) scale(1);
+}
+
+
+@media (max-width: 980px) {
+  .detail-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-meta-grid > div:nth-child(3) {
+    border-left: 0;
+  }
 }
 
 @media (max-width: 760px) {
