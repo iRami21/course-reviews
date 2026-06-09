@@ -1191,17 +1191,25 @@ function setupEventListeners() {
 
   const userAvatar = document.getElementById("userAvatar");
   if (userAvatar) {
-    userAvatar.addEventListener("click", function (e) {
+    // 只用 onclick，避免與下方 DOMContentLoaded 的 onclick 重複觸發
+    userAvatar.onclick = function (e) {
       e.stopPropagation();
+
+      // 輕彈跳特效
+      userAvatar.classList.remove("avatar-click-pop", "avatar-ripple");
+      void userAvatar.offsetWidth;
+      userAvatar.classList.add("avatar-click-pop", "avatar-ripple");
+      userAvatar.addEventListener("animationend", () => {
+        userAvatar.classList.remove("avatar-click-pop", "avatar-ripple");
+      }, { once: true });
+
       if (currentUser) {
         const menu = document.getElementById("userDropdown");
-        if (menu) {
-          menu.hidden = !menu.hidden;
-        }
+        if (menu) menu.hidden = !menu.hidden;
       } else {
         openLoginModal();
       }
-    });
+    };
   }
 
   document.addEventListener("click", function () {
@@ -2056,24 +2064,34 @@ function renderInteractions() {
   list.innerHTML = items.map(buildInteractionCard).join("");
 }
 
+// 🌟 修正版 1：清除給幾分細項，並將 reviewId 藏進卡片屬性中
 function buildPersonalActionCard(item) {
   const typeLabel = {
     favorite: '<span class="activity-type-badge badge-favorite">Saved</span>',
     review:   '<span class="activity-type-badge badge-review">Review</span>',
     reaction: '<span class="activity-type-badge badge-reaction">Reacted</span>',
+    reply:    '<span class="activity-type-badge badge-reply">Reply</span>',
   }[item.type] || "";
-  const ratingHtml = item.type === "review" && item.rating
-    ? `<div class="activity-card-rating">${"★".repeat(item.rating)}${"☆".repeat(5 - item.rating)}</div>` : "";
+  
   const snippetHtml = item.reviewSnippet
     ? `<p class="activity-card-snippet">"${escapeHtml(item.reviewSnippet)}"</p>` : "";
   const courseLink = item.courseId ? `data-course-id="${item.courseId}"` : "";
+  
+  // reply 類型：scroll 到 reply 本身；其他：scroll 到 review
+  let targetAttr = "";
+  if (item.type === "reply" && item.reviewId && item.replyId) {
+    targetAttr = `data-target="reply-${item.reviewId}-${item.replyId}"`;
+  } else if (item.reviewId) {
+    targetAttr = `data-target="review-${item.reviewId}"`;
+  }
+
   return `
-    <div class="activity-card" ${courseLink} onclick="handleActivityCardClick(this)" role="button" tabindex="0">
-      <div class="activity-card-icon">${escapeHtml(item.icon)}</div>
+    <div class="activity-card" ${courseLink} ${targetAttr} onclick="handleActivityCardClick(this)" role="button" tabindex="0" style="cursor: pointer;">
+      <div class="activity-card-icon">${escapeHtml(item.icon || "📝")}</div>
       <div class="activity-card-body">
-        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt)}</span></div>
+        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt || "")}</span></div>
         <p class="activity-card-message">${item.message}</p>
-        ${ratingHtml}${snippetHtml}
+        ${snippetHtml}
         <span class="activity-card-course-code">${escapeHtml(item.courseCode || "")}</span>
       </div>
       <div class="activity-card-arrow">›</div>
@@ -2096,10 +2114,42 @@ function buildInteractionCard(item) {
     </div>`;
 }
 
-function handleActivityCardClick(el) {
+// 🌟 修正版 2：點擊卡片跳轉進入課程詳細頁，並在資料載入後，自動滾動到該留言並套用閃爍特效
+async function handleActivityCardClick(el) {
   const courseId = parseInt(el.dataset.courseId);
+  const targetId = el.dataset.target; // 例如 "review-45"
   if (!courseId) return;
-  navigateToCourseFromActivity(courseId);
+
+  // 設定好 origin，再隱藏 activity 頁面跳到課程詳情
+  courseDetailOrigin = 'activity';
+  document.getElementById("activityPage").style.display = "none";
+
+  // 確保課程資料在 allCourses 裡
+  if (!allCourses.find(c => String(c.id) === String(courseId))) {
+    try {
+      const res = await fetch(`/api/courses/${courseId}`);
+      if (!res.ok) throw new Error("Course not found.");
+      const data = await res.json();
+      const course = data.course || data;
+      if (course && course.id) allCourses.push(course);
+    } catch (err) {
+      alert("無法載入課程資料：" + err.message);
+      document.getElementById("activityPage").style.display = "block";
+      return;
+    }
+  }
+
+  // 如果有 targetId，讓 loadReviews 渲染完後立刻 scroll + 閃爍
+  if (targetId) {
+    window.__pendingScrollTarget__ = targetId;
+    // reply 類型（格式 reply-{reviewId}-{replyId}）需要先記下 reviewId 展開 replies group
+    const replyMatch = targetId.match(/^reply-(\d+)-/);
+    if (replyMatch) {
+      window.__pendingExpandReview__ = replyMatch[1];
+    }
+  }
+
+  openCourseDetail(courseId);
 }
 
 function handleInteractionCardClick(el) {
@@ -2213,8 +2263,6 @@ function showHomePage() {
   if (dropdown) dropdown.style.display = "none";
   const userDropdown = document.getElementById("userDropdown");
   if (userDropdown) userDropdown.hidden = true;
-  const avatarMenu = document.getElementById("avatarMenuCard");
-  if (avatarMenu) avatarMenu.style.display = "none";
 }
 
 function toggleUserMenu(event) {
@@ -2643,11 +2691,13 @@ function openCourseDetail(courseId) {
   document.body.classList.add("detail-open");
   const navLogoBtn = document.getElementById("navLogoBtn");
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Back to courses");
-  document.getElementById("pageHeading").style.display = "none";
 
+  // 隱藏所有其他 section，避免版面疊在一起
+  document.getElementById("pageHeading").style.display = "none";
+  document.getElementById("favoritesPage").style.display = "none";
+  document.getElementById("activityPage").style.display = "none";
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
-
   if (document.getElementById("adminAddCoursePanel")) document.getElementById("adminAddCoursePanel").style.display = "none";
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
 
@@ -2655,7 +2705,11 @@ function openCourseDetail(courseId) {
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  // 有 pendingScrollTarget 時不 scroll to top，讓 loadReviews 渲染後自己 scroll
+  if (!window.__pendingScrollTarget__) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   const backBtn = document.querySelector(".back-button");
   if (backBtn) {
@@ -2671,35 +2725,8 @@ function openCourseDetail(courseId) {
       ${labelText}
     `;
     backBtn.onclick = closeCourseDetail;
-    if (allReviews && allReviews[courseId]) {
-        renderReviewsList(allReviews[courseId]);
-    } else {
-        fetch(`/api/courses/${courseId}/reviews`)
-            .then(res => res.json())
-            .then(data => {
-                renderReviewsList(data.reviews || []);
-            });
-    }
-
-    const cachedId = String(courseId);
-
-    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[cachedId]) {
-        renderReviewsList(window.__INITIAL_REVIEWS__[cachedId]);
-    } else if (courseReviews && courseReviews[cachedId]) {
-        renderReviewsList(courseReviews[cachedId]);
-    } else {
-        fetch(`/api/courses/${courseId}/reviews`)
-            .then(res => res.json())
-            .then(data => {
-                courseReviews[cachedId] = data.reviews || [];
-                renderReviewsList(data.reviews || []);
-            })
-            .catch(err => {
-                console.error("Fetch reviews failed:", err);
-                renderReviewsList([]);
-            });
-          }
-}}
+  }
+}
 
 function restoreCourseListPosition() {
   const targetCard = courseReturnState.courseId
@@ -2829,7 +2856,26 @@ function renderDimBreakdown(reviews) {
 }
 
 // Load reviews
-function loadReviews(courseId) {
+function loadReviews(courseId, onRendered) {
+  const cachedId = String(courseId);
+
+  // Cache miss：自己去 fetch，填完 cache 再重跑
+  if (!courseReviews[cachedId] || courseReviews[cachedId].length === 0) {
+    const initialKey = cachedId;
+    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[initialKey]) {
+      courseReviews[cachedId] = window.__INITIAL_REVIEWS__[initialKey];
+    } else {
+      fetch(`/api/courses/${courseId}/reviews`)
+        .then(res => res.json())
+        .then(data => {
+          courseReviews[cachedId] = data.reviews || [];
+          loadReviews(courseId, onRendered); // 填完 cache 重跑，這次有資料
+        })
+        .catch(err => console.error("loadReviews fetch failed:", err));
+      return; // 等 fetch 回來再渲染
+    }
+  }
+
   const reviews = getReviewsForCourse(courseId);
 
   const reviewsList = document.getElementById("reviewsList");
@@ -2864,6 +2910,7 @@ function loadReviews(courseId) {
   reviews.forEach((review) => {
     const reviewItem = document.createElement("div");
     reviewItem.className = "review-item";
+    reviewItem.id = `review-${review.id}`;
 
     const DIM_ICONS = {
       ratingQuality:   { img: "/static/icons/award.png" },
@@ -2969,6 +3016,39 @@ function loadReviews(courseId) {
 
     reviewsList.appendChild(reviewItem);
   });
+
+  // 渲染完後執行 scroll/highlight callback（供 activity 跳轉使用）
+  if (typeof onRendered === "function") onRendered();
+
+  // 消費全域的 pendingScrollTarget（handleActivityCardClick 設定的）
+  const pendingTarget = window.__pendingScrollTarget__;
+  if (pendingTarget) {
+    window.__pendingScrollTarget__ = null;
+    const expandReviewId = window.__pendingExpandReview__;
+    window.__pendingExpandReview__ = null;
+
+    const doScroll = () => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(pendingTarget);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("review-highlight-flash");
+          el.addEventListener("animationend", () => {
+            el.classList.remove("review-highlight-flash");
+          }, { once: true });
+        }
+      });
+    };
+
+    // reply 需要先展開對應的 replies group，再 scroll
+    if (expandReviewId) {
+      const groupKey = `${expandReviewId}:root`;
+      expandedReplyGroups.add(groupKey);
+      loadReviews(courseId, doScroll); // 重新渲染讓 replies 出現
+    } else {
+      doScroll();
+    }
+  }
 }
 
 function updateStudentReviewStats(reviews = []) {
@@ -3011,7 +3091,7 @@ function renderReplies(replies = [], reviewId) {
       ` : "";
 
       return `
-        <div class="reply-thread">
+        <div class="reply-thread" id="reply-${reviewId}-${reply.id}">
           <div class="reply-item">
             <div class="reply-content" style="width: 100%;">
               <div class="reply-meta" style="display: flex; align-items: center; width: 100%;">
@@ -3530,30 +3610,6 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
-document.addEventListener("DOMContentLoaded", function() {
-  const userAvatar = document.getElementById("userAvatar");
-
-  if (userAvatar) {
-    userAvatar.onclick = function(e) {
-      e.stopPropagation();
-
-      if (!currentUser) {
-        if (typeof window.openLoginModal === "function") {
-          window.openLoginModal();
-        }
-        return;
-      }
-
-      const menuCard = document.getElementById("avatarMenuCard");
-      if (menuCard) {
-        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
-        menuCard.style.display = isHidden ? "block" : "none";
-      } else {
-        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
-      }
-    };
-  }
-});
 
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
@@ -4325,3 +4381,33 @@ document.addEventListener("click", function() {
         c.classList.remove("open");
     });
 });
+
+
+
+// 🌟 2. 修正版：生成個人活動卡片（清除了給幾分的細項，改埋入唯一識別碼）
+function buildPersonalActionCard(item) {
+  const typeLabel = {
+    favorite: '<span class="activity-type-badge badge-favorite">Saved</span>',
+    review:   '<span class="activity-type-badge badge-review">Review</span>',
+    reaction: '<span class="activity-type-badge badge-reaction">Reacted</span>',
+  }[item.type] || "";
+  
+  const snippetHtml = item.reviewSnippet
+    ? `<p class="activity-card-snippet">"${escapeHtml(item.reviewSnippet)}"</p>` : "";
+  const courseLink = item.courseId ? `data-course-id="${item.courseId}"` : "";
+  
+  // 將目標評論的 id 綁定為 data-target，供後續精確滾動定位使用
+  const targetAttr = item.reviewId ? `data-target="review-${item.reviewId}"` : (item.id ? `data-target="review-${item.id}"` : "");
+
+  return `
+    <div class="activity-card" ${courseLink} ${targetAttr} onclick="handleActivityCardClick(this)" role="button" tabindex="0" style="cursor: pointer;">
+      <div class="activity-card-icon">${escapeHtml(item.icon || "📝")}</div>
+      <div class="activity-card-body">
+        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt || "")}</span></div>
+        <p class="activity-card-message">${item.message}</p>
+        ${snippetHtml}
+        <span class="activity-card-course-code">${escapeHtml(item.courseCode || "")}</span>
+      </div>
+      <div class="activity-card-arrow">›</div>
+    </div>`;
+}

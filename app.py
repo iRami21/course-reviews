@@ -1411,13 +1411,46 @@ def create_app():
                 "courseName": course.name,
                 "courseCode": course.code,
                 "rating": review.rating,
+                "reviewId": str(review.id),
                 "ratingStars": "★" * (review.rating or 0) + "☆" * (5 - (review.rating or 0)),
                 "reviewSnippet": (review.text or "")[:80] + ("…" if len(review.text or "") > 80 else ""),
                 "link": f"/courses/{course.course_id}",
                 "createdAt": review.created_at.strftime("%Y-%m-%d %H:%M") if review.created_at else "",
             })
 
-        # ── 3. Reactions the user gave ───────────────────────────────────────────
+        # ── 3. Replies the user wrote ────────────────────────────────────────────
+        replies = (
+            ReviewReply.query
+            .options(
+                selectinload(ReviewReply.review)
+                .selectinload(Review.section)
+                .selectinload(Section.course)
+            )
+            .filter(ReviewReply.user_id == uid)
+            .order_by(ReviewReply.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        for reply in replies:
+            review = reply.review
+            if not review or not review.course:
+                continue
+            course = review.course
+            personal_actions.append({
+                "type": "reply",
+                "icon": "💬",
+                "message": f"You replied to a review on <strong>{course.name}</strong>",
+                "courseId": course.course_id,
+                "courseName": course.name,
+                "courseCode": course.code,
+                "reviewId": str(review.id),
+                "replyId": str(reply.id),
+                "reviewSnippet": (reply.text or "")[:80] + ("…" if len(reply.text or "") > 80 else ""),
+                "link": f"/courses/{course.course_id}",
+                "createdAt": reply.created_at.strftime("%Y-%m-%d %H:%M") if reply.created_at else "",
+            })
+
+        # ── 4. Reactions the user gave ───────────────────────────────────────────
         reactions = (
             ReviewReaction.query
             .options(
@@ -1443,6 +1476,7 @@ def create_app():
                 "courseName": course.name,
                 "courseCode": course.code,
                 "emoji": rxn.emoji,
+                "reviewId": str(review.id),
                 "link": f"/courses/{course.course_id}",
                 "createdAt": rxn.created_at.strftime("%Y-%m-%d %H:%M") if rxn.created_at else "",
             })
