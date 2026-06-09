@@ -1,6 +1,7 @@
 ﻿// Global variables
 let currentUser = null;
 let currentCourseId = null;
+let courseReturnState = { courseId: null, scrollY: 0 };
 let allCourses = [];
 let currentViewMode = 'browse';
 // favoritesCache: 所有已收藏課程（跨頁面分頁，獨立維護）
@@ -1592,6 +1593,19 @@ function goToCoursePage(page) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function renderCourseCodeTags(course) {
+  const codes = (course.codes && course.codes.length ? course.codes : [course.code]).filter(Boolean);
+  const visibleCodes = codes.slice(0, 2);
+  const hiddenCodes = codes.slice(2);
+  const codeTags = visibleCodes
+    .map((code) => tagSearchButton(code, "course-code course-tag-btn"))
+    .join("");
+
+  if (!hiddenCodes.length) return codeTags;
+
+  return `${codeTags}<span class="course-code course-code-more" title="${escapeHtml(hiddenCodes.join("、"))}">+${hiddenCodes.length}</span>`;
+}
+
 function renderCourseCards(container, courses, emptyText) {
 
   container.innerHTML = "";
@@ -1604,6 +1618,7 @@ function renderCourseCards(container, courses, emptyText) {
   courses.forEach((course) => {
     const courseCard = document.createElement("div");
     courseCard.className = `course-card ${isCurrentUserAdmin() ? "admin-course-card" : ""}`.trim();
+    courseCard.dataset.courseId = String(course.id);
     courseCard.onclick = () => openCourseDetail(course.id);
 
     const semesterText = `${course.year} S${course.semester}`;
@@ -1644,8 +1659,7 @@ function renderCourseCards(container, courses, emptyText) {
     courseCard.innerHTML = `
             <div class="course-card-header">
                 <div class="course-card-tags">
-                  ${tagSearchButton(course.code, "course-code course-tag-btn")}
-                  ${tagSearchButton(semesterText, "course-semester course-tag-btn")}
+                  ${renderCourseCodeTags(course)}
                 </div>
                 <button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
@@ -1674,7 +1688,7 @@ function renderCourseCards(container, courses, emptyText) {
                     <span class="stat-save-display">
                         ${heartIcon()} <span class="save-count-num" id="save-count-${course.id}">${course.saveCount || 0}</span>
                     </span>
-                    <span class="stat-comment">${commentIcon()} ${getCourseCommentTotal(course.id)}</span>
+                    <span class="stat-comment">${commentIcon()} ${course.commentTotal ?? getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
                   <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
@@ -1854,6 +1868,65 @@ function syncDetailFollowButton(courseId) {
   };
 }
 
+function formatCourseType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "elective" || normalized === "選修") return "Elective";
+  if (normalized === "compulsory" || normalized === "必修") return "Compulsory";
+  return "Other";
+}
+
+function renderDetailOfferingHistory(course) {
+  const latestTermEl = document.getElementById("detailLatestTerm");
+  const historyEl = document.getElementById("detailHistoryTerms");
+  const historyTerms = Array.isArray(course.historyTerms) ? course.historyTerms : [];
+  const fallbackLatest = course.latestTerm || (course.year && course.semester ? `${course.year}-S${course.semester}` : "-");
+
+  if (latestTermEl) {
+    latestTermEl.textContent = historyTerms[0]?.label || fallbackLatest;
+  }
+
+  if (historyEl) {
+    historyEl.innerHTML = historyTerms.length
+      ? historyTerms
+          .map((term) => {
+            const classTimeChanged = (term.classTime || "-") !== (course.classTime || "-");
+            const locationChanged = (term.location || "-") !== (course.location || "-");
+            const classTimeRow = classTimeChanged
+              ? `
+                <span class="detail-history-popover-row">
+                  <span class="detail-history-popover-title">上課時間</span>
+                  <span>${escapeHtml(term.classTime || "-")}</span>
+                </span>
+              `
+              : "";
+            const locationRow = locationChanged
+              ? `
+                <span class="detail-history-popover-row">
+                  <span class="detail-history-popover-title">地點</span>
+                  <span>${escapeHtml(term.location || "-")}</span>
+                </span>
+              `
+              : "";
+
+            return `
+              <button type="button" class="detail-history-pill" data-tag="${escapeHtml(term.searchValue || term.label)}" onclick="event.stopPropagation(); searchByTag(this.dataset.tag)">
+                ${escapeHtml(term.label)}
+                <span class="detail-history-popover" role="tooltip">
+                  <span class="detail-history-popover-row">
+                    <span class="detail-history-popover-title">Professor</span>
+                    <span>${escapeHtml(term.professorText || "-")}</span>
+                  </span>
+                  ${classTimeRow}
+                  ${locationRow}
+                </span>
+              </button>
+            `;
+          })
+          .join("")
+      : `<span class="detail-history-empty">-</span>`;
+  }
+}
+
 function renderDetailTags(course) {
   const tagList = document.getElementById("detailTagList");
   if (!tagList) return;
@@ -1873,6 +1946,10 @@ function getCourseLikeTotal(courseId) {
 
 function getCourseCommentTotal(courseId) {
   const reviews = getReviewsForCourse(courseId);
+  const course = allCourses.find((item) => String(item.id) === String(courseId));
+  if (course && Number.isFinite(Number(course.commentTotal))) {
+    return Number(course.commentTotal);
+  }
   return reviews.reduce(
     (total, review) => total + 1 + (review.replies || []).length,
     0,
@@ -2588,30 +2665,35 @@ function openCourseDetail(courseId) {
   const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!course) return;
 
+  if (!document.body.classList.contains("detail-open")) {
+    courseReturnState = { courseId: String(courseId), scrollY: window.scrollY };
+  }
+
   currentCourseId = courseId;
   const reviews = getReviewsForCourse(courseId);
   const averageRating = getAverageRating(reviews, course.rating);
 
-  const detailCourseCode = document.getElementById("detailCourseCode");
-  const detailCourseTerm = document.getElementById("detailCourseTerm");
-  const detailTermText = `${course.year} S${course.semester}`;
-  detailCourseCode.textContent = course.code;
-  detailCourseCode.onclick = (event) => {
-    event.stopPropagation();
-    searchByTag(course.code);
-  };
-  detailCourseTerm.textContent = detailTermText;
-  detailCourseTerm.onclick = (event) => {
-    event.stopPropagation();
-    searchByTag(detailTermText);
-  };
+  const detailCourseTags = document.querySelector(".detail-course-tags");
+  const detailCodes = (course.codes && course.codes.length ? course.codes : [course.code]).filter(Boolean);
+  if (detailCourseTags) {
+    detailCourseTags.innerHTML = detailCodes
+      .map((code) => `
+        <button type="button" class="detail-course-code" data-tag="${escapeHtml(code)}" onclick="event.stopPropagation(); searchByTag(this.dataset.tag)">
+          ${escapeHtml(code)}
+        </button>
+      `)
+      .join("");
+  }
   document.getElementById("detailCourseTitle").textContent = course.title;
   syncDetailFollowButton(courseId);
   document.getElementById("detailCourseTitleZh").textContent = course.titleZh;
   document.getElementById("detailCourseProfessor").textContent = course.professor || "-";
   document.getElementById("detailCourseDepartment").textContent = course.department;
   document.getElementById("detailCourseCredits").textContent = course.credits;
-  document.getElementById("detailCourseDescription").textContent = course.description;
+  renderDetailOfferingHistory(course);
+  document.getElementById("detailClassTime").textContent = course.classTime || "-";
+  document.getElementById("detailClassLocation").textContent = course.location || "-";
+  document.getElementById("detailCourseRequirement").textContent = formatCourseType(course.requirement || course.courseType);
   renderDetailTags(course);
   updateDetailSocialStats(courseId);
   document.getElementById("detailRatingValue").textContent = averageRating.toFixed(1);
@@ -2654,12 +2736,30 @@ function openCourseDetail(courseId) {
       `;
 }}
 
+function restoreCourseListPosition() {
+  const targetCard = courseReturnState.courseId
+    ? document.querySelector(`[data-course-id="${CSS.escape(String(courseReturnState.courseId))}"]`)
+    : null;
+
+  if (targetCard) {
+    targetCard.scrollIntoView({ block: "center", behavior: "auto" });
+    return;
+  }
+
+  window.scrollTo({ top: courseReturnState.scrollY || 0, behavior: "auto" });
+}
+
 function openCourseReviewForm(courseId) {
   openCourseDetail(courseId);
   openReviewForm();
 }
 
 function handleNavLogoClick() {
+  if (document.body.classList.contains("detail-open")) {
+    closeCourseDetail();
+    return;
+  }
+
   showHomePage();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -2688,6 +2788,7 @@ function closeCourseDetail() {
   if (pagination) pagination.style.display = "";
   currentCourseId = null;
   renderAdminCoursePanel(null);
+  requestAnimationFrame(restoreCourseListPosition);
 }
 
 function getReviewsForCourse(courseId) {
