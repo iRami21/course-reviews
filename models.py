@@ -227,10 +227,6 @@ class Review(db.Model):
         db.UniqueConstraint("sectionId", "userId", name="uq_user_section_review"),
     )
     review_id = db.Column("reviewId", db.Integer, primary_key=True)
-    section_id = db.Column("sectionId", db.Integer, db.ForeignKey("Section.sectionId"), nullable=False, index=True)
-    user_id = db.Column("userId", db.Integer, db.ForeignKey("User.userId"), nullable=False, index=True)
-
-    review_id = db.Column("reviewId", db.Integer, primary_key=True)
     section_id = db.Column(
         "sectionId",
         db.Integer,
