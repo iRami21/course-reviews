@@ -1561,6 +1561,7 @@ async function fetchCoursesPage(page = 1) {
       ...(data.pagination || {}),
     };
     displayCourses(allCourses);
+    generateDynamicTrending();
   } catch (error) {
     if (container) {
       container.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
@@ -4061,6 +4062,8 @@ window.saveEditReply = async function(reviewId, replyId) {
 
 function generateDynamicTrending() {
   const trendingContainer = document.querySelector(".trending-tags");
+  const searchBox = document.getElementById("searchBox");
+  const searchDropdown = document.getElementById("searchDropdownCard");
   if (!trendingContainer) return;
 
   const sortedCourses = [...allCourses].sort((a, b) => {
@@ -4071,22 +4074,23 @@ function generateDynamicTrending() {
 
   const topKeywords = new Set();
   sortedCourses.forEach(course => {
-    if (topKeywords.size < 5) {
-      const keyword = course.name || course.title;
-      if (keyword) topKeywords.add(keyword);
-    }
+    if (topKeywords.size >= 5) return;
+    const keyword = course.titleZh || course.name || course.title || course.department;
+    if (keyword) topKeywords.add(keyword);
   });
+
+  if (!topKeywords.size) return;
 
   trendingContainer.innerHTML = Array.from(topKeywords).map(keyword =>
     `<button type="button" class="trending-tag-btn">${escapeHtml(keyword)}</button>`
   ).join("");
 
-  newBtns.forEach(btn => {
+  trendingContainer.querySelectorAll(".trending-tag-btn").forEach(btn => {
     btn.addEventListener("mousedown", function(e) {
       e.preventDefault();
+      if (!searchBox) return;
       searchBox.value = this.textContent.trim();
-      searchDropdown.style.display = "none";
-      // 點擊熱門標籤時也要強制切換畫面
+      if (searchDropdown) searchDropdown.style.display = "none";
       showBrowseCourses(false);
       filterCourses();
     });
