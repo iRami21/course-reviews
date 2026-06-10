@@ -375,6 +375,39 @@ def create_app():
             query = query.filter(Favorite.course_id.in_(course_ids))
         return {course_id for (course_id,) in query.all()}
 
+    def round_rating(value):
+        try:
+            numeric = float(value or 0)
+        except (TypeError, ValueError):
+            numeric = 0
+        return int(numeric * 10 + 0.5) / 10
+
+    def review_rating_expression():
+        return func.coalesce(
+            (
+                Review.rating_quality
+                + Review.rating_sweetness
+                + Review.rating_coolness
+                + Review.rating_solidity
+            ) / 4.0,
+            Review.rating,
+        )
+
+    def review_total_rating(review):
+        scores = [
+            review.rating_quality,
+            review.rating_sweetness,
+            review.rating_coolness,
+            review.rating_solidity,
+        ]
+        if all(score is not None for score in scores):
+            return round_rating(sum(int(score) for score in scores) / 4)
+        return round(float(review.rating or 0), 1)
+
+    def average_review_rating(reviews):
+        ratings = [review_total_rating(review) for review in reviews if review_total_rating(review) > 0]
+        return sum(ratings) / len(ratings) if ratings else 0
+
     def serialize_course(course, review_stats=None, favorite_counts=None, favorite_course_ids=None):
         review_count = 0
         average_rating = 0
@@ -382,9 +415,8 @@ def create_app():
             review_count, average_rating = review_stats.get(course.course_id, (0, 0))
         else:
             reviews = reviews_for_course(course.course_id).all()
-            ratings = [review.rating for review in reviews if review.rating]
             review_count = len(reviews)
-            average_rating = sum(ratings) / len(ratings) if ratings else 0
+            average_rating = average_review_rating(reviews)
 
         if favorite_counts is not None:
             save_count = favorite_counts.get(course.course_id, 0)
@@ -435,7 +467,7 @@ def create_app():
             "requirement": course.requirement or course.course_type or "",
             "courseType": course.course_type or "",
             "englishTaught": bool(course.english_taught),
-            "rating": round(float(average_rating or 0), 1),
+            "rating": round_rating(average_rating),
             "reviewCount": int(review_count or 0),
             "commentTotal": int(review_count or 0),
             "followed": followed,
@@ -681,7 +713,7 @@ def create_app():
         payload["reviewCount"] = total_reviews
         # 嚴謹模式：留言總數等於主評價數量
         payload["commentTotal"] = total_reviews 
-        payload["rating"] = round(sum(all_ratings) / len(all_ratings), 1) if all_ratings else 0
+        payload["rating"] = round_rating(sum(all_ratings) / len(all_ratings)) if all_ratings else 0
         payload["saveCount"] = int(sum((favorite_counts or {}).get(course_id, 0) for course_id in course_ids))
         payload["followed"] = any(course_id in (favorite_course_ids or set()) for course_id in course_ids)
         
@@ -723,7 +755,7 @@ def create_app():
                 "avatarAnimal": author.avatar_animal if author else "question",
                 "gender": author.gender if author else "undisclosed",
             },
-            "rating": review.rating,
+            "rating": review_total_rating(review),
             "ratingQuality": review.rating_quality,
             "ratingSweetness": review.rating_sweetness,
             "ratingCoolness": review.rating_coolness,
@@ -816,7 +848,7 @@ def create_app():
             db.session.query(
                 Section.course_id,
                 func.count(Review.review_id),
-                func.avg(Review.rating),
+                func.avg(review_rating_expression()),
             )
             .join(Review, Review.section_id == Section.section_id)
             .filter(Review.parent_id.is_(None))
@@ -831,7 +863,7 @@ def create_app():
             db.session.query(
                 Section.course_id.label("course_id"),
                 func.count(Review.review_id).label("review_count"),
-                func.avg(Review.rating).label("average_rating"),
+                func.avg(review_rating_expression()).label("average_rating"),
             )
             .join(Review, Review.section_id == Section.section_id)
             .filter(Review.parent_id.is_(None))
@@ -954,7 +986,7 @@ def create_app():
         )
         
         # 建立精確的基礎計分欄位（只看主評價）
-        avg_rating = func.coalesce(func.avg(Review.rating).filter(visible_review_cond), 0)
+        avg_rating = func.coalesce(func.avg(review_rating_expression()).filter(visible_review_cond), 0)
         review_count = func.count(Review.review_id).filter(visible_review_cond)
         latest_review_time = func.coalesce(func.max(Review.created_at).filter(visible_review_cond), "1970-01-01 00:00:00")
         
@@ -1443,9 +1475,9 @@ def create_app():
                 "courseId": course.course_id,
                 "courseName": course.name,
                 "courseCode": course.code,
-                "rating": review.rating,
+                "rating": review_total_rating(review),
                 "reviewId": str(review.id),
-                "ratingStars": "★" * (review.rating or 0) + "☆" * (5 - (review.rating or 0)),
+                "ratingStars": "★" * round(review_total_rating(review)) + "☆" * (5 - round(review_total_rating(review))),
                 "reviewSnippet": (review.text or "")[:80] + ("…" if len(review.text or "") > 80 else ""),
                 "link": f"/courses/{course.course_id}",
                 "createdAt": review.created_at.strftime("%Y-%m-%d %H:%M") if review.created_at else "",
@@ -1587,14 +1619,13 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         try:
             reviews = reviews_for_course(course_id).all()
-            rated = [r for r in reviews if r.rating]
-            average_rating = sum(r.rating for r in rated) / len(rated) if rated else 0
+            average_rating = average_review_rating(reviews)
             current_user_id = current_user.id if current_user.is_authenticated else None
             return jsonify(
                 {
                     "courseId": course.course_id,
                     "reviewCount": len(reviews),
-                    "averageRating": round(float(average_rating), 1),
+                    "averageRating": round_rating(average_rating),
                     "reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
                 }
             )
@@ -1641,10 +1672,10 @@ def create_app():
             rating_coolness  = parse_rating("ratingCoolness")
             rating_solidity  = parse_rating("ratingSolidity")
 
-            scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
-            if not scores:
+            scores = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(score is None for score in scores):
                 return jsonify({"error": "Please rate all four dimensions."}), 400
-            rating = round(sum(scores) / len(scores))
+            rating = round(sum(scores) / 4)
         else:
             parent_review = Review.query.get(parent_id)
             if parent_review is None:
@@ -1672,17 +1703,13 @@ def create_app():
             pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 "review": serialize_review(review, current_user_id=current_user_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
             }
@@ -1755,17 +1782,13 @@ def create_app():
             pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 "review": serialize_review(review, current_user_id=current_user_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
             }
@@ -1791,17 +1814,13 @@ def create_app():
             pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 # FIX: 不再序列化已刪除的 review 物件，改回傳被刪除的 id
                 "deletedReviewId": str(review_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
@@ -1947,10 +1966,10 @@ def create_app():
         rating_coolness  = parse_dim("ratingCoolness")
         rating_solidity  = parse_dim("ratingSolidity")
 
-        scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
-        if not scores:
+        scores = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+        if any(score is None for score in scores):
             return jsonify({"error": "Please rate all four dimensions."}), 400
-        rating = round(sum(scores) / len(scores))
+        rating = round(sum(scores) / 4)
 
         review = Review(
             section_id=section.section_id,

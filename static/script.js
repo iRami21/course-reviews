@@ -2952,10 +2952,32 @@ function getReviewsForCourse(courseId) {
   return courseReviews[courseId] || [];
 }
 
+function getReviewTotalRating(review) {
+  const dimensionKeys = [
+    "ratingQuality",
+    "ratingSweetness",
+    "ratingCoolness",
+    "ratingSolidity",
+  ];
+  const scores = dimensionKeys
+    .map((key) => Number(review?.[key]))
+    .filter((score) => Number.isFinite(score) && score >= 1 && score <= 5);
+
+  if (scores.length === dimensionKeys.length) {
+    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    return Math.round(average * 10) / 10;
+  }
+
+  const fallback = Number(review?.rating);
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
 function getAverageRating(reviews, fallbackRating) {
   if (reviews.length === 0) return fallbackRating;
-  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-  return total / reviews.length;
+  const ratings = reviews.map(getReviewTotalRating).filter((rating) => rating > 0);
+  if (ratings.length === 0) return fallbackRating;
+  const total = ratings.reduce((sum, rating) => sum + rating, 0);
+  return Math.round((total / ratings.length) * 10) / 10;
 }
 
 function renderRatingBreakdown(reviews) {
@@ -2964,7 +2986,7 @@ function renderRatingBreakdown(reviews) {
   breakdown.innerHTML = "";
 
   for (let rating = 5; rating >= 1; rating--) {
-    const count = reviews.filter((r) => r.rating === rating).length;
+    const count = reviews.filter((r) => Math.round(getReviewTotalRating(r)) === rating).length;
     const percent = total > 0 ? (count / total) * 100 : 0;
     const row = document.createElement("div");
     row.className = "rating-breakdown-row";
@@ -2985,7 +3007,7 @@ function renderDimBreakdown(reviews) {
     { key: "ratingQuality",   label: "Quality", img: "/static/icons/award.png" },
     { key: "ratingSweetness", label: "Sweetness", img: "/static/icons/candy.png" },
     { key: "ratingCoolness",  label: "Coolness", img: "/static/icons/cool.png"  },
-    { key: "ratingSolidity",  label: "Solidaty", img: "/static/icons/bicep.png" },
+    { key: "ratingSolidity",  label: "Solidity", img: "/static/icons/bicep.png" },
   ];
 
   const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
