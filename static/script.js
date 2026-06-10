@@ -507,9 +507,10 @@ function renderReactionControl(item, reviewId, replyId = null) {
       `<button type="button" class="${isReply ? 'reply-emoji-btn' : ''}" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
   ).join("");
 
-  return `
-    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
-      <button
+  const replyAttr = replyId ? `data-reply-id="${replyId}"` : "";
+  const innerHtml = isCurrentUserAdmin()
+    ? `<span class="like-count-num">${item.likes ?? 0} reactions</span>`
+    : `<button
         class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
         onclick="toggleReactionPalette(event)"
         type="button"
@@ -521,7 +522,11 @@ function renderReactionControl(item, reviewId, replyId = null) {
       </button>
       <div class="reaction-palette">
         ${paletteButtons}
-      </div>
+      </div>`;
+
+  return `
+    <div class="reaction-container" data-review-id="${reviewId}" ${replyAttr}>
+      ${innerHtml}
     </div>
   `;
 }
@@ -587,228 +592,191 @@ function getAdminCoursePayload(form) {
   };
 }
 
-function renderAdminControls() {
-  const addPanel = document.getElementById("adminAddCoursePanel");
-  if (addPanel) {
-    addPanel.style.display = isCurrentUserAdmin() ? "block" : "none";
+// ── Admin Modal ───────────────────────────────────────────────────
 
+function openAdminModal(mode, course = null) {
+  // 先關 dropdown
+  const dropdown = document.getElementById("userDropdown");
+  if (dropdown) dropdown.hidden = true;
+
+  const modal   = document.getElementById("adminCourseModal");
+  const form    = document.getElementById("adminModalForm");
+  const kicker  = document.getElementById("adminModalKicker");
+  const title   = document.getElementById("adminModalTitle");
+  const submitBtn  = document.getElementById("adminModalSubmitBtn");
+  const deleteBtn  = document.getElementById("adminModalDeleteBtn");
+  const courseIdEl = document.getElementById("adminModalCourseId");
+
+  form.reset();
+  courseIdEl.value = "";
+
+  if (mode === "add") {
+    kicker.textContent   = "New Course";
+    title.textContent    = "Add a Course";
+    submitBtn.textContent = "Add Course";
+    deleteBtn.style.display = "none";
+  } else {
+    kicker.textContent   = "Edit Course";
+    title.textContent    = "Edit Course";
+    submitBtn.textContent = "Save Changes";
+    deleteBtn.style.display = "inline-flex";
+    courseIdEl.value = course.id;
+
+    // Populate fields — 用 if 保護，避免 HTML 沒有某欄位時噴 TypeError
+    if (form.elements["code"])           form.elements["code"].value           = course.code        || "";
+    if (form.elements["title"])          form.elements["title"].value          = course.title       || course.name || "";
+    if (form.elements["title_zh"])       form.elements["title_zh"].value       = course.titleZh     || "";
+    if (form.elements["department"])     form.elements["department"].value     = course.department  || "";
+    if (form.elements["year"])           form.elements["year"].value           = course.year        || "";
+    if (form.elements["semester"])       form.elements["semester"].value       = course.semester    || "";
+    if (form.elements["credits"])        form.elements["credits"].value        = course.credits     || "";
+    if (form.elements["grade"])          form.elements["grade"].value          = course.grade       || "";
+    if (form.elements["professor"])      form.elements["professor"].value      = course.professor   || "";
+    if (form.elements["requirement"])    form.elements["requirement"].value    = course.requirement || "";
+    if (form.elements["description"])    form.elements["description"].value    = course.description || "";
+    if (form.elements["english_taught"]) form.elements["english_taught"].checked = !!course.englishTaught;
   }
 
-  const addBtn = document.getElementById("adminAddCourseBtn");
-  if (addBtn) {
-    addBtn.style.display = isCurrentUserAdmin() ? "inline-flex" : "none";
-  }
-
-  const userMenu = document.getElementById("userMenu");
-  if (userMenu && currentUser) {
-    const existingBadge = userMenu.querySelector(".admin-badge");
-    if (isCurrentUserAdmin() && !existingBadge) {
-      const badge = document.createElement("span");
-      badge.className = "admin-badge";
-      badge.textContent = "admin";
-      badge.style.cssText = "font-size: 1rem; color: #ffcf76; background: rgba(255,207,118,0.2); padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 700;";
-      userMenu.appendChild(badge);
-    } else if (!isCurrentUserAdmin() && existingBadge) {
-      existingBadge.remove();
-    }
-  }
-
-  if (currentCourseId) {
-    const course = allCourses.find((item) => String(item.id) === String(currentCourseId));
-    renderAdminCoursePanel(course);
-  }
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+  setTimeout(() => form.elements["code"].focus(), 80);
 }
 
-function toggleAdminAddCourseForm() {
-  const form = document.getElementById("adminAddCourseForm");
-  const button = document.getElementById("adminAddCourseToggle");
-  if (!form) return;
-
-  const isCollapsed = form.classList.toggle("admin-course-form-collapsed");
-  if (button) {
-    button.textContent = isCollapsed ? "New Course" : "Close";
-  }
-
-  if (!isCollapsed) {
-    const editPanel = document.getElementById("adminEditCoursePanel");
-    if (editPanel) {
-      editPanel.style.display = "none";
-      editPanel.innerHTML = "";
-    }
-  }
+function closeAdminModal() {
+  const modal = document.getElementById("adminCourseModal");
+  modal.style.display = "none";
+  document.body.style.overflow = "";
 }
 
-window.editAdminCourse = function(courseId) {
-  const course = allCourses.find((c) => String(c.id) === String(courseId));
-  if (!course || !isCurrentUserAdmin()) return;
-
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-  }
-
-  const addForm = document.getElementById("adminAddCourseForm");
-  const addToggle = document.getElementById("adminAddCourseToggle");
-  if (addForm && !addForm.classList.contains("admin-course-form-collapsed")) {
-    addForm.classList.add("admin-course-form-collapsed");
-    if (addToggle) addToggle.textContent = "New Course";
-  }
-
-  const panel = document.getElementById("adminEditCoursePanel");
-  if (panel) {
-    panel.style.display = "block";
-    renderAdminCoursePanel(course);
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-};
-
-function renderAdminCoursePanel(course) {
-  const panel = document.getElementById("adminEditCoursePanel");
-  if (!panel) return;
-
-  if (!isCurrentUserAdmin() || !course) {
-    panel.style.display = "none";
-    panel.innerHTML = "";
-    return;
-  }
-
-  panel.style.display = "block";
-  panel.innerHTML = `
-    <div class="admin-course-header">
-      <div>
-        <h2>Edit Course</h2>
-        <p class="admin-hint">Changes update this course immediately.</p>
-      </div>
-    </div>
-    <form class="admin-course-form" id="adminEditCourseForm" data-course-id="${escapeHtml(course.id)}" onsubmit="submitAdminCourseEdit(event)">
-      <div class="admin-form-row">
-        <input type="text" name="code" placeholder="Course code" value="${escapeHtml(course.code || "")}" required />
-        <input type="text" name="title" placeholder="Course title" value="${escapeHtml(course.title || "")}" required />
-      </div>
-      <div class="admin-form-row">
-        <input type="text" name="title_zh" placeholder="Chinese title" value="${escapeHtml(course.titleZh || "")}" />
-        <input type="text" name="professor" placeholder="Professor" value="${escapeHtml(course.professor || "")}" />
-      </div>
-      <div class="admin-form-row">
-        <input type="text" name="department" placeholder="Department" value="${escapeHtml(course.department || "")}" />
-        <input type="text" name="credits" placeholder="Credits" value="${escapeHtml(course.credits || "")}" />
-      </div>
-      <div class="admin-form-row">
-        <input type="text" name="year" placeholder="Year" value="${escapeHtml(course.year || "")}" />
-        <input type="text" name="semester" placeholder="Semester" value="${escapeHtml(course.semester || "")}" />
-        <input type="text" name="grade" placeholder="Grade" value="${escapeHtml(course.grade || "")}" />
-      </div>
-      <div class="admin-form-row">
-        <input type="text" name="requirement" placeholder="Requirement" value="${escapeHtml(course.requirement || "")}" />
-        <label class="admin-checkbox-label">
-          <input type="checkbox" name="english_taught" ${course.englishTaught ? "checked" : ""} /> English taught
-        </label>
-      </div>
-      <div class="admin-form-row">
-        <textarea name="description" placeholder="Description">${escapeHtml(course.description || "")}</textarea>
-      </div>
-      <div class="admin-course-actions">
-        <button type="submit" class="btn-reviews-card">Save Changes</button>
-        <button type="button" class="btn-secondary" onclick="deleteAdminCourse(${course.id})">Delete Course</button>
-      </div>
-    </form>
-  `;
+function adminModalOverlayClick(e) {
+  if (e.target === document.getElementById("adminCourseModal")) closeAdminModal();
 }
 
-async function submitAdminCourseCreate(event) {
+async function submitAdminModal(event) {
   event.preventDefault();
-  try {
-    const result = await apiRequest("/api/admin/courses", {
-      method: "POST",
-      body: JSON.stringify(getAdminCoursePayload(event.currentTarget)),
-    });
+  const form      = event.currentTarget;
+  const courseId  = form.elements["courseId"].value;
+  const isEdit    = !!courseId;
+  const submitBtn = document.getElementById("adminModalSubmitBtn");
 
-    if (result.course) {
-      allCourses.unshift(result.course);
-      displayCourses(allCourses);
-    }
-    event.currentTarget.reset();
-    alert("課程已成功新增。");
-  } catch (error) {
-    alert(error.message);
-  }
-}
+  submitBtn.disabled = true;
+  submitBtn.textContent = isEdit ? "Saving…" : "Adding…";
 
-async function submitAdminCourseEdit(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  const form = event.currentTarget;
-  const courseId = form.dataset.courseId;
-  const submitButton = form.querySelector('button[type="submit"]');
-  const originalButtonText = submitButton?.textContent || "Save Changes";
-
-  if (!form.reportValidity()) return;
-
-  if (submitButton) {
-    submitButton.disabled = true;
-    submitButton.textContent = "Saving...";
-  }
+  const payload = {
+    code:         form.elements["code"]        ? form.elements["code"].value.trim()        : "",
+    title:        form.elements["title"]       ? form.elements["title"].value.trim()       : "",
+    title_zh:     form.elements["title_zh"]    ? form.elements["title_zh"].value.trim()    : "",
+    department:   form.elements["department"]  ? form.elements["department"].value.trim()  : "",
+    year:         form.elements["year"]        ? form.elements["year"].value.trim()        : "",
+    semester:     form.elements["semester"]    ? form.elements["semester"].value.trim()    : "",
+    credits:      form.elements["credits"]     ? form.elements["credits"].value.trim()     : "",
+    grade:        form.elements["grade"]       ? form.elements["grade"].value.trim()       : "",
+    professor:    form.elements["professor"]   ? form.elements["professor"].value.trim()   : "",
+    requirement:  form.elements["requirement"] ? form.elements["requirement"].value.trim() : "",
+    description:  form.elements["description"] ? form.elements["description"].value.trim() : "",
+    englishTaught: form.elements["english_taught"] ? form.elements["english_taught"].checked : false,
+  };
 
   try {
-    const result = await apiRequest(`/api/admin/courses/${courseId}`, {
-      method: "PATCH",
-      body: JSON.stringify(getAdminCoursePayload(form)),
-    });
-
-    if (result.course) {
-      replaceCourseInState(result.course);
-      displayCourses(allCourses);
-      const panel = document.getElementById("adminEditCoursePanel");
-      if (panel) {
-        panel.style.display = "none";
-        panel.innerHTML = "";
+    if (isEdit) {
+      const result = await apiRequest(`/api/admin/courses/${courseId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      if (result.course) {
+        replaceCourseInState(result.course);
+        displayCourses(allCourses);
+        closeAdminModal();
+        openCourseDetail(result.course.id);
       }
-      openCourseDetail(result.course.id);
+    } else {
+      const result = await apiRequest("/api/admin/courses", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (result.course) {
+        allCourses.unshift(result.course);
+        displayCourses(allCourses);
+        closeAdminModal();
+      }
     }
-    alert("課程已成功儲存。");
-  } catch (error) {
-    alert(error.message || "課程儲存失敗，請再試一次。");
+  } catch (err) {
+    alert(err.message || "操作失敗，請再試一次。");
   } finally {
-    const activeForm = document.getElementById("adminEditCourseForm");
-    const activeSubmitButton = activeForm?.querySelector('button[type="submit"]');
-    if (activeSubmitButton) {
-      activeSubmitButton.disabled = false;
-      activeSubmitButton.textContent = originalButtonText;
-    }
+    submitBtn.disabled = false;
+    submitBtn.textContent = isEdit ? "Save Changes" : "Add Course";
   }
 }
 
-window.submitAdminCourseEdit = submitAdminCourseEdit;
-
-async function deleteAdminCourse(courseId) {
-  if (!confirm("Delete this course?")) return;
-
+async function deleteAdminCourseFromModal() {
+  const courseId = document.getElementById("adminModalCourseId").value;
+  if (!courseId || !confirm("確定要刪除這門課程嗎？此操作無法還原。")) return;
   try {
-    await apiRequest(`/api/admin/courses/${courseId}`, {
-      method: "DELETE",
-    });
-    allCourses = allCourses.filter((course) => String(course.id) !== String(courseId));
+    await apiRequest(`/api/admin/courses/${courseId}`, { method: "DELETE" });
+    allCourses = allCourses.filter(c => String(c.id) !== String(courseId));
     delete courseReviews[courseId];
+    closeAdminModal();
     closeCourseDetail();
     displayCourses(allCourses);
-    alert("課程已成功刪除。");
-  } catch (error) {
-    alert(error.message);
+  } catch (err) {
+    alert(err.message);
   }
+}
+
+// Keyboard close
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("adminCourseModal")?.style.display === "flex") {
+    closeAdminModal();
+  }
+});
+
+function renderAdminControls() {
+  // Add Course 按鈕在 pageHeading 右側
+  const addBtn = document.getElementById("adminAddCourseBtn");
+  if (addBtn) addBtn.style.display = isCurrentUserAdmin() ? "inline-flex" : "none";
+
+  // Admin badge 在頭像旁邊
+  const badge = document.getElementById("adminBadgeNav");
+  if (badge) badge.style.display = isCurrentUserAdmin() ? "inline-flex" : "none";
+
+  // dropdown 裡不再放 admin badge
+}
+
+// Edit trigger from course card (called by admin-course-card click path)
+window.openAdminEditCourse = function(course) {
+  if (!course || !isCurrentUserAdmin()) return;
+  openAdminModal("edit", course);
+};
+
+// Keep legacy name working
+function renderAdminCoursePanel(course) {
+  // no-op – replaced by modal
 }
 
 function setupAdminForms() {
-  const addForm = document.getElementById("adminAddCourseForm");
-  if (addForm) {
-    addForm.addEventListener("submit", submitAdminCourseCreate);
-  }
-
-  document.addEventListener("submit", (event) => {
-    if (event.target?.id === "adminEditCourseForm") {
-      submitAdminCourseEdit(event);
-    }
-  });
+  // no-op – modal uses inline onsubmit
 }
 
+// 從課程卡片 Edit 按鈕呼叫
+window.openAdminEditById = function(courseId) {
+  const course = allCourses.find(c => String(c.id) === String(courseId));
+  if (!course) { alert("找不到課程資料，請重新整理頁面。"); return; }
+  openAdminModal("edit", course);
+};
+
+// 從課程卡片 Delete 按鈕呼叫
+window.deleteAdminCourse = async function(courseId) {
+  if (!courseId || !confirm("確定要刪除這門課程嗎？此操作無法還原。")) return;
+  try {
+    await apiRequest(`/api/admin/courses/${courseId}`, { method: "DELETE" });
+    allCourses = allCourses.filter(c => String(c.id) !== String(courseId));
+    delete courseReviews[courseId];
+    if (String(currentCourseId) === String(courseId)) closeCourseDetail();
+    displayCourses(allCourses);
+  } catch (err) {
+    alert(err.message || "刪除失敗，請再試一次。");
+  }
+};
 function buildNotificationItem(item) {
     const statusClass = item.isRead ? "" : "unread";
     const icon = item.category === "activity" ? "💬" : "🔔";
@@ -1602,7 +1570,7 @@ function renderCoursePagination() {
 
 function goToCoursePage(page) {
   fetchCoursesPage(page);
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo(0, 0);
 }
 
 function renderCourseCodeTags(course) {
@@ -1657,7 +1625,7 @@ function renderCourseCards(container, courses, emptyText, origin = 'browse') {
 
     const adminActionsHtml = isCurrentUserAdmin() ? `
       <div class="course-admin-actions" onclick="event.stopPropagation();">
-        <button class="admin-action-btn" onclick="event.stopPropagation(); editAdminCourse(${course.id})" title="Edit course" aria-label="Edit course">
+        <button class="admin-action-btn" onclick="event.stopPropagation(); openAdminEditById(${course.id})" title="Edit course" aria-label="Edit course">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -1679,7 +1647,7 @@ function renderCourseCards(container, courses, emptyText, origin = 'browse') {
                 <div class="course-card-tags">
                   ${renderCourseCodeTags(course)}
                 </div>
-                <button
+                ${!isCurrentUserAdmin() ? `<button
                   class="course-follow-btn ${course.followed ? "followed" : ""}"
                   data-course-id="${course.id}"
                   onclick="event.stopPropagation(); toggleFollow(${course.id})"
@@ -1687,7 +1655,7 @@ function renderCourseCards(container, courses, emptyText, origin = 'browse') {
                   title="${course.followed ? "Saved" : "Save course"}"
                 >
                   ${heartIcon()}
-                </button>
+                </button>` : ""}
             </div>
 
             <div class="course-title-section">
@@ -1709,7 +1677,7 @@ function renderCourseCards(container, courses, emptyText, origin = 'browse') {
                     <span class="stat-comment">${commentIcon()} ${typeof course.commentTotal !== "undefined" ? course.commentTotal : getCourseCommentTotal(course.id)}</span>
                 </div>
                 <div class="course-footer-actions">
-                  <button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>
+                  ${!isCurrentUserAdmin() ? `<button class="btn-reviews-card" onclick="event.stopPropagation(); openCourseReviewForm(${course.id})">Add Review</button>` : ''}
                 </div>
             </div>
             ${adminActionsHtml}
@@ -1739,7 +1707,7 @@ function submitSearchFromBar() {
   // 強制把畫面切換回課程列表，且「不」清空搜尋框
   showBrowseCourses(false);
   filterCourses();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo(0, 0);
 }
 
 function searchByTag(tag) {
@@ -1751,7 +1719,7 @@ function searchByTag(tag) {
   // 強制把畫面切換回課程列表，且「不」清空搜尋框
   showBrowseCourses(false);
   filterCourses();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo(0, 0);
 }
 
 function tagSearchButton(tag, className) {
@@ -1781,6 +1749,10 @@ async function toggleFollow(courseId) {
   if (!currentUser) {
     alert("Please login to save courses.");
     openLoginModal();
+    return;
+  }
+  if (isCurrentUserAdmin()) {
+    alert("Admin accounts cannot save courses.");
     return;
   }
 
@@ -1851,12 +1823,14 @@ function syncDetailFollowButton(courseId) {
   const course = allCourses.find((c) => String(c.id) === String(courseId));
   if (!detailFollowBtn || !course) return;
 
+  if (isCurrentUserAdmin()) {
+    detailFollowBtn.style.display = "none";
+    return;
+  }
+  detailFollowBtn.style.display = "";
   detailFollowBtn.className = `course-follow-btn detail-follow-btn ${course.followed ? "followed" : ""}`;
   detailFollowBtn.innerHTML = heartIcon();
-  detailFollowBtn.setAttribute(
-    "aria-label",
-    course.followed ? "Unsave course" : "Save course",
-  );
+  detailFollowBtn.setAttribute("aria-label", course.followed ? "Unsave course" : "Save course");
   detailFollowBtn.title = course.followed ? "Saved" : "Save course";
   detailFollowBtn.onclick = (event) => {
     event.stopPropagation();
@@ -2797,7 +2771,7 @@ function openCourseDetail(courseId) {
 
   // 有 pendingScrollTarget 時不 scroll to top，讓 loadReviews 渲染後自己 scroll
   if (!window.__pendingScrollTarget__) {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo(0, 0);
   }
 
   const backBtn = document.querySelector(".back-button");
@@ -2862,6 +2836,7 @@ function restoreCourseListPosition() {
 }
 
 function openCourseReviewForm(courseId) {
+  if (isCurrentUserAdmin()) return;
   openCourseDetail(courseId);
   openReviewForm();
 }
@@ -2873,7 +2848,7 @@ function handleNavLogoClick() {
   }
 
   showHomePage();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo(0, 0);
 }
 
 function closeCourseDetail() {
@@ -2949,7 +2924,7 @@ function renderDimBreakdown(reviews) {
     { key: "ratingQuality",   label: "Quality", img: "/static/icons/award.png" },
     { key: "ratingSweetness", label: "Sweetness", img: "/static/icons/candy.png" },
     { key: "ratingCoolness",  label: "Coolness", img: "/static/icons/cool.png"  },
-    { key: "ratingSolidity",  label: "Solidaty", img: "/static/icons/bicep.png" },
+    { key: "ratingSolidity",  label: "Solidity", img: "/static/icons/bicep.png" },
   ];
 
   const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
@@ -3005,18 +2980,22 @@ function loadReviews(courseId, onRendered) {
 
   const addReviewBtn = document.querySelector(".btn-add-review");
   if (addReviewBtn) {
-    const hasIReviewed = currentUser && reviews.some(r => r.author === getDisplayName(currentUser));
-
-    if (hasIReviewed) {
-      addReviewBtn.disabled = true;
-      addReviewBtn.style.opacity = "0.5";
-      addReviewBtn.style.cursor = "not-allowed";
-      addReviewBtn.textContent = "Already Reviewed";
+    if (isCurrentUserAdmin()) {
+      addReviewBtn.style.display = "none";
     } else {
-      addReviewBtn.disabled = false;
-      addReviewBtn.style.opacity = "1";
-      addReviewBtn.style.cursor = "pointer";
-      addReviewBtn.textContent = "Write a Review";
+      addReviewBtn.style.display = "";
+      const hasIReviewed = currentUser && reviews.some(r => r.author === getDisplayName(currentUser));
+      if (hasIReviewed) {
+        addReviewBtn.disabled = true;
+        addReviewBtn.style.opacity = "0.5";
+        addReviewBtn.style.cursor = "not-allowed";
+        addReviewBtn.textContent = "Already Reviewed";
+      } else {
+        addReviewBtn.disabled = false;
+        addReviewBtn.style.opacity = "1";
+        addReviewBtn.style.cursor = "pointer";
+        addReviewBtn.textContent = "Write a Review";
+      }
     }
   }
 
@@ -3409,9 +3388,10 @@ function renderReactionControl(item, reviewId, replyId = null) {
       `<button type="button" class="${isReply ? 'reply-emoji-btn' : ''}" onclick="selectReviewEmoji(event, ${targetArgs}, '${reaction}')">${reaction}</button>`,
   ).join("");
 
-  return `
-    <div class="reaction-container" data-review-id="${reviewId}" ${replyId ? `data-reply-id="${replyId}"` : ""}>
-      <button
+  const replyAttr = replyId ? `data-reply-id="${replyId}"` : "";
+  const innerHtml = isCurrentUserAdmin()
+    ? `<span class="like-count-num">${item.likes ?? 0} reactions</span>`
+    : `<button
         class="review-action-btn main-reaction-btn ${item.liked ? "liked" : ""}"
         onclick="toggleReactionPalette(event)"
         type="button"
@@ -3423,7 +3403,11 @@ function renderReactionControl(item, reviewId, replyId = null) {
       </button>
       <div class="reaction-palette">
         ${paletteButtons}
-      </div>
+      </div>`;
+
+  return `
+    <div class="reaction-container" data-review-id="${reviewId}" ${replyAttr}>
+      ${innerHtml}
     </div>
   `;
 }
@@ -3636,6 +3620,11 @@ async function submitReview(event) {
     return;
   }
 
+  if (isCurrentUserAdmin()) {
+    alert("Admin accounts cannot submit reviews.");
+    return;
+  }
+
   if (selectedDimRatings.Quality === 0 || selectedDimRatings.Sweetness === 0 ||
       selectedDimRatings.Coolness === 0 || selectedDimRatings.Solidity === 0) {
     alert("Please rate all four dimensions.");
@@ -3785,7 +3774,7 @@ window.toggleFilterPanel = function() {
     if (wasOnOtherPage) {
       panel.style.display = 'block';
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+        requestAnimationFrame(() => window.scrollTo(0, 0));
       });
     } else {
       const isCurrentlyOpen = panel.style.display !== 'none';
@@ -4073,7 +4062,7 @@ function updateBackToTopButton() {
 }
 
 function scrollToPageTop() {
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo(0, 0);
 }
 
 document.addEventListener("DOMContentLoaded", function () {

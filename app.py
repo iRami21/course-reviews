@@ -1265,6 +1265,8 @@ def create_app():
     @app.route("/api/courses/<int:course_id>/favorite", methods=["POST"])
     @login_required
     def api_toggle_course_favorite(course_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         course = Course.query.get_or_404(course_id)
         payload = request.get_json(silent=True) or {}
         wanted = payload.get("followed")
@@ -1730,6 +1732,8 @@ def create_app():
     @app.route("/api/courses/<int:course_id>/reviews/<int:review_id>/reactions", methods=["POST"])
     @login_required
     def api_react_to_review(course_id, review_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         course = Course.query.get_or_404(course_id)
         review = (
             Review.query.join(Section)
@@ -1831,6 +1835,8 @@ def create_app():
     @app.route("/api/courses/<int:course_id>/review", methods=["POST"])
     @login_required
     def api_submit_review(course_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         course = Course.query.get_or_404(course_id)
         section = course.latest_section
         if not section:
@@ -1937,6 +1943,8 @@ def create_app():
     @app.route("/api/reviews/<int:review_id>/reply", methods=["POST"])
     @login_required
     def api_submit_reply(review_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         review = Review.query.get_or_404(review_id)
         if not review.is_visible:
             return jsonify({"error": "Review not found."}), 404
@@ -1997,6 +2005,8 @@ def create_app():
     @app.route("/api/reviews/<int:review_id>/reaction", methods=["POST"])
     @login_required
     def api_review_reaction(review_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         review = Review.query.get_or_404(review_id)
         if not review.is_visible:
             return jsonify({"error": "Review not found."}), 404
@@ -2094,6 +2104,8 @@ def create_app():
     @app.route("/api/replies/<int:reply_id>/reaction", methods=["POST"])
     @login_required
     def api_reply_reaction(reply_id):
+        if current_user.role == "admin":
+            return jsonify({"error": "Admin 帳號無法進行此操作。"}), 403
         reply = ReviewReply.query.get_or_404(reply_id)
         data = request.get_json(silent=True) or request.form
         reaction_value = str(data.get("reaction", "")).strip()
@@ -2386,15 +2398,12 @@ def create_app():
             course.code = data["code"]
         if data["title"]:
             course.name = data["title"]
-        course.title_zh = data["title_zh"]
-        course.professor = data["professor"]
-        course.department = data["department"]
+        # title_zh, professor, department, year, semester 都是 @property（唯讀），
+        # Course model 不直接存這些欄位，略過即可（它們從 Section/Offer/Teach 動態計算）
         course.credits = data["credits"]
-        course.year = data["year"]
-        course.semester = data["semester"]
         course.grade = data["grade"]
         course.requirement = data["requirement"]
-        course.description = data["description"]
+        course.description = data["description"]   # description 有 setter（no-op），安全
         course.english_taught = data["english_taught"]
         return course
 

@@ -76,6 +76,7 @@
 
           <div class="user-menu" id="userMenu" style="display: none">
             <button class="user-avatar" id="userAvatar" type="button" aria-label="Account menu"></button>
+            <span class="admin-badge-nav" id="adminBadgeNav" style="display:none; gap: 5px;;">ADMIN</span>
             <div class="user-dropdown" id="userDropdown" hidden>
               <button type="button" id="profileMenuBtn">Profile</button>
               <button type="button" id="favoritesMenuBtn">Favorite</button>
@@ -226,56 +227,131 @@
             <p class="page-kicker"> Let's explore !</p>
             <h2>All Courses</h2>
           </div>
-
-          <button class="btn-secondary" id="backToBrowseBtn" type="button" onclick="showBrowseCourses()" style="display: none;">
-            Back to Browse
-          </button>
+          <div class="page-heading-actions">
+            <button type="button" class="admin-toggle-btn" id="adminAddCourseBtn" onclick="openAdminModal('add')" style="display:none;">
+              + New Course
+            </button>
+            <button class="btn-secondary" id="backToBrowseBtn" type="button" onclick="showBrowseCourses()" style="display: none;">
+              Back to Browse
+            </button>
+          </div>
         </section>
 
-      <section class="admin-course-section" id="adminAddCoursePanel" style="display: none;">
-        <div class="admin-course-header">
-          <div>
-            <h2>Course Management</h2>
-            <p class="admin-hint">Create courses directly from the browse page.</p>
+      <!-- Admin modal (add + edit) — rendered dynamically by JS -->
+      <div id="adminCourseModal" class="admin-modal-overlay" style="display:none;" onclick="adminModalOverlayClick(event)">
+        <div class="admin-modal-card" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
+          <div class="admin-modal-header">
+            <div class="admin-modal-title-group">
+              <span class="admin-kicker" id="adminModalKicker">New Course</span>
+              <h2 class="admin-modal-title" id="adminModalTitle">Add a Course</h2>
+            </div>
+            <button type="button" class="admin-modal-close" onclick="closeAdminModal()" aria-label="Close">✕</button>
           </div>
-          <button type="button" class="admin-toggle-btn" id="adminAddCourseToggle" onclick="toggleAdminAddCourseForm()">
-            New Course
-          </button>
-        </div>
-        <form class="admin-course-form admin-course-form-collapsed" id="adminAddCourseForm">
-          <div class="admin-form-row">
-            <input type="text" name="code" placeholder="Course code" required />
-            <input type="text" name="title" placeholder="Course title" required />
-          </div>
-          <div class="admin-form-row">
-            <input type="text" name="title_zh" placeholder="Chinese title" />
-            <input type="text" name="professor" placeholder="Professor" />
-          </div>
-          <div class="admin-form-row">
-            <input type="text" name="department" placeholder="Department" />
-            <input type="text" name="credits" placeholder="Credits" />
-          </div>
-          <div class="admin-form-row">
-            <input type="text" name="year" placeholder="Year" />
-            <input type="text" name="semester" placeholder="Semester" />
-            <input type="text" name="grade" placeholder="Grade" />
-          </div>
-          <div class="admin-form-row">
-            <input type="text" name="requirement" placeholder="Requirement" />
-            <label class="admin-checkbox-label">
-              <input type="checkbox" name="english_taught" /> English taught
-            </label>
-          </div>
-          <div class="admin-form-row">
-            <textarea name="description" placeholder="Description"></textarea>
-          </div>
-          <button type="submit" class="btn-reviews-card">Add Course</button>
-        </form>
-      </section>
 
-      
-      <!-- Admin edit panel is rendered dynamically when a course card is edited. -->
-      <section class="admin-edit-course-section" id="adminEditCoursePanel" style="display: none;"></section>
+          <form id="adminModalForm" class="admin-modal-form" onsubmit="submitAdminModal(event)">
+            <input type="hidden" id="adminModalCourseId" name="courseId" value="" />
+
+            <div class="admin-modal-section-label">Identity</div>
+            <div class="admin-modal-row">
+              <div class="admin-modal-field">
+                <label for="amCode">Course Code <span class="admin-required">*</span></label>
+                <input id="amCode" name="code" type="text" placeholder="e.g. MIS207" required autocomplete="off" />
+              </div>
+              <div class="admin-modal-field admin-modal-field--wide">
+                <label for="amTitle">Course Title (EN) <span class="admin-required">*</span></label>
+                <input id="amTitle" name="title" type="text" placeholder="e.g. Statistical Data Analysis" required autocomplete="off" />
+              </div>
+            </div>
+            <div class="admin-modal-row">
+              <div class="admin-modal-field admin-modal-field--wide">
+                <label for="amTitleZh">Course Title (ZH)</label>
+                <input id="amTitleZh" name="title_zh" type="text" placeholder="e.g. 統計資料分析" autocomplete="off" />
+              </div>
+              <div class="admin-modal-field">
+                <label for="amDept">Department</label>
+                <select id="amDept" name="department">
+                  <option value="">— Select —</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-modal-section-label">Offering</div>
+            <div class="admin-modal-row admin-modal-row--four">
+              <div class="admin-modal-field">
+                <label for="amYear">Year</label>
+                <input id="amYear" name="year" type="number" placeholder="e.g. 113" min="100" max="200" autocomplete="off" />
+              </div>
+              <div class="admin-modal-field">
+                <label for="amSemester">Semester</label>
+                <select id="amSemester" name="semester">
+                  <option value="">—</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+              <div class="admin-modal-field">
+                <label for="amCredits">Credits</label>
+                <select id="amCredits" name="credits">
+                  <option value="">—</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                </select>
+              </div>
+              <div class="admin-modal-field">
+                <label for="amGrade">Year Level</label>
+                <select id="amGrade" name="grade">
+                  <option value="">—</option>
+                  <option value="1">1 年級</option>
+                  <option value="2">2 年級</option>
+                  <option value="3">3 年級</option>
+                  <option value="4">4 年級</option>
+                  <option value="大一">大一</option>
+                  <option value="大二">大二</option>
+                  <option value="大三">大三</option>
+                  <option value="大四">大四</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-modal-row">
+              <div class="admin-modal-field">
+                <label for="amProfessor">Instructor</label>
+                <input id="amProfessor" name="professor" type="text" placeholder="e.g. 王小明" autocomplete="off" />
+              </div>
+              <div class="admin-modal-field">
+                <label for="amRequirement">Requirement</label>
+                <select id="amRequirement" name="requirement">
+                  <option value="">—</option>
+                  <option value="必修">必修 Required</option>
+                  <option value="選修">選修 Elective</option>
+                  <option value="通識">通識 General</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-modal-section-label">Details</div>
+            <div class="admin-modal-row">
+              <label class="admin-modal-toggle-label">
+                <input type="checkbox" name="english_taught" id="amEnglish" />
+                <span class="admin-modal-toggle-track"><span class="admin-modal-toggle-thumb"></span></span>
+                Taught in English
+              </label>
+            </div>
+
+            <div class="admin-modal-actions">
+              <button type="button" class="admin-modal-btn-danger" id="adminModalDeleteBtn" onclick="deleteAdminCourseFromModal()" style="display:none;">Delete Course</button>
+              <div class="admin-modal-actions-right">
+                <button type="button" class="admin-modal-btn-ghost" onclick="closeAdminModal()">Cancel</button>
+                <button type="submit" class="admin-modal-btn-primary" id="adminModalSubmitBtn">Add Course</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
 
       
       <div class="quick-sort-menu" id="quickSortMenu">
