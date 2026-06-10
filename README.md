@@ -1,19 +1,145 @@
-# README
+# GitGood
 
-### 打新的code之前，下載(同步)Github上的版本 Before typing any new codes, download(pull) the current version from Github
-git pull origin main
-### 切回主分支
-git checkout main 
+GitGood is a Flask-based course review platform for browsing NSYSU courses, saving favorite courses, writing reviews, and comparing course ratings.
 
-### 建立個人分支(以防直接修改共用內容造成版本錯誤)
-git checkout -b 'nameA'
-### 做出更改後確認現在狀態用(可看出哪些有修改需要add/push)
-git status
-### 把現有所有的更改丟入"暫存"(最後面那個點很重要! 就是代表"全部"一定要有!)
-git add .
-### 存入並對這次的更新內容做解釋(description填寫訊息)
-git commit -m "description"
-### 第一次push
-git push -u origin 'nameA'
-### 事後都push進nameA的話就不用後面那段
-git push
+The app combines a course catalog, user authentication, admin course management, favorites, review replies, reactions, notifications, and department/category filters in one web interface.
+
+## Features
+
+- Browse courses with pagination, search, sorting, and responsive course cards.
+- Search by course title, course code, instructor, department, program tags, year, semester, grade, and requirement type.
+- Filter courses by category, department, grade, year, semester, and rating.
+- Save favorite courses after login and view them from the user menu.
+- Register/login with avatar and gender-based avatar styling.
+- Write course reviews using four rating dimensions: Quality, Sweetness, Coolness, and Solidity.
+- Calculate the displayed course rating from the four dimensions, rounded to one decimal place.
+- Reply to reviews, react to reviews/replies, and receive notifications.
+- View course detail pages with latest offering, history, instructor, class time, room, type, grade, department, and program tags.
+- Admin users can edit course information from the course detail page.
+
+## Tech Stack
+
+- Python
+- Flask
+- Flask-Login
+- Flask-SQLAlchemy
+- SQLite
+- HTML, CSS, JavaScript
+
+## Project Structure
+
+```text
+gitgood/
+|-- app.py                  # Flask application, routes, API endpoints, and app setup
+|-- models.py               # SQLAlchemy database models
+|-- requirements.txt        # Python dependencies
+|-- 12354.db                # Main SQLite database used by the app
+|-- templates/              # Jinja/HTML templates
+|-- static/                 # CSS, JavaScript, icons, and frontend assets
+|-- utils/                  # Course utilities and department filter definitions
+`-- NSYSU Course Database/  # Source course database files
+```
+
+## Team Responsibilities
+
+| Member | GitHub            | Responsibilities                                                                               |
+| ------ | ----------------- | ---------------------------------------------------------------------------------------------- |
+| 陳佳晨 | `Kcc122`          | Frontend implementation, course UI, review interactions, and supporting backend integration.   |
+| 白宜巧 | `WhiteChocolate0` | UI/UX refinement, search/filter flow, course detail experience, and department/category logic. |
+| 李秉宸 | `agito`           | Backend development, database integration, Flask routes, and project documentation.            |
+
+### Supporting Contributors
+
+| Member | GitHub              | Contributions                                                                        |
+| ------ | ------------------- | ------------------------------------------------------------------------------------ |
+| 王昱晴 | `mimi` / `mimiw420` | Backend/template support, documentation updates, and feature integration assistance. |
+| Rami   | `Rami` / `iRami21`  | Backend and template support.                                                        |
+| 何昕芳 | `hofang1025`        | Backend/database support.                                                            |
+
+## Setup
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/bli202118-collab/gitgood.git
+cd gitgood
+```
+
+### 2. Create a virtual environment
+
+macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+## Configuration
+
+The app provides development defaults, but these values can be overridden with environment variables:
+
+| Variable         | Purpose                  | Default             |
+| ---------------- | ------------------------ | ------------------- |
+| `SECRET_KEY`     | Flask session secret key | `dev`               |
+| `ADMIN_USERNAME` | Default admin username   | `admin`             |
+| `ADMIN_EMAIL`    | Default admin email      | `admin@example.com` |
+| `ADMIN_PASSWORD` | Default admin password   | `admin123`          |
+
+For production, always set a strong `SECRET_KEY` and change the default admin password.
+
+## Run the App
+
+Recommended Flask CLI command:
+
+```bash
+flask --app app:create_app run --host 127.0.0.1 --port 5050
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5050
+```
+
+If port `5050` is already in use, either stop the existing Flask process or run on another port:
+
+```bash
+flask --app app:create_app run --host 127.0.0.1 --port 5051
+```
+
+## Development Checks
+
+Run these checks before committing frontend or backend changes:
+
+```bash
+python3 -m py_compile app.py models.py
+node --check static/script.js
+git diff --check
+```
+
+## Database Notes
+
+- The main application database is `12354.db`.
+- The course source databases are stored under `NSYSU Course Database/`.
+- Local database files may change during testing. Review database changes carefully before committing them.
+
+## Notes for Contributors
+
+- Keep frontend assets in `static/`.
+- Keep HTML templates in `templates/`.
+- Keep reusable backend helpers in `utils/`.
+- Avoid committing local test data unless the database change is intentional.
+- Prefer small, focused commits with a clear message.

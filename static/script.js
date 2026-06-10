@@ -814,8 +814,19 @@ function buildNotificationItem(item) {
     const icon = item.category === "activity" ? "💬" : "🔔";
     const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
     const unreadDot = !item.isRead ? `<span class="noti-unread-dot"></span>` : "";
+
+    // Parse course id and scroll target from link (e.g. /courses/42#review-7 or /courses/42#reply-7-99)
+    let courseIdAttr = "";
+    let targetAttr = "";
+    if (item.link) {
+      const courseMatch = String(item.link).match(/\/courses\/(\d+)/);
+      if (courseMatch) courseIdAttr = `data-course-id="${courseMatch[1]}"`;
+      const hashMatch = String(item.link).match(/#(review-\d+|reply-\d+-\d+)$/);
+      if (hashMatch) targetAttr = `data-target="${escapeHtml(hashMatch[1])}"`;
+    }
+
     return `
-        <div class="noti-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}>
+        <div class="noti-item ${statusClass}" data-id="${escapeHtml(item.id)}" ${linkAttr} ${courseIdAttr} ${targetAttr}>
           <div class="noti-icon-wrap">${icon}</div>
           <div class="noti-body">
             <p class="noti-msg">${escapeHtml(item.message)}</p>
@@ -947,10 +958,8 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
-  allCourses =
-    window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
-      ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
-      : JSON.parse(JSON.stringify(sampleCourses));
+  // 不在頁面載入時塞入大量資料，改以後端分頁 API 取得
+  allCourses = [];
   coursePagination = {
     ...coursePagination,
     ...(window.__COURSE_PAGINATION__ || {}),
@@ -961,13 +970,15 @@ document.addEventListener("DOMContentLoaded", function () {
   latestCourseYear = Number(window.__LATEST_COURSE_YEAR__ || latestCourseYear || 0);
   updateLatestYearToggleLabel();
   renderDepartmentFilter("");
-  displayCourses(allCourses);
   setupEventListeners();
   setupAdminForms();
   checkUserLogin();
   renderAdminControls();
   refreshNotifications();
   startNotificationPolling();
+
+  // 以 server-side 頁面為主，載入第 1 頁
+  fetchCoursesPage(1).catch((e) => console.warn('Initial fetchCoursesPage failed', e));
 });
 
 function getDepartmentsForCategory(category) {
@@ -1191,17 +1202,25 @@ function setupEventListeners() {
 
   const userAvatar = document.getElementById("userAvatar");
   if (userAvatar) {
-    userAvatar.addEventListener("click", function (e) {
+    // 只用 onclick，避免與下方 DOMContentLoaded 的 onclick 重複觸發
+    userAvatar.onclick = function (e) {
       e.stopPropagation();
+
+      // 輕彈跳特效
+      userAvatar.classList.remove("avatar-click-pop", "avatar-ripple");
+      void userAvatar.offsetWidth;
+      userAvatar.classList.add("avatar-click-pop", "avatar-ripple");
+      userAvatar.addEventListener("animationend", () => {
+        userAvatar.classList.remove("avatar-click-pop", "avatar-ripple");
+      }, { once: true });
+
       if (currentUser) {
         const menu = document.getElementById("userDropdown");
-        if (menu) {
-          menu.hidden = !menu.hidden;
-        }
+        if (menu) menu.hidden = !menu.hidden;
       } else {
         openLoginModal();
       }
-    });
+    };
   }
 
   document.addEventListener("click", function () {
@@ -1237,6 +1256,8 @@ function setupEventListeners() {
     let _searchDebounceTimer = null;
     _searchBoxEl.addEventListener("input", function () {
       clearTimeout(_searchDebounceTimer);
+      // 只要一打字，就立刻把畫面切換回課程列表
+      showBrowseCourses(false);
       updatePageTitle();
       _searchDebounceTimer = setTimeout(() => filterCourses(), 300);
     });
@@ -1369,9 +1390,30 @@ function setupEventListeners() {
         const courseMatch = String(link).match(/\/courses\/(\d+)/);
         if (courseMatch && typeof openCourseDetail === "function") {
           const courseId = Number(courseMatch[1]);
-          const course = allCourses.find((c) => String(c.id) === String(courseId));
-          if (!Number.isNaN(courseId) && course) {
-            openCourseDetail(courseId);
+          if (!Number.isNaN(courseId)) {
+            // Set scroll target from data-target attr (parsed from link hash in buildNotificationItem)
+            const targetId = item.dataset.target;
+            if (targetId) {
+              window.__pendingScrollTarget__ = targetId;
+              const replyMatch = targetId.match(/^reply-(\d+)-/);
+              if (replyMatch) window.__pendingExpandReview__ = replyMatch[1];
+            }
+            notiDropdown.style.display = "none";
+            const cached = allCourses.find((c) => String(c.id) === String(courseId));
+            if (cached) {
+              openCourseDetail(courseId);
+            } else {
+              fetch(`/api/courses/${courseId}`)
+                .then(r => r.ok ? r.json() : Promise.reject())
+                .then(data => {
+                  const course = data.course || data;
+                  if (course && course.id && !allCourses.find(c => String(c.id) === String(course.id))) {
+                    allCourses.push(course);
+                  }
+                  openCourseDetail(courseId);
+                })
+                .catch(() => { window.location.href = link; });
+            }
             return;
           }
         }
@@ -1442,6 +1484,44 @@ function getActiveCourseFilters() {
   };
 }
 
+function resetCourseFiltersToHottest() {
+  const searchBox = document.getElementById("searchBox");
+  if (searchBox) {
+    searchBox.value = "";
+  }
+
+  const filterRows = [
+    "deptCategoryFilterRow",
+    "deptFilterRow",
+    "gradeFilterRow",
+    "yearFilterRow",
+    "semesterFilterRow",
+    "ratingFilterRow",
+  ];
+
+  filterRows.forEach((rowId) => setFilterRowActiveValue(rowId, ""));
+
+  const latestYearToggle = document.getElementById("latestYearOnlyToggle");
+  if (latestYearToggle) {
+    latestYearToggle.checked = false;
+  }
+
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
+  if (deptSubFilterSelect) {
+    restoreDepartmentDropdown();
+  }
+
+  renderDepartmentFilter("");
+
+  const sortButtons = document.querySelectorAll("#quickSortMenu .sort-text-btn");
+  sortButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sort === "popular" || btn.dataset.value === "popular");
+  });
+
+  currentViewMode = "browse";
+  courseDetailOrigin = "browse";
+}
+
 function buildCoursePageUrl(page = 1) {
   const params = new URLSearchParams({
     page: String(page),
@@ -1481,6 +1561,7 @@ async function fetchCoursesPage(page = 1) {
       ...(data.pagination || {}),
     };
     displayCourses(allCourses);
+    generateDynamicTrending();
   } catch (error) {
     if (container) {
       container.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
@@ -1693,21 +1774,21 @@ function submitSearchFromBar() {
 
   searchBox.value = searchBox.value.trim();
   if (searchDropdown) searchDropdown.style.display = "none";
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-  }
+  
+  // 強制把畫面切換回課程列表，且「不」清空搜尋框
+  showBrowseCourses(false);
   filterCourses();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
 function searchByTag(tag) {
   const searchBox = document.getElementById("searchBox");
   const value = String(tag || "").trim();
   if (!searchBox || !value) return;
 
   searchBox.value = value;
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-  }
+  // 強制把畫面切換回課程列表，且「不」清空搜尋框
+  showBrowseCourses(false);
   filterCourses();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -2032,6 +2113,7 @@ function showActivity() {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "block";
 
+  // 記住上次的 tab，並正確恢復顯示
   switchActivityTab(activityState.activeTab);
   if (!activityState.loaded) {
     loadActivityData();
@@ -2100,24 +2182,34 @@ function renderInteractions() {
   list.innerHTML = items.map(buildInteractionCard).join("");
 }
 
+// 🌟 修正版 1：清除給幾分細項，並將 reviewId 藏進卡片屬性中
 function buildPersonalActionCard(item) {
   const typeLabel = {
     favorite: '<span class="activity-type-badge badge-favorite">Saved</span>',
     review:   '<span class="activity-type-badge badge-review">Review</span>',
     reaction: '<span class="activity-type-badge badge-reaction">Reacted</span>',
+    reply:    '<span class="activity-type-badge badge-reply">Reply</span>',
   }[item.type] || "";
-  const ratingHtml = item.type === "review" && item.rating
-    ? `<div class="activity-card-rating">${"★".repeat(item.rating)}${"☆".repeat(5 - item.rating)}</div>` : "";
+  
   const snippetHtml = item.reviewSnippet
     ? `<p class="activity-card-snippet">"${escapeHtml(item.reviewSnippet)}"</p>` : "";
   const courseLink = item.courseId ? `data-course-id="${item.courseId}"` : "";
+  
+  // reply 類型：scroll 到 reply 本身；其他：scroll 到 review
+  let targetAttr = "";
+  if (item.type === "reply" && item.reviewId && item.replyId) {
+    targetAttr = `data-target="reply-${item.reviewId}-${item.replyId}"`;
+  } else if (item.reviewId) {
+    targetAttr = `data-target="review-${item.reviewId}"`;
+  }
+
   return `
-    <div class="activity-card" ${courseLink} onclick="handleActivityCardClick(this)" role="button" tabindex="0">
-      <div class="activity-card-icon">${escapeHtml(item.icon)}</div>
+    <div class="activity-card" ${courseLink} ${targetAttr} onclick="handleActivityCardClick(this)" role="button" tabindex="0" style="cursor: pointer;">
+      <div class="activity-card-icon">${escapeHtml(item.icon || "📝")}</div>
       <div class="activity-card-body">
-        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt)}</span></div>
+        <div class="activity-card-top">${typeLabel}<span class="activity-card-time">${escapeHtml(item.createdAt || "")}</span></div>
         <p class="activity-card-message">${item.message}</p>
-        ${ratingHtml}${snippetHtml}
+        ${snippetHtml}
         <span class="activity-card-course-code">${escapeHtml(item.courseCode || "")}</span>
       </div>
       <div class="activity-card-arrow">›</div>
@@ -2128,8 +2220,14 @@ function buildInteractionCard(item) {
   const unreadDot = !item.isRead ? `<span class="activity-unread-dot"></span>` : "";
   const cardClass = `activity-card interaction-card${item.isRead ? "" : " unread"}`;
   const linkAttr = item.link ? `data-link="${escapeHtml(item.link)}"` : "";
+  // Parse hash anchor from link (e.g. /courses/42#review-7 or #reply-7-99)
+  let targetAttr = "";
+  if (item.link) {
+    const hashMatch = String(item.link).match(/#(review-\d+|reply-\d+-\d+)$/);
+    if (hashMatch) targetAttr = `data-target="${escapeHtml(hashMatch[1])}"`;
+  }
   return `
-    <div class="${cardClass}" data-id="${escapeHtml(item.id)}" ${linkAttr}
+    <div class="${cardClass}" data-id="${escapeHtml(item.id)}" ${linkAttr} ${targetAttr}
          onclick="handleInteractionCardClick(this)" role="button" tabindex="0">
       <div class="activity-card-icon">🔔</div>
       <div class="activity-card-body">
@@ -2140,15 +2238,48 @@ function buildInteractionCard(item) {
     </div>`;
 }
 
-function handleActivityCardClick(el) {
+// 🌟 修正版 2：點擊卡片跳轉進入課程詳細頁，並在資料載入後，自動滾動到該留言並套用閃爍特效
+async function handleActivityCardClick(el) {
   const courseId = parseInt(el.dataset.courseId);
+  const targetId = el.dataset.target; // 例如 "review-45"
   if (!courseId) return;
-  navigateToCourseFromActivity(courseId);
+
+  // 設定好 origin，再隱藏 activity 頁面跳到課程詳情
+  courseDetailOrigin = 'activity';
+  document.getElementById("activityPage").style.display = "none";
+
+  // 確保課程資料在 allCourses 裡
+  if (!allCourses.find(c => String(c.id) === String(courseId))) {
+    try {
+      const res = await fetch(`/api/courses/${courseId}`);
+      if (!res.ok) throw new Error("Course not found.");
+      const data = await res.json();
+      const course = data.course || data;
+      if (course && course.id) allCourses.push(course);
+    } catch (err) {
+      alert("無法載入課程資料：" + err.message);
+      document.getElementById("activityPage").style.display = "block";
+      return;
+    }
+  }
+
+  // 如果有 targetId，讓 loadReviews 渲染完後立刻 scroll + 閃爍
+  if (targetId) {
+    window.__pendingScrollTarget__ = targetId;
+    // reply 類型（格式 reply-{reviewId}-{replyId}）需要先記下 reviewId 展開 replies group
+    const replyMatch = targetId.match(/^reply-(\d+)-/);
+    if (replyMatch) {
+      window.__pendingExpandReview__ = replyMatch[1];
+    }
+  }
+
+  openCourseDetail(courseId);
 }
 
 function handleInteractionCardClick(el) {
   const link = el.dataset.link;
   const id = el.dataset.id;
+  const targetId = el.dataset.target; // e.g. "review-45" or "reply-45-99"
   if (id) {
     markSingleInteractionRead(id);
     el.classList.remove("unread");
@@ -2157,7 +2288,15 @@ function handleInteractionCardClick(el) {
   }
   if (link && link.includes("/courses/")) {
     const match = link.match(/\/courses\/(\d+)/);
-    if (match) navigateToCourseFromActivity(parseInt(match[1]));
+    if (match) {
+      const courseId = parseInt(match[1]);
+      if (targetId) {
+        window.__pendingScrollTarget__ = targetId;
+        const replyMatch = targetId.match(/^reply-(\d+)-/);
+        if (replyMatch) window.__pendingExpandReview__ = replyMatch[1];
+      }
+      navigateToCourseFromActivity(courseId);
+    }
   }
 }
 
@@ -2221,7 +2360,7 @@ function renderActivityList() {
   if (activityState.loaded) { renderPersonalActions(); renderInteractions(); }
 }
 
-function showBrowseCourses() {
+function showBrowseCourses(clearSearch = true) {
   document.getElementById("favoritesPage").style.display = "none";
   document.getElementById("activityPage").style.display = "none";
   document.getElementById("courseDetailPage").style.display = "none";
@@ -2239,13 +2378,15 @@ function showBrowseCourses() {
 
   const searchBox = document.getElementById("searchBox");
   const hasSearch = searchBox && searchBox.value.trim() !== "";
-  if (hasSearch) {
+  
+  if (clearSearch !== false && hasSearch) {
     searchBox.value = "";
     updatePageTitle();
     filterCourses();
   } else {
     updatePageTitle();
-    restoreCourseListPosition();
+    // 如果正在搜尋狀態，就不要跳回原本的捲動位置
+    if (!hasSearch) restoreCourseListPosition();
   }
 }
 
@@ -2257,8 +2398,6 @@ function showHomePage() {
   if (dropdown) dropdown.style.display = "none";
   const userDropdown = document.getElementById("userDropdown");
   if (userDropdown) userDropdown.hidden = true;
-  const avatarMenu = document.getElementById("avatarMenuCard");
-  if (avatarMenu) avatarMenu.style.display = "none";
 }
 
 function toggleUserMenu(event) {
@@ -2450,8 +2589,6 @@ function closeLoginModal() {
 window.continueAsGuest = function() {
   document.getElementById("navBlock").style.display = "block";
   document.getElementById("mainContentBlock").style.display = "block";
-  const schedBtn = document.getElementById("scheduleToggleBtn");
-  if (schedBtn) schedBtn.style.display = "";
   updateBackToTopButton();
   closeLoginModal();
 };
@@ -2571,8 +2708,6 @@ async function logout() {
   updateAuthUI();
   document.getElementById("navBlock").style.display = "none";
   document.getElementById("mainContentBlock").style.display = "none";
-  const schedBtn = document.getElementById("scheduleToggleBtn");
-  if (schedBtn) schedBtn.style.display = "none";
   const topBtn = document.getElementById("backToTopBtn");
   if (topBtn) topBtn.classList.remove("visible");
   openLoginModal(true);
@@ -2592,15 +2727,11 @@ async function checkUserLogin() {
 
   if (currentUser) {
     closeLoginModal();
-    const schedBtn = document.getElementById("scheduleToggleBtn");
-    if (schedBtn) schedBtn.style.display = "";
     updateBackToTopButton();
     refreshNotifications();
   } else {
     document.getElementById("navBlock").style.display = "none";
     document.getElementById("mainContentBlock").style.display = "none";
-    const schedBtn = document.getElementById("scheduleToggleBtn");
-    if (schedBtn) schedBtn.style.display = "none";
     const topBtn = document.getElementById("backToTopBtn");
     if (topBtn) topBtn.classList.remove("visible");
     openLoginModal(true);
@@ -2688,11 +2819,13 @@ function openCourseDetail(courseId) {
   document.body.classList.add("detail-open");
   const navLogoBtn = document.getElementById("navLogoBtn");
   if (navLogoBtn) navLogoBtn.setAttribute("aria-label", "Back to courses");
-  document.getElementById("pageHeading").style.display = "none";
 
+  // 隱藏所有其他 section，避免版面疊在一起
+  document.getElementById("pageHeading").style.display = "none";
+  document.getElementById("favoritesPage").style.display = "none";
+  document.getElementById("activityPage").style.display = "none";
   if (document.getElementById("quickSortMenu")) document.getElementById("quickSortMenu").style.display = "none";
   if (document.getElementById("filterPanel")) document.getElementById("filterPanel").style.display = "none";
-
   if (document.getElementById("adminAddCoursePanel")) document.getElementById("adminAddCoursePanel").style.display = "none";
   if (document.getElementById("adminEditCoursePanel")) document.getElementById("adminEditCoursePanel").style.display = "none";
 
@@ -2700,14 +2833,29 @@ function openCourseDetail(courseId) {
   const pagination = document.getElementById("coursesPagination");
   if (pagination) pagination.style.display = "none";
   document.getElementById("courseDetailPage").style.display = "block";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  // 有 pendingScrollTarget 時不 scroll to top，讓 loadReviews 渲染後自己 scroll
+  if (!window.__pendingScrollTarget__) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   const backBtn = document.querySelector(".back-button");
+  const navLogoBack = document.querySelector(".nav-logo-back");
+
+  // 1. 先根據來源決定正確的文字
+  let labelText = "Back to Courses"; 
+  if (courseDetailOrigin === "favorites") {
+    labelText = "Back to Favorites";
+  } 
+  else if (courseDetailOrigin === "activity") {
+    labelText = "Back to Activity";
+  } 
+  else if (currentViewMode === "search") {
+    labelText = "Back to Courses"; 
+  }
+
+  // 2. 更新頁面內部的返回按鈕（雖然被 CSS 隱藏了，但維持邏輯完整）
   if (backBtn) {
-    let labelText = "Back to Browse";
-    if (courseDetailOrigin === "favorites") labelText = "Back to Favorites";
-    else if (courseDetailOrigin === "activity") labelText = "Back to Activity";
-    else if (currentViewMode === "search") labelText = "Back to Search";
     backBtn.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M19 12H5"></path>
@@ -2716,35 +2864,28 @@ function openCourseDetail(courseId) {
       ${labelText}
     `;
     backBtn.onclick = closeCourseDetail;
-    if (allReviews && allReviews[courseId]) {
-        renderReviewsList(allReviews[courseId]);
-    } else {
-        fetch(`/api/courses/${courseId}/reviews`)
-            .then(res => res.json())
-            .then(data => {
-                renderReviewsList(data.reviews || []);
-            });
-    }
+  }
 
-    const cachedId = String(courseId);
+  // 3. 關鍵修正：同步更新導覽列商標上真正顯示出來的返回文字！
+  if (navLogoBack) {
+    navLogoBack.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 12H5"></path>
+        <path d="m12 19-7-7 7-7"></path>
+      </svg>
+      ${labelText}
+    `;
+  }
+    backBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 12H5"></path>
+        <path d="m12 19-7-7 7-7"></path>
+      </svg>
+      ${labelText}
+    `;
+    backBtn.onclick = closeCourseDetail;
+  }
 
-    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[cachedId]) {
-        renderReviewsList(window.__INITIAL_REVIEWS__[cachedId]);
-    } else if (courseReviews && courseReviews[cachedId]) {
-        renderReviewsList(courseReviews[cachedId]);
-    } else {
-        fetch(`/api/courses/${courseId}/reviews`)
-            .then(res => res.json())
-            .then(data => {
-                courseReviews[cachedId] = data.reviews || [];
-                renderReviewsList(data.reviews || []);
-            })
-            .catch(err => {
-                console.error("Fetch reviews failed:", err);
-                renderReviewsList([]);
-            });
-          }
-}}
 
 function restoreCourseListPosition() {
   const targetCard = courseReturnState.courseId
@@ -2765,12 +2906,9 @@ function openCourseReviewForm(courseId) {
 }
 
 function handleNavLogoClick() {
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-    return;
-  }
-
+  resetCourseFiltersToHottest();
   showHomePage();
+  fetchCoursesPage(1).catch((e) => console.warn('fetchCoursesPage failed on logo click', e));
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2793,9 +2931,11 @@ function closeCourseDetail() {
   if (courseDetailOrigin === 'favorites') {
     courseDetailOrigin = 'browse';
     showFavorites();
+    window.scrollTo({ top: courseReturnState.scrollY || 0, behavior: "auto" });
   } else if (courseDetailOrigin === 'activity') {
     courseDetailOrigin = 'browse';
     showActivity();
+    window.scrollTo({ top: courseReturnState.scrollY || 0, behavior: "auto" });
   } else {
     courseDetailOrigin = 'browse';
     document.getElementById("pageHeading").style.display = "";
@@ -2812,10 +2952,32 @@ function getReviewsForCourse(courseId) {
   return courseReviews[courseId] || [];
 }
 
+function getReviewTotalRating(review) {
+  const dimensionKeys = [
+    "ratingQuality",
+    "ratingSweetness",
+    "ratingCoolness",
+    "ratingSolidity",
+  ];
+  const scores = dimensionKeys
+    .map((key) => Number(review?.[key]))
+    .filter((score) => Number.isFinite(score) && score >= 1 && score <= 5);
+
+  if (scores.length === dimensionKeys.length) {
+    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    return Math.round(average * 10) / 10;
+  }
+
+  const fallback = Number(review?.rating);
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
 function getAverageRating(reviews, fallbackRating) {
   if (reviews.length === 0) return fallbackRating;
-  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-  return total / reviews.length;
+  const ratings = reviews.map(getReviewTotalRating).filter((rating) => rating > 0);
+  if (ratings.length === 0) return fallbackRating;
+  const total = ratings.reduce((sum, rating) => sum + rating, 0);
+  return Math.round((total / ratings.length) * 10) / 10;
 }
 
 function renderRatingBreakdown(reviews) {
@@ -2824,7 +2986,7 @@ function renderRatingBreakdown(reviews) {
   breakdown.innerHTML = "";
 
   for (let rating = 5; rating >= 1; rating--) {
-    const count = reviews.filter((r) => r.rating === rating).length;
+    const count = reviews.filter((r) => Math.round(getReviewTotalRating(r)) === rating).length;
     const percent = total > 0 ? (count / total) * 100 : 0;
     const row = document.createElement("div");
     row.className = "rating-breakdown-row";
@@ -2845,7 +3007,7 @@ function renderDimBreakdown(reviews) {
     { key: "ratingQuality",   label: "Quality", img: "/static/icons/award.png" },
     { key: "ratingSweetness", label: "Sweetness", img: "/static/icons/candy.png" },
     { key: "ratingCoolness",  label: "Coolness", img: "/static/icons/cool.png"  },
-    { key: "ratingSolidity",  label: "Solidaty", img: "/static/icons/bicep.png" },
+    { key: "ratingSolidity",  label: "Solidity", img: "/static/icons/bicep.png" },
   ];
 
   const rated = reviews.filter(r => r.ratingQuality || r.ratingSweetness || r.ratingCoolness || r.ratingSolidity);
@@ -2874,7 +3036,26 @@ function renderDimBreakdown(reviews) {
 }
 
 // Load reviews
-function loadReviews(courseId) {
+function loadReviews(courseId, onRendered) {
+  const cachedId = String(courseId);
+
+  // Cache miss：自己去 fetch，填完 cache 再重跑
+  if (!courseReviews[cachedId] || courseReviews[cachedId].length === 0) {
+    const initialKey = cachedId;
+    if (window.__INITIAL_REVIEWS__ && window.__INITIAL_REVIEWS__[initialKey]) {
+      courseReviews[cachedId] = window.__INITIAL_REVIEWS__[initialKey];
+    } else {
+      fetch(`/api/courses/${courseId}/reviews`)
+        .then(res => res.json())
+        .then(data => {
+          courseReviews[cachedId] = data.reviews || [];
+          loadReviews(courseId, onRendered); // 填完 cache 重跑，這次有資料
+        })
+        .catch(err => console.error("loadReviews fetch failed:", err));
+      return; // 等 fetch 回來再渲染
+    }
+  }
+
   const reviews = getReviewsForCourse(courseId);
 
   const reviewsList = document.getElementById("reviewsList");
@@ -2909,6 +3090,7 @@ function loadReviews(courseId) {
   reviews.forEach((review) => {
     const reviewItem = document.createElement("div");
     reviewItem.className = "review-item";
+    reviewItem.id = `review-${review.id}`;
 
     const DIM_ICONS = {
       ratingQuality:   { img: "/static/icons/award.png" },
@@ -3014,6 +3196,39 @@ function loadReviews(courseId) {
 
     reviewsList.appendChild(reviewItem);
   });
+
+  // 渲染完後執行 scroll/highlight callback（供 activity 跳轉使用）
+  if (typeof onRendered === "function") onRendered();
+
+  // 消費全域的 pendingScrollTarget（handleActivityCardClick 設定的）
+  const pendingTarget = window.__pendingScrollTarget__;
+  if (pendingTarget) {
+    window.__pendingScrollTarget__ = null;
+    const expandReviewId = window.__pendingExpandReview__;
+    window.__pendingExpandReview__ = null;
+
+    const doScroll = () => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(pendingTarget);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("review-highlight-flash");
+          el.addEventListener("animationend", () => {
+            el.classList.remove("review-highlight-flash");
+          }, { once: true });
+        }
+      });
+    };
+
+    // reply 需要先展開對應的 replies group，再 scroll
+    if (expandReviewId) {
+      const groupKey = `${expandReviewId}:root`;
+      expandedReplyGroups.add(groupKey);
+      loadReviews(courseId, doScroll); // 重新渲染讓 replies 出現
+    } else {
+      doScroll();
+    }
+  }
 }
 
 function updateStudentReviewStats(reviews = []) {
@@ -3056,7 +3271,7 @@ function renderReplies(replies = [], reviewId) {
       ` : "";
 
       return `
-        <div class="reply-thread">
+        <div class="reply-thread" id="reply-${reviewId}-${reply.id}">
           <div class="reply-item">
             <div class="reply-content" style="width: 100%;">
               <div class="reply-meta" style="display: flex; align-items: center; width: 100%;">
@@ -3200,6 +3415,7 @@ async function submitReply(reviewId) {
 
     input.value = "";
     expandedReplyGroups.add(`${reviewId}:root`);
+    activityState.loaded = false; // 強制下次回 activity 時重新 fetch
     loadReviews(currentCourseId);
   } catch (error) {
     alert(error.message);
@@ -3286,6 +3502,31 @@ function replaceCourseInState(course) {
   const index = allCourses.findIndex((item) => String(item.id) === String(course.id));
   if (index >= 0) {
     allCourses[index] = { ...allCourses[index], ...course };
+    // 更新畫面上的課程卡片與明細（若正在檢視）
+    updateCourseCardDisplay(allCourses[index]);
+    if (String(currentCourseId) === String(course.id)) {
+      refreshDetailRatingSummary(course.id);
+      renderDetailTags(allCourses[index]);
+    }
+  }
+}
+
+function updateCourseCardDisplay(course) {
+  if (!course) return;
+  // 更新卡片上的 inline 評分
+  const card = document.querySelector(`[data-course-id="${CSS.escape(String(course.id))}"]`);
+  if (card) {
+    const ratingEl = card.querySelector('.course-rating-inline');
+    if (ratingEl && typeof course.rating === 'number') {
+      ratingEl.innerHTML = `${starIcon()}${Number(course.rating).toFixed(1)}`;
+    }
+    const commentEl = card.querySelector('.course-reviews-count .stat-comment');
+    if (commentEl) {
+      const commentTotal = typeof course.commentTotal !== 'undefined' ? course.commentTotal : getCourseCommentTotal(course.id);
+      commentEl.innerHTML = `${commentIcon()} ${commentTotal}`;
+    }
+    const saveCountEl = card.querySelector('.save-count-num');
+    if (saveCountEl) saveCountEl.textContent = course.saveCount ?? 0;
   }
 }
 
@@ -3480,12 +3721,13 @@ async function submitReview(event) {
     }
     courseReviews[currentCourseId].unshift(result.review);
 
-    if (course && result.course) {
-      Object.assign(course, result.course);
+    if (result.course) {
+      replaceCourseInState(result.course);
     }
 
     alert("Review submitted successfully!");
     closeReviewModal();
+    activityState.loaded = false; // 強制下次回 activity 時重新 fetch
 
     if (currentCourseId) {
       openCourseDetail(currentCourseId);
@@ -3575,30 +3817,6 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
-document.addEventListener("DOMContentLoaded", function() {
-  const userAvatar = document.getElementById("userAvatar");
-
-  if (userAvatar) {
-    userAvatar.onclick = function(e) {
-      e.stopPropagation();
-
-      if (!currentUser) {
-        if (typeof window.openLoginModal === "function") {
-          window.openLoginModal();
-        }
-        return;
-      }
-
-      const menuCard = document.getElementById("avatarMenuCard");
-      if (menuCard) {
-        const isHidden = menuCard.style.display === "none" || menuCard.style.display === "";
-        menuCard.style.display = isHidden ? "block" : "none";
-      } else {
-        console.error("找不到 id='avatarMenuCard' 的 HTML 元件，請檢查 index.html 中是否有寫對！");
-      }
-    };
-  }
-});
 
 window.toggleFilterPanel = function() {
   const panel = document.getElementById('filterPanel');
@@ -3866,6 +4084,8 @@ window.saveEditReply = async function(reviewId, replyId) {
 
 function generateDynamicTrending() {
   const trendingContainer = document.querySelector(".trending-tags");
+  const searchBox = document.getElementById("searchBox");
+  const searchDropdown = document.getElementById("searchDropdownCard");
   if (!trendingContainer) return;
 
   const sortedCourses = [...allCourses].sort((a, b) => {
@@ -3876,25 +4096,24 @@ function generateDynamicTrending() {
 
   const topKeywords = new Set();
   sortedCourses.forEach(course => {
-    if (topKeywords.size < 5) {
-      const keyword = course.name || course.title;
-      if (keyword) topKeywords.add(keyword);
-    }
+    if (topKeywords.size >= 5) return;
+    const keyword = course.titleZh || course.name || course.title || course.department;
+    if (keyword) topKeywords.add(keyword);
   });
+
+  if (!topKeywords.size) return;
 
   trendingContainer.innerHTML = Array.from(topKeywords).map(keyword =>
     `<button type="button" class="trending-tag-btn">${escapeHtml(keyword)}</button>`
   ).join("");
 
-  const newBtns = trendingContainer.querySelectorAll(".trending-tag-btn");
-  const searchBox = document.getElementById("searchBox");
-  const searchDropdown = document.getElementById("searchDropdownCard");
-
-  newBtns.forEach(btn => {
+  trendingContainer.querySelectorAll(".trending-tag-btn").forEach(btn => {
     btn.addEventListener("mousedown", function(e) {
       e.preventDefault();
+      if (!searchBox) return;
       searchBox.value = this.textContent.trim();
-      searchDropdown.style.display = "none";
+      if (searchDropdown) searchDropdown.style.display = "none";
+      showBrowseCourses(false);
       filterCourses();
     });
   });
@@ -3927,69 +4146,7 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("scroll", updateBackToTopButton, { passive: true });
 });
 
-/* Schedule sidebar: weekly timetable with independent semester data. */
 
-// --- State ---
-// scheduleData: { "113-1": { courses: ["1","3"], colors: {"1":1,"3":2} }, ... }
-let scheduleData = {};
-let activeScheduleSemester = null; // e.g. "113-1"
-
-// Helpers to get/set active semester's data
-function getActiveSemData() {
-  if (!activeScheduleSemester) return { courses: [], colors: {} };
-  if (!scheduleData[activeScheduleSemester]) {
-    scheduleData[activeScheduleSemester] = { courses: [], colors: {} };
-  }
-  return scheduleData[activeScheduleSemester];
-}
-
-Object.defineProperty(window, 'myScheduleCourses', {
-  get() { return getActiveSemData().courses; },
-  set(v) { getActiveSemData().courses = v; },
-  configurable: true,
-});
-
-function getScheduleColorMap() { return getActiveSemData().colors; }
-
-const SCHEDULE_COLORS = [1,2,3,4,5,6,7,8];
-
-// Period definitions: label + time range
-const SCHEDULE_PERIODS = [
-  { p: 1,  label: "1",  time: "08:10–09:00" },
-  { p: 2,  label: "2",  time: "09:10–10:00" },
-  { p: 3,  label: "3",  time: "10:10–11:00" },
-  { p: 4,  label: "4",  time: "11:10–12:00" },
-  { p: 5,  label: "Lunch", time: "12:00–13:00" },
-  { p: 6,  label: "5",  time: "13:10–14:00" },
-  { p: 7,  label: "6",  time: "14:10–15:00" },
-  { p: 8,  label: "7",  time: "15:10–16:00" },
-  { p: 9,  label: "8",  time: "16:10–17:00" },
-  { p: 10, label: "9",  time: "17:10–18:00" },
-  { p: 11, label: "A",  time: "18:25–19:15" },
-  { p: 12, label: "B",  time: "19:20–20:10" },
-  { p: 13, label: "C",  time: "20:15–21:05" },
-  { p: 14, label: "D",  time: "21:10–22:00" },
-];
-const SCHEDULE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-// --- Toggle sidebar open/close ---
-window.toggleScheduleSidebar = function () {
-  const sidebar = document.getElementById("scheduleSidebar");
-  const overlay = document.getElementById("scheduleOverlay");
-  if (!sidebar) return;
-  const isOpen = sidebar.classList.contains("open");
-  sidebar.classList.toggle("open", !isOpen);
-  document.body.classList.toggle("schedule-open", !isOpen);
-  if (overlay) overlay.style.display = !isOpen ? "block" : "none";
-};
-
-window.closeScheduleSidebar = function () {
-  const sidebar = document.getElementById("scheduleSidebar");
-  const overlay = document.getElementById("scheduleOverlay");
-  if (sidebar) sidebar.classList.remove("open");
-  document.body.classList.remove("schedule-open");
-  if (overlay) overlay.style.display = "none";
-};
 
 // --- Collect all available semesters from allCourses ---
 function getAvailableSemesters() {
@@ -4003,340 +4160,6 @@ function getAvailableSemesters() {
     return (by - ay) || (bs - as_);
   });
 }
-
-// --- Switch active semester tab ---
-window.switchScheduleSemester = function(semKey) {
-  activeScheduleSemester = semKey;
-  if (!scheduleData[semKey]) scheduleData[semKey] = { courses: [], colors: {} };
-  document.querySelectorAll(".sched-sem-tab").forEach(t => {
-    t.classList.toggle("active", t.dataset.sem === semKey);
-  });
-  renderScheduleSidebar();
-  updateAllAddButtons();
-  updateScheduleBadge();
-};
-
-// --- Add a course to the active semester's schedule ---
-window.addToSchedule = function (courseId) {
-  if (!activeScheduleSemester) {
-    const course = allCourses.find(c => String(c.id) === String(courseId));
-    const key = course ? `${course.year}-${course.semester}` : getAvailableSemesters()[0];
-    if (key) window.switchScheduleSemester(key);
-    else { showConflictToast("No semester available."); return; }
-  }
-
-  const semData = getActiveSemData();
-  const course = allCourses.find(c => String(c.id) === String(courseId));
-  if (!course) return;
-
-  if (semData.courses.includes(String(courseId))) {
-    removeFromSchedule(courseId);
-    return;
-  }
-
-  const courseSemKey = `${course.year}-${course.semester}`;
-  if (courseSemKey !== activeScheduleSemester) {
-    if (!confirm(`This course is from ${courseSemKey}, but your active schedule is ${activeScheduleSemester}.\nSwitch to ${courseSemKey} and add?`)) return;
-    window.switchScheduleSemester(courseSemKey);
-  }
-
-  const freshSemData = getActiveSemData();
-
-  if (course.schedule && course.schedule.length > 0) {
-    const conflictCourses = freshSemData.courses
-      .map(id => allCourses.find(c => String(c.id) === String(id)))
-      .filter(Boolean)
-      .filter(c => c.schedule && c.schedule.some(
-        slot => course.schedule.some(s => s.day === slot.day && s.period === slot.period)
-      ));
-    if (conflictCourses.length > 0) {
-      const names = conflictCourses.map(c => c.titleZh || c.title).join(", ");
-      showConflictToast(`⚠️ Time conflict with: ${names}`);
-      return;
-    }
-  }
-
-  const usedColors = Object.values(freshSemData.colors);
-  const freeColor = SCHEDULE_COLORS.find(c => !usedColors.includes(c)) || 1;
-  freshSemData.colors[String(courseId)] = freeColor;
-  freshSemData.courses.push(String(courseId));
-
-  renderScheduleSidebar();
-  updateAllAddButtons();
-  updateScheduleBadge();
-
-  const sidebar = document.getElementById("scheduleSidebar");
-  if (sidebar && !sidebar.classList.contains("open")) toggleScheduleSidebar();
-};
-
-// --- Remove from active semester ---
-window.removeFromSchedule = function (courseId) {
-  const semData = getActiveSemData();
-  semData.courses = semData.courses.filter(id => String(id) !== String(courseId));
-  delete semData.colors[String(courseId)];
-  renderScheduleSidebar();
-  updateAllAddButtons();
-  updateScheduleBadge();
-};
-
-// --- Clear active semester ---
-window.clearSchedule = function () {
-  const semData = getActiveSemData();
-  if (semData.courses.length === 0) return;
-  if (!confirm(`Remove all courses from ${activeScheduleSemester} schedule?`)) return;
-  semData.courses = [];
-  semData.colors = {};
-  renderScheduleSidebar();
-  updateAllAddButtons();
-  updateScheduleBadge();
-};
-
-// --- Render the full sidebar content ---
-function renderScheduleSidebar() {
-  renderScheduleSemesterTabs();
-  renderScheduleGrid();
-  renderScheduleCourseList();
-  renderScheduleCredits();
-}
-
-// --- Build the timetable grid ---
-function renderScheduleGrid() {
-  const grid = document.getElementById("scheduleGrid");
-  if (!grid) return;
-
-  const semData = getActiveSemData();
-
-  const slotMap = {};
-  semData.courses.forEach(courseId => {
-    const course = allCourses.find(c => String(c.id) === String(courseId));
-    if (!course || !course.schedule) return;
-    course.schedule.forEach(({ day, period }) => {
-      const key = `${day}-${period}`;
-      slotMap[key] = courseId;
-    });
-  });
-
-  let html = "";
-
-  html += `<div class="sched-header-cell period-col" style="font-size:0.6rem;">P\\D</div>`;
-
-  SCHEDULE_DAYS.forEach(day => {
-    html += `<div class="sched-header-cell">${escapeHtml(day)}</div>`;
-  });
-
-  SCHEDULE_PERIODS.forEach(({ p, label, time }) => {
-    html += `
-      <div class="sched-period-cell">
-        <span>${escapeHtml(label)}</span>
-        <span class="sched-period-time">${escapeHtml(time.split("–")[0])}</span>
-      </div>
-    `;
-
-    for (let dayIndex = 1; dayIndex <= 6; dayIndex++) {
-      const key = `${dayIndex}-${p}`;
-      const courseId = slotMap[key];
-      if (courseId) {
-        const course = allCourses.find(c => String(c.id) === String(courseId));
-        const colorClass = `course-color-${semData.colors[String(courseId)] || 1}`;
-        const shortName = course
-          ? (course.titleZh || course.title || "").slice(0, 10)
-          : "?";
-        html += `
-          <div class="sched-cell has-course ${colorClass}">
-            <button class="cell-remove-btn" onclick="removeFromSchedule(${courseId})" title="Remove">✕</button>
-            <span class="cell-course-name">${escapeHtml(shortName)}</span>
-          </div>
-        `;
-      } else {
-        html += `<div class="sched-cell"></div>`;
-      }
-    }
-  });
-
-  grid.innerHTML = html;
-}
-
-// --- Course list chips below grid ---
-function renderScheduleCourseList() {
-  const list = document.getElementById("scheduleList");
-  if (!list) return;
-
-  const semData = getActiveSemData();
-
-  if (semData.courses.length === 0) {
-    list.innerHTML = `
-      <div class="schedule-empty-state">
-        <span class="empty-icon">🗓️</span>
-        No courses in <strong>${activeScheduleSemester || "this semester"}</strong> yet.<br>
-        Click <strong>"+ Schedule"</strong> on any course card.
-      </div>
-    `;
-    return;
-  }
-
-  let html = `<h4>Added Courses (${semData.courses.length})</h4>`;
-  semData.courses.forEach(courseId => {
-    const course = allCourses.find(c => String(c.id) === String(courseId));
-    if (!course) return;
-    const colorIndex = semData.colors[String(courseId)] || 1;
-    const bgColors = [
-      "#4f67b1","#2a8f6f","#c74d30","#7c3aed",
-      "#0891b2","#9d5c0d","#b02473","#374151"
-    ];
-    const bg = bgColors[(colorIndex - 1) % bgColors.length];
-    const credits = course.credits ? `${course.credits} cr.` : "";
-    const displayName = course.titleZh || course.title;
-    const slots = course.schedule && course.schedule.length > 0
-      ? course.schedule.map(s => `${SCHEDULE_DAYS[s.day - 1] || "?"}${s.period}`).join(", ")
-      : "No time data";
-
-    html += `
-      <div class="schedule-course-chip" style="background:${bg};">
-        <div class="chip-title">
-          <div style="font-weight:800;font-size:0.82rem;">${escapeHtml(displayName)}</div>
-          <div style="font-size:0.7rem;opacity:0.85;">${escapeHtml(slots)}</div>
-        </div>
-        ${credits ? `<span class="chip-credits">${escapeHtml(credits)}</span>` : ""}
-        <button class="chip-remove" onclick="removeFromSchedule(${courseId})" title="Remove">✕</button>
-      </div>
-    `;
-  });
-  list.innerHTML = html;
-}
-
-// --- Credits bar ---
-function renderScheduleCredits() {
-  const bar = document.getElementById("scheduleCreditsBar");
-  if (!bar) return;
-  const semData = getActiveSemData();
-  const total = semData.courses.reduce((sum, id) => {
-    const c = allCourses.find(x => String(x.id) === String(id));
-    return sum + (c?.credits || 0);
-  }, 0);
-  bar.textContent = `📚 ${semData.courses.length} course${semData.courses.length !== 1 ? "s" : ""} · ${total} credits`;
-}
-
-// --- Badge on toggle button (total across ALL semesters) ---
-function updateScheduleBadge() {
-  const badge = document.querySelector("#scheduleToggleBtn .schedule-badge");
-  if (!badge) return;
-  const n = Object.values(scheduleData).reduce((sum, d) => sum + (d.courses?.length || 0), 0);
-  badge.textContent = n;
-  badge.style.display = n > 0 ? "flex" : "none";
-}
-
-// --- Update all "Add to Schedule" buttons across the page ---
-function updateAllAddButtons() {
-  const semData = getActiveSemData();
-  document.querySelectorAll("[data-schedule-id]").forEach(btn => {
-    const id = String(btn.dataset.scheduleId);
-    const inSchedule = semData.courses.includes(id);
-    btn.classList.toggle("in-schedule", inSchedule);
-    btn.textContent = inSchedule ? "✓ In Schedule" : "+ Schedule";
-  });
-}
-
-// --- Conflict toast ---
-function showConflictToast(msg) {
-  let toast = document.getElementById("scheduleConflictToast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "scheduleConflictToast";
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.style.display = "block";
-  clearTimeout(toast._timeout);
-  toast._timeout = setTimeout(() => { toast.style.display = "none"; }, 3500);
-}
-
-// --- Render semester tabs ---
-function renderScheduleSemesterTabs() {
-  const tabBar = document.getElementById("scheduleTabBar");
-  if (!tabBar) return;
-
-  const semesters = getAvailableSemesters();
-  if (semesters.length === 0) {
-    tabBar.innerHTML = `<span style="font-size:0.75rem;opacity:0.7;padding:4px 8px;">No semesters found</span>`;
-    return;
-  }
-
-  if (!activeScheduleSemester || !semesters.includes(activeScheduleSemester)) {
-    activeScheduleSemester = semesters[0];
-    if (!scheduleData[activeScheduleSemester]) scheduleData[activeScheduleSemester] = { courses: [], colors: {} };
-  }
-
-  tabBar.innerHTML = semesters.map(sem => {
-    const count = scheduleData[sem]?.courses?.length || 0;
-    const [year, s] = sem.split("-");
-    const label = `${year} S${s}`;
-    const isActive = sem === activeScheduleSemester;
-    return `
-      <button
-        class="sched-sem-tab${isActive ? " active" : ""}"
-        data-sem="${escapeHtml(sem)}"
-        onclick="switchScheduleSemester('${escapeHtml(sem)}')"
-      >${escapeHtml(label)}${count > 0 ? `<span class="sched-sem-count">${count}</span>` : ""}</button>
-    `;
-  }).join("");
-}
-
-// --- Inject HTML for the sidebar and toggle button into the page ---
-function injectScheduleSidebarHTML() {
-  if (document.getElementById("scheduleSidebar")) return;
-
-  const toggleBtn = document.createElement("button");
-  toggleBtn.id = "scheduleToggleBtn";
-  toggleBtn.setAttribute("aria-label", "Toggle schedule sidebar");
-  toggleBtn.style.display = "none";
-  toggleBtn.innerHTML = `
-    📅
-    <span class="schedule-toggle-label">Schedule</span>
-    <span class="schedule-badge">0</span>
-  `;
-  toggleBtn.addEventListener("click", toggleScheduleSidebar);
-  document.body.appendChild(toggleBtn);
-
-  const overlay = document.createElement("div");
-  overlay.id = "scheduleOverlay";
-  overlay.addEventListener("click", closeScheduleSidebar);
-  document.body.appendChild(overlay);
-
-  const sidebar = document.createElement("aside");
-  sidebar.id = "scheduleSidebar";
-  sidebar.className = "schedule-sidebar";
-  sidebar.innerHTML = `
-    <div class="schedule-sidebar-header">
-      <h3>📅 My Schedule</h3>
-      <div class="schedule-header-actions">
-        <button class="schedule-clear-btn" onclick="clearSchedule()">Clear</button>
-        <button class="schedule-close-btn" onclick="closeScheduleSidebar()" aria-label="Close">✕</button>
-      </div>
-    </div>
-    <div class="sched-tab-bar" id="scheduleTabBar"></div>
-    <div class="schedule-credits-bar" id="scheduleCreditsBar">📚 0 courses · 0 credits</div>
-    <div class="schedule-grid-wrapper">
-      <div class="schedule-grid" id="scheduleGrid"></div>
-    </div>
-    <div class="schedule-course-list" id="scheduleList"></div>
-  `;
-  document.body.appendChild(sidebar);
-}
-
-
-sampleCourses.forEach(c => {
-  if (String(c.id) === "1" && !c.schedule) c.schedule = [{ day: 1, period: 2 }, { day: 1, period: 3 }, { day: 3, period: 2 }, { day: 3, period: 3 }];
-  if (String(c.id) === "2" && !c.schedule) c.schedule = [{ day: 2, period: 1 }, { day: 2, period: 2 }, { day: 5, period: 1 }, { day: 5, period: 2 }];
-  if (String(c.id) === "3" && !c.schedule) c.schedule = [{ day: 2, period: 5 }, { day: 4, period: 5 }];
-  if (String(c.id) === "4" && !c.schedule) c.schedule = [{ day: 1, period: 6 }, { day: 1, period: 7 }, { day: 4, period: 6 }, { day: 4, period: 7 }];
-});
-
-// --- Bootstrap on DOM ready ---
-document.addEventListener("DOMContentLoaded", function () {
-  injectScheduleSidebarHTML();
-  renderScheduleSidebar();
-  updateScheduleBadge();
-});
 
 function updatePageTitle() {
     const searchBox = document.getElementById("searchBox");
@@ -4373,3 +4196,7 @@ document.addEventListener("click", function() {
         c.classList.remove("open");
     });
 });
+
+
+
+// buildPersonalActionCard is defined earlier (around line 2068) with full reply/reaction support.

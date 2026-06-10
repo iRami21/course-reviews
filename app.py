@@ -1,4 +1,5 @@
 import json
+import time
 import os
 import re
 import sqlite3
@@ -52,6 +53,10 @@ from utils.department_filters import (
 def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
+    # Cache TTL for courses payload (seconds)
+    app.config.setdefault("COURSES_CACHE_TTL", 5)
+    # simple in-memory cache: key -> (timestamp, payload_dict)
+    app._courses_cache = {}
 
     db_path = os.path.join(app.root_path, "12354.db")
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
@@ -82,7 +87,6 @@ def create_app():
                 text("ALTER TABLE \"User\" ADD COLUMN role VARCHAR(16) DEFAULT 'student'")
             )
             
-        # 👇 新增這兩段：如果資料庫沒有這兩個欄位，就自動幫它加進去
         if "avatarAnimal" not in user_columns:
             db.session.execute(
                 text("ALTER TABLE \"User\" ADD COLUMN avatarAnimal TEXT DEFAULT 'question'")
@@ -371,6 +375,39 @@ def create_app():
             query = query.filter(Favorite.course_id.in_(course_ids))
         return {course_id for (course_id,) in query.all()}
 
+    def round_rating(value):
+        try:
+            numeric = float(value or 0)
+        except (TypeError, ValueError):
+            numeric = 0
+        return int(numeric * 10 + 0.5) / 10
+
+    def review_rating_expression():
+        return func.coalesce(
+            (
+                Review.rating_quality
+                + Review.rating_sweetness
+                + Review.rating_coolness
+                + Review.rating_solidity
+            ) / 4.0,
+            Review.rating,
+        )
+
+    def review_total_rating(review):
+        scores = [
+            review.rating_quality,
+            review.rating_sweetness,
+            review.rating_coolness,
+            review.rating_solidity,
+        ]
+        if all(score is not None for score in scores):
+            return round_rating(sum(int(score) for score in scores) / 4)
+        return round(float(review.rating or 0), 1)
+
+    def average_review_rating(reviews):
+        ratings = [review_total_rating(review) for review in reviews if review_total_rating(review) > 0]
+        return sum(ratings) / len(ratings) if ratings else 0
+
     def serialize_course(course, review_stats=None, favorite_counts=None, favorite_course_ids=None):
         review_count = 0
         average_rating = 0
@@ -378,9 +415,8 @@ def create_app():
             review_count, average_rating = review_stats.get(course.course_id, (0, 0))
         else:
             reviews = reviews_for_course(course.course_id).all()
-            ratings = [review.rating for review in reviews if review.rating]
             review_count = len(reviews)
-            average_rating = sum(ratings) / len(ratings) if ratings else 0
+            average_rating = average_review_rating(reviews)
 
         if favorite_counts is not None:
             save_count = favorite_counts.get(course.course_id, 0)
@@ -390,7 +426,7 @@ def create_app():
         if favorite_course_ids is not None:
             followed = course.course_id in favorite_course_ids
         else:
-            # 這裡的邏輯非常重要，確保 Favorite 表裡面真的有這一筆資料
+            
             followed = (
                 current_user.is_authenticated
                 and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None
@@ -431,13 +467,14 @@ def create_app():
             "requirement": course.requirement or course.course_type or "",
             "courseType": course.course_type or "",
             "englishTaught": bool(course.english_taught),
-            "rating": round(float(average_rating or 0), 1),
+            "rating": round_rating(average_rating),
             "reviewCount": int(review_count or 0),
+            "commentTotal": int(review_count or 0),
             "followed": followed,
             "saveCount": int(save_count or 0),
             "year": course.year or 0,
             "semester": course.semester or 0,
-            # 💡 完美保留你精心設計的豐富標籤，讓前端的標籤搜尋功能可以繼續點擊！
+
             "tags": [
                 tag
                 for tag in [
@@ -554,7 +591,7 @@ def create_app():
         return matched_codes
 
     def display_course_group_key(course):
-        # 1. 整理出這門課所有的教授陣容
+  
         prof_names = []
         for s in course.sections:
             for i in s.instructors:
@@ -563,19 +600,15 @@ def create_app():
                     if cleaned and cleaned not in prof_names:
                         prof_names.append(cleaned)
         prof_names.sort()
-        
-        # 2. 徹底清理課名文字
+  
         title_key = re.sub(r"\s+", " ", (course.title or course.name or "").strip()).casefold()
         prof_key = "|".join(prof_names).casefold()
         
-        # 3. 🚨 終極防禦：如果是校際課程，或者根本沒有教授
-        #    我們直接綁定它在資料庫的唯一身分證 `course.course_id`
-        #    這會強制讓「民法」、「日文」、「電腦英語」擁有完全不同的 Key，在記憶體分組時絕對不會撞車！
         dept_str = course.department or ""
         if "校際" in dept_str or not prof_key:
             return (f"unique_course_{course.course_id}_{title_key}", "none")
             
-        # 4. 一般校內課程：相同課名 + 相同教授群才允許合併
+       
         return (title_key, prof_key)
     
     def build_course_display_groups(courses):
@@ -612,7 +645,7 @@ def create_app():
                 if rating:
                     all_ratings.append(float(rating))
 
-        # ── 🚨 這裡就是被省略掉、現在完整補回來的歷史學期與系所邏輯 ──
+
         departments = []
         history_terms = []
         program_tags = []
@@ -627,13 +660,13 @@ def create_app():
                     
                 term_label = f"{section.roc_year} S{section.term}"
                 
-                # 取得上課時間、地點與學程標籤
+               
                 meeting_data = get_raw_course_meeting(c.code, section.roc_year, section.term)
                 for tag in meeting_data.get("programTags", []):
                     if tag not in program_tags:
                         program_tags.append(tag)
                 
-                # 取得該學期的教授名單
+
                 prof_names = [clean_professor_name(i.name) for i in section.instructors if i and i.name]
                 prof_text = "、".join(dict.fromkeys(n for n in prof_names if n))
                 
@@ -648,7 +681,7 @@ def create_app():
                     "searchValue": term_label
                 }
                 
-                # 避免重複加入相同學期
+
                 if not any(t["year"] == section.roc_year and t["semester"] == section.term for t in history_terms):
                     history_terms.append(term_info)
                     
@@ -680,7 +713,7 @@ def create_app():
         payload["reviewCount"] = total_reviews
         # 嚴謹模式：留言總數等於主評價數量
         payload["commentTotal"] = total_reviews 
-        payload["rating"] = round(sum(all_ratings) / len(all_ratings), 1) if all_ratings else 0
+        payload["rating"] = round_rating(sum(all_ratings) / len(all_ratings)) if all_ratings else 0
         payload["saveCount"] = int(sum((favorite_counts or {}).get(course_id, 0) for course_id in course_ids))
         payload["followed"] = any(course_id in (favorite_course_ids or set()) for course_id in course_ids)
         
@@ -717,12 +750,12 @@ def create_app():
         return {
             "id": str(review.id),
             "author": author.username if author else "Anonymous",
-            # 💡 完美救回被後端刪除的頭像結構，防止前端大頭貼破圖！
+            
             "avatar": {
                 "avatarAnimal": author.avatar_animal if author else "question",
                 "gender": author.gender if author else "undisclosed",
             },
-            "rating": review.rating,
+            "rating": review_total_rating(review),
             "ratingQuality": review.rating_quality,
             "ratingSweetness": review.rating_sweetness,
             "ratingCoolness": review.rating_coolness,
@@ -744,9 +777,7 @@ def create_app():
             ],
         }
 
-    # =========================================================================
-    # 🔽 以下完整保留後端同學寫的效能優化與子查詢函式，確保後端運算不崩潰
-    # =========================================================================
+    
 
     def serialize_reply(reply, current_user_id=None):
         author = reply.author
@@ -817,7 +848,7 @@ def create_app():
             db.session.query(
                 Section.course_id,
                 func.count(Review.review_id),
-                func.avg(Review.rating),
+                func.avg(review_rating_expression()),
             )
             .join(Review, Review.section_id == Section.section_id)
             .filter(Review.parent_id.is_(None))
@@ -832,7 +863,7 @@ def create_app():
             db.session.query(
                 Section.course_id.label("course_id"),
                 func.count(Review.review_id).label("review_count"),
-                func.avg(Review.rating).label("average_rating"),
+                func.avg(review_rating_expression()).label("average_rating"),
             )
             .join(Review, Review.section_id == Section.section_id)
             .filter(Review.parent_id.is_(None))
@@ -888,9 +919,7 @@ def create_app():
             .order_by(Review.created_at.desc())
         )
 
-    # =========================================================================
-    # 🔽 完美守住你 HEAD 原有的通知功能、搜尋資料包與 API 路由，防止功能人間蒸發
-    # =========================================================================
+ 
 
     def save_notification(user_id, message, link="", category="notification"):
         if not user_id or not message:
@@ -921,6 +950,20 @@ def create_app():
         return Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).limit(limit).all()
 
     def get_courses_payload(page=None, per_page=None):
+        # Lightweight caching to reduce DB load for frequent list requests
+        try:
+            cache_ttl = app.config.get("COURSES_CACHE_TTL", 5)
+            cache_key = json.dumps({
+                "user": current_user.id if current_user.is_authenticated else None,
+                "args": sorted([(k, v) for k, v in request.args.items()]),
+                "page": int(page or request.args.get("page", 1)),
+                "per_page": int(per_page or request.args.get("per_page", 60)),
+            }, sort_keys=True)
+            cached = app._courses_cache.get(cache_key)
+            if cached and (time.time() - cached[0]) < cache_ttl:
+                return cached[1]
+        except Exception:
+            cached = None
         page = max(1, int(page or request.args.get("page", 1)))
         per_page = min(60, max(1, int(per_page or request.args.get("per_page", 60))))
         query_text = str(request.args.get("q", "")).strip()
@@ -933,7 +976,6 @@ def create_app():
         semester = str(request.args.get("semester", "")).strip()
         min_rating_raw = str(request.args.get("min_rating", "")).strip()
         
-        # 🚨 確保 sort_by 第一時間被宣告
         sort_by = str(request.args.get("sort", "popular")).strip() or "popular"
 
         from models import Section, Review
@@ -944,7 +986,7 @@ def create_app():
         )
         
         # 建立精確的基礎計分欄位（只看主評價）
-        avg_rating = func.coalesce(func.avg(Review.rating).filter(visible_review_cond), 0)
+        avg_rating = func.coalesce(func.avg(review_rating_expression()).filter(visible_review_cond), 0)
         review_count = func.count(Review.review_id).filter(visible_review_cond)
         latest_review_time = func.coalesce(func.max(Review.created_at).filter(visible_review_cond), "1970-01-01 00:00:00")
         
@@ -1079,7 +1121,7 @@ def create_app():
                 if stats["rev_cnt"] > 0:
                     g["ratings_list"].append(stats["avg_rat"])
 
-        # ── 🎯 完美對齊 Python cmp_to_key 的終極權重比較器 ──
+    
         def compare_hottest(k1, k2):
             g1, g2 = group_lookup[k1], group_lookup[k2]
             score1 = g1["total_rev"] + g1["total_fav"]
@@ -1188,6 +1230,20 @@ def create_app():
                 "totalPages": total_pages,
             },
         }
+        # store into cache
+        try:
+            app._courses_cache[cache_key] = (time.time(), {
+                "courses": serialized_groups,
+                "reviews": representative_reviews,
+                "pagination": {
+                    "page": page,
+                    "perPage": per_page,
+                    "total": total,
+                    "totalPages": total_pages,
+                },
+            })
+        except Exception:
+            pass
                     
     @app.route("/courses")
     def courses():
@@ -1284,6 +1340,11 @@ def create_app():
 
         db.session.commit()
         save_count = Favorite.query.filter_by(course_id=course.course_id).count()
+        # 清除課程列表快取以便下一次請求拿到最新值
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
         return jsonify(
             {
                 "courseId": course.course_id,
@@ -1414,14 +1475,47 @@ def create_app():
                 "courseId": course.course_id,
                 "courseName": course.name,
                 "courseCode": course.code,
-                "rating": review.rating,
-                "ratingStars": "★" * (review.rating or 0) + "☆" * (5 - (review.rating or 0)),
+                "rating": review_total_rating(review),
+                "reviewId": str(review.id),
+                "ratingStars": "★" * round(review_total_rating(review)) + "☆" * (5 - round(review_total_rating(review))),
                 "reviewSnippet": (review.text or "")[:80] + ("…" if len(review.text or "") > 80 else ""),
                 "link": f"/courses/{course.course_id}",
                 "createdAt": review.created_at.strftime("%Y-%m-%d %H:%M") if review.created_at else "",
             })
 
-        # ── 3. Reactions the user gave ───────────────────────────────────────────
+        # ── 3. Replies the user wrote ────────────────────────────────────────────
+        replies = (
+            ReviewReply.query
+            .options(
+                selectinload(ReviewReply.review)
+                .selectinload(Review.section)
+                .selectinload(Section.course)
+            )
+            .filter(ReviewReply.user_id == uid)
+            .order_by(ReviewReply.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        for reply in replies:
+            review = reply.review
+            if not review or not review.course:
+                continue
+            course = review.course
+            personal_actions.append({
+                "type": "reply",
+                "icon": "💬",
+                "message": f"You replied to a review on <strong>{course.name}</strong>",
+                "courseId": course.course_id,
+                "courseName": course.name,
+                "courseCode": course.code,
+                "reviewId": str(review.id),
+                "replyId": str(reply.id),
+                "reviewSnippet": (reply.text or "")[:80] + ("…" if len(reply.text or "") > 80 else ""),
+                "link": f"/courses/{course.course_id}",
+                "createdAt": reply.created_at.strftime("%Y-%m-%d %H:%M") if reply.created_at else "",
+            })
+
+        # ── 4. Reactions the user gave ───────────────────────────────────────────
         reactions = (
             ReviewReaction.query
             .options(
@@ -1447,6 +1541,7 @@ def create_app():
                 "courseName": course.name,
                 "courseCode": course.code,
                 "emoji": rxn.emoji,
+                "reviewId": str(review.id),
                 "link": f"/courses/{course.course_id}",
                 "createdAt": rxn.created_at.strftime("%Y-%m-%d %H:%M") if rxn.created_at else "",
             })
@@ -1524,14 +1619,13 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         try:
             reviews = reviews_for_course(course_id).all()
-            rated = [r for r in reviews if r.rating]
-            average_rating = sum(r.rating for r in rated) / len(rated) if rated else 0
+            average_rating = average_review_rating(reviews)
             current_user_id = current_user.id if current_user.is_authenticated else None
             return jsonify(
                 {
                     "courseId": course.course_id,
                     "reviewCount": len(reviews),
-                    "averageRating": round(float(average_rating), 1),
+                    "averageRating": round_rating(average_rating),
                     "reviews": [serialize_review(review, current_user_id=current_user_id) for review in reviews],
                 }
             )
@@ -1578,10 +1672,10 @@ def create_app():
             rating_coolness  = parse_rating("ratingCoolness")
             rating_solidity  = parse_rating("ratingSolidity")
 
-            scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
-            if not scores:
+            scores = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(score is None for score in scores):
                 return jsonify({"error": "Please rate all four dimensions."}), 400
-            rating = round(sum(scores) / len(scores))
+            rating = round(sum(scores) / 4)
         else:
             parent_review = Review.query.get(parent_id)
             if parent_review is None:
@@ -1603,19 +1697,19 @@ def create_app():
         )
         db.session.add(review)
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 "review": serialize_review(review, current_user_id=current_user_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
             }
@@ -1638,22 +1732,63 @@ def create_app():
         if not new_text:
             return jsonify({"error": "Review text is required."}), 400
 
+        # 更新文字
         review.text = new_text
+
+        # 嘗試更新四個維度評分：允許前端只送部分欄位，後端會與現有值合併
+        def parse_dim_incoming(dct, key):
+            try:
+                if key in dct:
+                    v = dct.get(key)
+                else:
+                    # 支援小寫開頭的表單欄位名稱
+                    alt = key[0].lower() + key[1:]
+                    v = dct.get(alt)
+                if v in (None, ""):
+                    return None
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+
+        dims_provided = any(k in payload or (k[0].lower() + k[1:]) in payload for k in ("ratingQuality", "ratingSweetness", "ratingCoolness", "ratingSolidity"))
+        if dims_provided:
+            # 取得 incoming（可能部分）與現有值合併
+            rq = parse_dim_incoming(payload, "ratingQuality")
+            rs = parse_dim_incoming(payload, "ratingSweetness")
+            rc = parse_dim_incoming(payload, "ratingCoolness")
+            rso = parse_dim_incoming(payload, "ratingSolidity")
+
+            rating_quality = rq if rq is not None else review.rating_quality
+            rating_sweetness = rs if rs is not None else review.rating_sweetness
+            rating_coolness = rc if rc is not None else review.rating_coolness
+            rating_solidity = rso if rso is not None else review.rating_solidity
+
+            # 驗證合併後都有值且在 1-5 範圍
+            merged = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(x is None for x in merged) or any(not (1 <= int(x) <= 5) for x in merged):
+                return jsonify({"error": "All four dimensions must have integer values between 1 and 5."}), 400
+
+            review.rating_quality = int(rating_quality)
+            review.rating_sweetness = int(rating_sweetness)
+            review.rating_coolness = int(rating_coolness)
+            review.rating_solidity = int(rating_solidity)
+            review.rating = round((int(rating_quality) + int(rating_sweetness) + int(rating_coolness) + int(rating_solidity)) / 4)
+
         review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 "review": serialize_review(review, current_user_id=current_user_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
             }
@@ -1673,19 +1808,19 @@ def create_app():
 
         db.session.delete(review)
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
-        average_rating = (
-            sum(r.rating for r in reviews if r.rating) / len([r for r in reviews if r.rating])
-            if any(r.rating for r in reviews)
-            else 0
-        )
+        average_rating = average_review_rating(reviews)
         current_user_id = current_user.id if current_user.is_authenticated else None
         return jsonify(
             {
                 "courseId": course.course_id,
                 "reviewCount": len(reviews),
-                "averageRating": round(float(average_rating), 1),
+                "averageRating": round_rating(average_rating),
                 # FIX: 不再序列化已刪除的 review 物件，改回傳被刪除的 id
                 "deletedReviewId": str(review_id),
                 "reviews": [serialize_review(review_item, current_user_id=current_user_id) for review_item in reviews],
@@ -1791,6 +1926,10 @@ def create_app():
         db.session.add(review)
         db.session.commit()
         flash("Review submitted.")
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
         return redirect(url_for("course_detail", course_id=course.course_id))
 
     @app.route("/api/courses/<int:course_id>/review", methods=["POST"])
@@ -1801,10 +1940,11 @@ def create_app():
         if not section:
             return jsonify({"error": "This course has no section to review."}), 400
 
-        # 💡 核心安全檢查：去資料庫查這個人是不是已經投過票了
-        existing_review = Review.query.filter_by(
-            section_id=section.section_id,
-            user_id=current_user.id
+      
+        existing_review = Review.query.filter(
+            Review.section_id == section.section_id,
+            Review.user_id == current_user.id,
+            Review.is_visible.isnot(False),
         ).first()
         
         if existing_review:
@@ -1826,10 +1966,10 @@ def create_app():
         rating_coolness  = parse_dim("ratingCoolness")
         rating_solidity  = parse_dim("ratingSolidity")
 
-        scores = [x for x in [rating_quality, rating_sweetness, rating_coolness, rating_solidity] if x]
-        if not scores:
+        scores = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+        if any(score is None for score in scores):
             return jsonify({"error": "Please rate all four dimensions."}), 400
-        rating = round(sum(scores) / len(scores))
+        rating = round(sum(scores) / 4)
 
         review = Review(
             section_id=section.section_id,
@@ -1874,7 +2014,45 @@ def create_app():
         if not text_value:
             return jsonify({"error": "Review text is required."}), 400
 
+        # 更新文字
         review.text = text_value
+
+        # 嘗試更新四個維度評分：允許前端只送部分欄位，後端會與現有值合併
+        def parse_dim_local(key):
+            try:
+                if key in data:
+                    v = data.get(key)
+                else:
+                    alt = key[0].lower() + key[1:]
+                    v = data.get(alt)
+                if v in (None, ""):
+                    return None
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+
+        dims_provided = any(k in data or (k[0].lower() + k[1:]) in data for k in ("ratingQuality", "ratingSweetness", "ratingCoolness", "ratingSolidity"))
+        if dims_provided:
+            rq = parse_dim_local("ratingQuality")
+            rs = parse_dim_local("ratingSweetness")
+            rc = parse_dim_local("ratingCoolness")
+            rso = parse_dim_local("ratingSolidity")
+
+            rating_quality = rq if rq is not None else review.rating_quality
+            rating_sweetness = rs if rs is not None else review.rating_sweetness
+            rating_coolness = rc if rc is not None else review.rating_coolness
+            rating_solidity = rso if rso is not None else review.rating_solidity
+
+            merged = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(x is None for x in merged) or any(not (1 <= int(x) <= 5) for x in merged):
+                return jsonify({"error": "All four dimensions must have integer values between 1 and 5."}), 400
+
+            review.rating_quality = int(rating_quality)
+            review.rating_sweetness = int(rating_sweetness)
+            review.rating_coolness = int(rating_coolness)
+            review.rating_solidity = int(rating_solidity)
+            review.rating = round((int(rating_quality) + int(rating_sweetness) + int(rating_coolness) + int(rating_solidity)) / 4)
+
         review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
         return jsonify({
@@ -1886,13 +2064,11 @@ def create_app():
     @login_required
     def api_delete_review(review_id):
         review = Review.query.get_or_404(review_id)
-        if not review.is_visible:
-            return jsonify({"ok": True})
         if not can_modify_review(review):
             return jsonify({"error": "You can only delete your own reviews."}), 403
 
         course = review.course
-        review.is_visible = False
+        db.session.delete(review)
         db.session.commit()
         return jsonify({
             "ok": True,
@@ -1922,7 +2098,7 @@ def create_app():
             save_notification(
                 review.author.id,
                 f"{current_user.username} replied to your review on {review.course.title or review.course.code}.",
-                link=url_for("course_detail", course_id=review.course_id),
+                link=url_for("course_detail", course_id=review.course_id) + f"#review-{review.id}",
                 category="activity",
             )
         db.session.commit()
@@ -2016,7 +2192,7 @@ def create_app():
             save_notification(
                 review.author.id,
                 f"{current_user.username} reacted {notify_reaction} to your review on {review.course.title or review.course.code}.",
-                link=url_for("course_detail", course_id=review.course_id),
+                link=url_for("course_detail", course_id=review.course_id) + f"#review-{review.id}",
                 category="activity",
             )
         db.session.commit()
@@ -2075,7 +2251,6 @@ def create_app():
         # ReviewReaction 目前有 (reviewId, userId) unique constraint，
         # 我們借用它，但用 review_id=None 無法插入，故直接在 reply.reaction_counts JSON 記錄
         # 並用獨立欄位追蹤「此 user 對此 reply 的 reaction」
-        # 簡易方案：reaction_counts JSON 同時存 user 清單，key = emoji, value = count
         # user 選擇記錄在額外的 user_reactions key 裡
         try:
             user_reactions = json.loads(reply.user_reactions or "{}")
@@ -2122,7 +2297,7 @@ def create_app():
             save_notification(
                 reply.author.id,
                 f"{current_user.username} reacted {notify_reaction} to your comment.",
-                link=url_for("course_detail", course_id=reply.review.course_id),
+                link=url_for("course_detail", course_id=reply.review.course_id) + f"#reply-{reply.review_id}-{reply.id}",
                 category="activity",
             )
         db.session.commit()
@@ -2584,64 +2759,11 @@ def create_app():
 
     @app.cli.command("seed-nsysu")
     def seed_nsysu():
-# 💡 採用後端同學的提示：目前專案已切換至整合完畢的 12354.db 主資料庫
+
         print("12354.db already contains the normalized NSYSU course data.")
         print("Run `flask init-db` only if you need Flask to create missing tables.")
 
-        # =========================================================================
-        # 備用資產：如果你未來需要重新從 "NSYSU Course Database" 資料夾解析原始檔案，
-        # 可以將下方你寫的精準解析引擎解除註解（請注意：執行時會清空現有 Review 與 Course 資料）
-        # =========================================================================
-        # base_dir = Path(app.root_path) / "NSYSU Course Database"
-        # db_files = sorted(base_dir.glob("NSYSU_Course_*.db"))
-        # if not db_files:
-        #     print("No NSYSU database files found.")
-        #     return
-        #
-        # with app.app_context():
-        #     db.create_all()
-        #     Review.query.delete()
-        #     Course.query.delete()
-        #     db.session.commit()
-        #
-        #     seen = set()
-        #     for db_file in db_files:
-        #         year, semester = parse_term_from_filename(db_file)
-        #         conn = sqlite3.connect(db_file)
-        #         conn.row_factory = sqlite3.Row
-        #         cur = conn.cursor()
-        #         cur.execute(
-        #             "SELECT id, name, department, teacher, credit, grade, compulsory, english, description FROM course_list"
-        #         )
-        #         for row in cur.fetchall():
-        #             code = str(row["id"] or "").strip()
-        #             if not code:
-        #                 continue
-        #             key = (code, year, semester)
-        #             if key in seen:
-        #                 continue
-        #             title, title_zh = split_course_name(row["name"])
-        #             course = Course(
-        #                 code=code,
-        #                 title=title or title_zh or code,
-        #                 title_zh=title_zh or None,
-        #                 professor=str(row["teacher"] or "").strip() or None,
-        #                 department=str(row["department"] or "").strip() or None,
-        #                 credits=parse_credits(row["credit"]),
-        #                 year=year,
-        #                 semester=semester,
-        #                 grade=normalize_grade(row["grade"]),
-        #                 requirement=parse_requirement(row["compulsory"]),
-        #                 english_taught=parse_bool(row["english"]),
-        #                 description=str(row["description"] or "").strip() or None,
-        #             )
-        #             db.session.add(course)
-        #             seen.add(key)
-        #         conn.close()
-        #
-        #     db.session.commit()
-        #     print(f"Seeded {len(seen)} courses from {len(db_files)} files.")
-
+        
     return app
 
 
