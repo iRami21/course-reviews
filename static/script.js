@@ -958,10 +958,8 @@ function toggleExpandedText(event, key) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", function () {
-  allCourses =
-    window.__INITIAL_COURSES__ && window.__INITIAL_COURSES__.length
-      ? JSON.parse(JSON.stringify(window.__INITIAL_COURSES__))
-      : JSON.parse(JSON.stringify(sampleCourses));
+  // 不在頁面載入時塞入大量資料，改以後端分頁 API 取得
+  allCourses = [];
   coursePagination = {
     ...coursePagination,
     ...(window.__COURSE_PAGINATION__ || {}),
@@ -972,13 +970,15 @@ document.addEventListener("DOMContentLoaded", function () {
   latestCourseYear = Number(window.__LATEST_COURSE_YEAR__ || latestCourseYear || 0);
   updateLatestYearToggleLabel();
   renderDepartmentFilter("");
-  displayCourses(allCourses);
   setupEventListeners();
   setupAdminForms();
   checkUserLogin();
   renderAdminControls();
   refreshNotifications();
   startNotificationPolling();
+
+  // 以 server-side 頁面為主，載入第 1 頁
+  fetchCoursesPage(1).catch((e) => console.warn('Initial fetchCoursesPage failed', e));
 });
 
 function getDepartmentsForCategory(category) {
@@ -1482,6 +1482,44 @@ function getActiveCourseFilters() {
     semester: semActiveBtn?.dataset.value || "",
     sort: sortActiveBtn ? (sortActiveBtn.dataset.sort || sortActiveBtn.dataset.value) : "popular",
   };
+}
+
+function resetCourseFiltersToHottest() {
+  const searchBox = document.getElementById("searchBox");
+  if (searchBox) {
+    searchBox.value = "";
+  }
+
+  const filterRows = [
+    "deptCategoryFilterRow",
+    "deptFilterRow",
+    "gradeFilterRow",
+    "yearFilterRow",
+    "semesterFilterRow",
+    "ratingFilterRow",
+  ];
+
+  filterRows.forEach((rowId) => setFilterRowActiveValue(rowId, ""));
+
+  const latestYearToggle = document.getElementById("latestYearOnlyToggle");
+  if (latestYearToggle) {
+    latestYearToggle.checked = false;
+  }
+
+  const deptSubFilterSelect = document.getElementById("deptSubFilterSelect");
+  if (deptSubFilterSelect) {
+    restoreDepartmentDropdown();
+  }
+
+  renderDepartmentFilter("");
+
+  const sortButtons = document.querySelectorAll("#quickSortMenu .sort-text-btn");
+  sortButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sort === "popular" || btn.dataset.value === "popular");
+  });
+
+  currentViewMode = "browse";
+  courseDetailOrigin = "browse";
 }
 
 function buildCoursePageUrl(page = 1) {
@@ -2867,12 +2905,9 @@ function openCourseReviewForm(courseId) {
 }
 
 function handleNavLogoClick() {
-  if (document.body.classList.contains("detail-open")) {
-    closeCourseDetail();
-    return;
-  }
-
+  resetCourseFiltersToHottest();
   showHomePage();
+  fetchCoursesPage(1).catch((e) => console.warn('fetchCoursesPage failed on logo click', e));
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

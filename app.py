@@ -1,4 +1,5 @@
 import json
+import time
 import os
 import re
 import sqlite3
@@ -52,6 +53,10 @@ from utils.department_filters import (
 def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
+    # Cache TTL for courses payload (seconds)
+    app.config.setdefault("COURSES_CACHE_TTL", 5)
+    # simple in-memory cache: key -> (timestamp, payload_dict)
+    app._courses_cache = {}
 
     db_path = os.path.join(app.root_path, "12354.db")
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
@@ -913,6 +918,20 @@ def create_app():
         return Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).limit(limit).all()
 
     def get_courses_payload(page=None, per_page=None):
+        # Lightweight caching to reduce DB load for frequent list requests
+        try:
+            cache_ttl = app.config.get("COURSES_CACHE_TTL", 5)
+            cache_key = json.dumps({
+                "user": current_user.id if current_user.is_authenticated else None,
+                "args": sorted([(k, v) for k, v in request.args.items()]),
+                "page": int(page or request.args.get("page", 1)),
+                "per_page": int(per_page or request.args.get("per_page", 60)),
+            }, sort_keys=True)
+            cached = app._courses_cache.get(cache_key)
+            if cached and (time.time() - cached[0]) < cache_ttl:
+                return cached[1]
+        except Exception:
+            cached = None
         page = max(1, int(page or request.args.get("page", 1)))
         per_page = min(60, max(1, int(per_page or request.args.get("per_page", 60))))
         query_text = str(request.args.get("q", "")).strip()
@@ -1179,6 +1198,20 @@ def create_app():
                 "totalPages": total_pages,
             },
         }
+        # store into cache
+        try:
+            app._courses_cache[cache_key] = (time.time(), {
+                "courses": serialized_groups,
+                "reviews": representative_reviews,
+                "pagination": {
+                    "page": page,
+                    "perPage": per_page,
+                    "total": total,
+                    "totalPages": total_pages,
+                },
+            })
+        except Exception:
+            pass
                     
     @app.route("/courses")
     def courses():
@@ -1275,6 +1308,11 @@ def create_app():
 
         db.session.commit()
         save_count = Favorite.query.filter_by(course_id=course.course_id).count()
+        # 清除課程列表快取以便下一次請求拿到最新值
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
         return jsonify(
             {
                 "courseId": course.course_id,
@@ -1628,6 +1666,10 @@ def create_app():
         )
         db.session.add(review)
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
@@ -1663,9 +1705,54 @@ def create_app():
         if not new_text:
             return jsonify({"error": "Review text is required."}), 400
 
+        # 更新文字
         review.text = new_text
+
+        # 嘗試更新四個維度評分：允許前端只送部分欄位，後端會與現有值合併
+        def parse_dim_incoming(dct, key):
+            try:
+                if key in dct:
+                    v = dct.get(key)
+                else:
+                    # 支援小寫開頭的表單欄位名稱
+                    alt = key[0].lower() + key[1:]
+                    v = dct.get(alt)
+                if v in (None, ""):
+                    return None
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+
+        dims_provided = any(k in payload or (k[0].lower() + k[1:]) in payload for k in ("ratingQuality", "ratingSweetness", "ratingCoolness", "ratingSolidity"))
+        if dims_provided:
+            # 取得 incoming（可能部分）與現有值合併
+            rq = parse_dim_incoming(payload, "ratingQuality")
+            rs = parse_dim_incoming(payload, "ratingSweetness")
+            rc = parse_dim_incoming(payload, "ratingCoolness")
+            rso = parse_dim_incoming(payload, "ratingSolidity")
+
+            rating_quality = rq if rq is not None else review.rating_quality
+            rating_sweetness = rs if rs is not None else review.rating_sweetness
+            rating_coolness = rc if rc is not None else review.rating_coolness
+            rating_solidity = rso if rso is not None else review.rating_solidity
+
+            # 驗證合併後都有值且在 1-5 範圍
+            merged = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(x is None for x in merged) or any(not (1 <= int(x) <= 5) for x in merged):
+                return jsonify({"error": "All four dimensions must have integer values between 1 and 5."}), 400
+
+            review.rating_quality = int(rating_quality)
+            review.rating_sweetness = int(rating_sweetness)
+            review.rating_coolness = int(rating_coolness)
+            review.rating_solidity = int(rating_solidity)
+            review.rating = round((int(rating_quality) + int(rating_sweetness) + int(rating_coolness) + int(rating_solidity)) / 4)
+
         review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
@@ -1698,6 +1785,10 @@ def create_app():
 
         db.session.delete(review)
         db.session.commit()
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
 
         reviews = reviews_for_course(course_id).all()
         average_rating = (
@@ -1816,6 +1907,10 @@ def create_app():
         db.session.add(review)
         db.session.commit()
         flash("Review submitted.")
+        try:
+            app._courses_cache.clear()
+        except Exception:
+            pass
         return redirect(url_for("course_detail", course_id=course.course_id))
 
     @app.route("/api/courses/<int:course_id>/review", methods=["POST"])
@@ -1900,7 +1995,45 @@ def create_app():
         if not text_value:
             return jsonify({"error": "Review text is required."}), 400
 
+        # 更新文字
         review.text = text_value
+
+        # 嘗試更新四個維度評分：允許前端只送部分欄位，後端會與現有值合併
+        def parse_dim_local(key):
+            try:
+                if key in data:
+                    v = data.get(key)
+                else:
+                    alt = key[0].lower() + key[1:]
+                    v = data.get(alt)
+                if v in (None, ""):
+                    return None
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+
+        dims_provided = any(k in data or (k[0].lower() + k[1:]) in data for k in ("ratingQuality", "ratingSweetness", "ratingCoolness", "ratingSolidity"))
+        if dims_provided:
+            rq = parse_dim_local("ratingQuality")
+            rs = parse_dim_local("ratingSweetness")
+            rc = parse_dim_local("ratingCoolness")
+            rso = parse_dim_local("ratingSolidity")
+
+            rating_quality = rq if rq is not None else review.rating_quality
+            rating_sweetness = rs if rs is not None else review.rating_sweetness
+            rating_coolness = rc if rc is not None else review.rating_coolness
+            rating_solidity = rso if rso is not None else review.rating_solidity
+
+            merged = [rating_quality, rating_sweetness, rating_coolness, rating_solidity]
+            if any(x is None for x in merged) or any(not (1 <= int(x) <= 5) for x in merged):
+                return jsonify({"error": "All four dimensions must have integer values between 1 and 5."}), 400
+
+            review.rating_quality = int(rating_quality)
+            review.rating_sweetness = int(rating_sweetness)
+            review.rating_coolness = int(rating_coolness)
+            review.rating_solidity = int(rating_solidity)
+            review.rating = round((int(rating_quality) + int(rating_sweetness) + int(rating_coolness) + int(rating_solidity)) / 4)
+
         review.updated_at = __import__('datetime').datetime.utcnow()
         db.session.commit()
         return jsonify({
