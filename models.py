@@ -19,16 +19,16 @@ class User(UserMixin, db.Model):
     role = db.Column(db.Text, nullable=False, default="student")
     dept_id = db.Column("deptId", db.Integer, db.ForeignKey("Department.deptId"))
 
-    # 你剛剛加的新欄位
+   
     avatar_animal = db.Column("avatarAnimal", db.Text, default="question")
     gender = db.Column("gender", db.Text, default="undisclosed")
 
-    # 👇 拜託把這三行加回來！這是系統辨識使用者身份的關鍵橋樑
+    
     @property
     def id(self):
         return self.user_id
 
-    # 下面的關聯保持原樣
+    
     reviews = db.relationship("Review", back_populates="author")
     review_reactions = db.relationship("ReviewReaction", back_populates="user")
     favorites = db.relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
@@ -141,7 +141,7 @@ class Course(db.Model):
                 return max(sections_list, key=lambda s: s.roc_year * 10 + s.term).term
         return 0
 
-    # description 欄位在 DB 不存在，用 property 安全橋接
+    
     @property
     def description(self):
         return None

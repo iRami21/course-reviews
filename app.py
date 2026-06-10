@@ -394,7 +394,7 @@ def create_app():
         if favorite_course_ids is not None:
             followed = course.course_id in favorite_course_ids
         else:
-            # 這裡的邏輯非常重要，確保 Favorite 表裡面真的有這一筆資料
+            
             followed = (
                 current_user.is_authenticated
                 and Favorite.query.filter_by(course_id=course.course_id, user_id=current_user.id).first() is not None

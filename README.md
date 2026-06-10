@@ -1,19 +1,74 @@
-# README
+# GitGood
 
-### 打新的code之前，下載(同步)Github上的版本 Before typing any new codes, download(pull) the current version from Github
-git pull origin main
-### 切回主分支
-git checkout main 
+This project is a course comment system
 
-### 建立個人分支(以防直接修改共用內容造成版本錯誤)
-git checkout -b 'nameA'
-### 做出更改後確認現在狀態用(可看出哪些有修改需要add/push)
-git status
-### 把現有所有的更改丟入"暫存"(最後面那個點很重要! 就是代表"全部"一定要有!)
-git add .
-### 存入並對這次的更新內容做解釋(description填寫訊息)
-git commit -m "description"
-### 第一次push
-git push -u origin 'nameA'
-### 事後都push進nameA的話就不用後面那段
-git push
+
+## Structure
+
+app.py Main Flask application responsible for routing, database initialization, and login management.
+
+models.py – SQLAlchemy model definitions.
+requirements.txt – Project dependencies.
+templates/ – HTML template files.
+static/ – CSS, JavaScript, and icon assets.
+utils/ – Utility functions and filtering logic.
+
+
+
+### 1. Navigate to the Project Folder
+
+```powershell
+cd c:\Users\88695\Documents\GitHub\gitgood
+```
+
+### 2. Create and Activate a Python Virtual Environment
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+
+### 3. install
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 4. admin account 
+
+
+
+- `SECRET_KEY`：Flask Session 用的密鑰，預設為 `dev`
+- `ADMIN_USERNAME`：管理員帳號 `admin`
+- `ADMIN_EMAIL`：管理員信箱 `admin@example.com`
+- `ADMIN_PASSWORD`：管理員密碼 `admin123`
+
+
+
+### 5. run the app.py
+
+
+
+```powershell
+python app.py
+```
+
+or Flask CLI：
+
+```powershell
+$env:FLASK_APP = "app.py"
+$env:FLASK_ENV = "development"
+flask run --host=127.0.0.1 --port=5000
+```
+
+### 6. open web by
+
+- `http://127.0.0.1:5000`
+
+## db
+
+- db is `12354.db`
+
+
+
