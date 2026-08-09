@@ -114,6 +114,22 @@ Then open:
 http://127.0.0.1:5050
 ```
 
+## Deploy to Vercel
+
+This project can be deployed to Vercel as a Flask serverless app.
+
+1. Push the repository to GitHub.
+2. Import the repo into Vercel.
+3. Keep the default root directory.
+4. Let Vercel use the Python function at `api/index.py`.
+
+The repo now includes the Vercel entrypoint and routing config:
+
+- [api/index.py](api/index.py)
+- [vercel.json](vercel.json)
+
+Important limitation: this app uses SQLite for logins, favorites, reviews, and notifications. Vercel's filesystem is ephemeral, so those writes are not a good long-term fit there. If you only need a demo or read-mostly deployment, Vercel is fine. If you need persistent user data, move the database to an external service first.
+
 If port `5050` is already in use, either stop the existing Flask process or run on another port:
 
 ```bash
